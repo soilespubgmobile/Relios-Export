@@ -121,7 +121,11 @@ else:
     sei = re.match(rb"[\x20-\x7e]+", raw[i:i + 4000]).group(0).decode()
     core = re.search(r"core (\d+[^-]*)", sei).group(1).strip()
     opts = dict(kv.split("=", 1) for kv in sei.split("options: ", 1)[1].split(" ") if "=" in kv)
-    for kv in TARGET_X264.split(" / "):
+    # Kaynak High ise program High'ın özelliği olan 8x8 DCT'yi açar (yoksa x264 dosyaya Main yazar).
+    # (8x8 DCT açılınca x264 i8x8 bölümlerini de kullanır: analyse 0x1:0x111 -> 0x3:0x113.)
+    _hedef_x264 = (TARGET_X264.replace("8x8dct=0", "8x8dct=1").replace("analyse=0x1:0x111", "analyse=0x3:0x113")
+                   if BEK_PROFIL == "High" else TARGET_X264)
+    for kv in _hedef_x264.split(" / "):
         k, want = kv.split("=", 1)
         chk(f"x264 {k}", want, opts.get(k, "(yok)"))
 chk("Yazan kütüphane (XviD4PSP ile aynı)", f"x264 core {TARGET_CORE}", f"x264 core {core}")

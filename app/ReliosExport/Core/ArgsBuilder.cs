@@ -325,7 +325,7 @@ public static class ArgsBuilder
     private static void X264(List<string> args, ProfilAyarlari a, MediaInfo media, int gecis, string gecisDosyasi)
     {
         var x = a.Video.X264;
-        var p = X264Parametreleri(a, CiktiKareHizi(a, media));
+        var p = X264Parametreleri(a, CiktiKareHizi(a, media), media);
         X264Bayraklari(args, x, gecis, gecisDosyasi, media);
         args.AddRange(["-x264-params", string.Join(':', p)]);
     }
@@ -364,7 +364,7 @@ public static class ArgsBuilder
     public static string KomutMetni(IEnumerable<string> args) =>
         string.Join(' ', args.Select(x => x.Length == 0 || x.Contains(' ') || x.Contains('"') ? "\"" + x.Replace("\"", "\\\"") + "\"" : x));
 
-    private static List<string> X264Parametreleri(ProfilAyarlari a, double fps)
+    private static List<string> X264Parametreleri(ProfilAyarlari a, double fps, MediaInfo? media = null)
     {
         var x = a.Video.X264;
         var k = a.AnahtarKare;
@@ -411,7 +411,10 @@ public static class ArgsBuilder
         Ekle("merange", x.MeAraligi);
         Ekle("chroma-me", x.KromaMe);
         Ekle("trellis", x.Trellis);
-        Ekle("8x8dct", x.Dct8x8);
+        // x264 dosyaya kullanılan özelliklerin gerektirdiği en düşük profili yazar: 8x8 DCT kapalıysa High
+        // istense de "Main" yazılır. Profil "kaynakla aynı" iken kaynak High ise High'ın özelliği açılır.
+        var kaynakHigh = x.Profil == Kaynak && media is not null && ProfilCoz(x.Profil, media) == "high";
+        Ekle("8x8dct", kaynakHigh ? true : x.Dct8x8);
         Ekle("cqm", x.Cqm);
         Ekle("deadzone-inter", x.OluBolgeInter);
         Ekle("deadzone-intra", x.OluBolgeIntra);
