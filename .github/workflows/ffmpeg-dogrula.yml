@@ -1,8 +1,11 @@
 name: FFmpeg dogrulama (Windows)
 
 # FFmpeg derlemesi bitince kendiliginden calisir (ya da elle, run numarasiyla):
-# derlenen ffmpeg.exe'yi gercek Windows'ta acar, icerigini listeler, programin kendi
-# TikTok kodlama kodunu calistirir ve ciktiyi hedef meta veriyle karsilastirir.
+# 1) Linux'ta ozellikleri bilinen 13 deneme videosu uretilir (farkli bicim, boyut, kare hizi,
+#    ses, dondurme bilgisi, renk araligi, HDR, Turkce dosya adi...).
+# 2) Windows'ta derlenen ffmpeg.exe ile programin kendi TikTok kodu her birini cevirir.
+#    Her cikti hedef meta veriyle (tools/hedef_kontrol.py) ve kaynakla
+#    (tools/saglamlik_kontrol.py: sure, kare sayisi, senkron, dondurme, renk, kirpma) karsilastirilir.
 on:
   workflow_run:
     workflows: ["Relios FFmpeg (win64, nonfree, en son kararli surumler)"]
@@ -18,8 +21,31 @@ permissions:
   actions: read
 
 jobs:
-  dogrula:
+  kaynaklar:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: ffmpeg kur (yalnizca deneme videolarini uretmek icin)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg > /dev/null
+          ffmpeg -hide_banner -version | head -1
+
+      - name: Deneme videolarini uret
+        run: bash tools/test_kaynaklari.sh kaynaklar
+
+      - name: Deneme videolarini yukle
+        uses: actions/upload-artifact@v7
+        with:
+          name: deneme-videolari
+          path: kaynaklar
+          retention-days: 3
+
+  dogrula:
+    needs: kaynaklar
     runs-on: windows-latest
     defaults:
       run:
@@ -41,6 +67,12 @@ jobs:
           github-token: ${{ github.token }}
           path: art
 
+      - name: Deneme videolarini indir
+        uses: actions/download-artifact@v8
+        with:
+          name: deneme-videolari
+          path: kaynaklar
+
       - name: Ac
         run: |
           $zip = Get-ChildItem -Recurse art -Filter *.zip | Select-Object -First 1
@@ -56,8 +88,8 @@ jobs:
           ffmpeg -hide_banner -version
           "--- yapilandirma"
           ffmpeg -hide_banner -buildconf
-          "--- kodlayicilar (beklenen: libx264, h264_nvenc, libfdk_aac, pcm_s16le/s24le/s32le/f32le)"
-          ffmpeg -hide_banner -encoders | Select-String -Pattern ' (libx264|h264_nvenc|libfdk_aac|pcm_s16le|pcm_s24le|pcm_s32le|pcm_f32le|libx265|libsvtav1|libvpx-vp9|libmp3lame|libopus) '
+          "--- kodlayicilar (beklenen: libx264, h264_nvenc, libfdk_aac, pcm_s16le/s24le/s32le/f32le; hevc_nvenc ve av1_nvenc OLMAMALI)"
+          ffmpeg -hide_banner -encoders | Select-String -Pattern ' (libx264|h264_nvenc|hevc_nvenc|av1_nvenc|libfdk_aac|pcm_s16le|pcm_s24le|pcm_s32le|pcm_f32le|libx265|libsvtav1|libvpx-vp9|libmp3lame|libopus) '
           "--- cozuculer"
           ffmpeg -hide_banner -decoders | Select-String -Pattern ' (h264|hevc|av1|libdav1d|vp9|vp8|prores|vvc|dnxhd|mpeg2video|aac|mp3float|opus|flac|ac3|eac3|vorbis|alac|pcm_s16le|pcm_s24le|pcm_f32le) '
           "--- protokoller (ag protokolu olmamali)"
@@ -69,18 +101,60 @@ jobs:
           ffmpeg -hide_banner -f lavfi -i testsrc2=size=64x64:rate=1 -frames:v 1 -c:v libx264 -flags +global_header -f null - 2>&1 | findstr /C:"core"
           exit /b 0
 
-      - name: Deneme kaynagi (1920x1080 60 fps, 44.1 kHz)
-        run: ffmpeg -hide_banner -loglevel error -y -f lavfi -i "testsrc2=size=1920x1080:rate=60:duration=8" -f lavfi -i "sine=frequency=440:sample_rate=44100:duration=8" -ac 2 -c:v libx264 -preset ultrafast -qp 0 -c:a pcm_s16le kaynak.mkv
-
-      - name: Relios Export TikTok kodlamasi (programin kendi kodu)
+      - name: Programin kodlama kodunu derle
         run: |
           dotnet build tools/ReliosExport.Smoke -c Release -o smoke --nologo -v q
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           New-Item -ItemType Directory smoke/ffmpeg -Force | Out-Null
           Copy-Item "$env:FFBIN/ffmpeg.exe","$env:FFBIN/ffprobe.exe" smoke/ffmpeg/
-          ./smoke/ReliosExport.Smoke.exe kaynak.mkv cikti
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Hedef meta veri karsilastirmasi
+      - name: Tum deneme videolari (programin kendi TikTok kodu + kontroller)
         run: |
-          $f = (Get-ChildItem cikti -Filter *.mp4 | Select-Object -First 1).FullName
-          python -X utf8 -I tools/hedef_kontrol.py $f 7
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          $kok = (Resolve-Path kaynaklar).Path
+          $man = Get-Content (Join-Path $kok manifest.json) -Raw -Encoding utf8 | ConvertFrom-Json
+          $satirlar = @()
+          $farklar = @()
+          $hatali = 0
+          $i = 0
+          foreach ($k in $man) {
+            $i++
+            $src = Join-Path $kok $k.dosya
+            if ($k.windows_adi) {
+              $yeni = Join-Path $kok $k.windows_adi
+              Copy-Item -LiteralPath $src -Destination $yeni -Force
+              $src = $yeni
+            }
+            $dir = Join-Path $PWD "cikti/$i"
+            Write-Host "::group::$i. $([IO.Path]::GetFileName($src)) - $($k.aciklama)"
+            $log = & ./smoke/ReliosExport.Smoke.exe $src $dir 2>&1 | ForEach-Object { "$_" }
+            $rc = $LASTEXITCODE
+            $log | ForEach-Object { Write-Host $_ }
+            $bilgi = (($log | Where-Object { $_ -like "Kaynak: *" } | Select-Object -First 1) -replace '^Kaynak: ', '')
+            $hedef = "-"; $sag = "-"; $durum = "HATA (kodlama)"
+            if ($rc -eq 0) {
+              $mp4 = (Get-ChildItem -LiteralPath $dir -Filter *.mp4 | Select-Object -First 1).FullName
+              $h = & python -X utf8 -I tools/hedef_kontrol.py $mp4 7 2>&1 | ForEach-Object { "$_" }
+              $hrc = $LASTEXITCODE
+              $h | ForEach-Object { Write-Host $_ }
+              $s = & python -X utf8 -I tools/saglamlik_kontrol.py $src $mp4 $k.matris $k.aralik ([int][bool]$k.ses) 2>&1 | ForEach-Object { "$_" }
+              $src_rc = $LASTEXITCODE
+              $s | ForEach-Object { Write-Host $_ }
+              $hedef = ((($h | Where-Object { $_ -match '\d+ kontrol, \d+ fark' }) | Select-Object -Last 1) -replace '^.*?(\d+ kontrol, \d+ fark).*$', '$1')
+              $sag = ((($s | Where-Object { $_ -match '\d+ kontrol, \d+ fark' }) | Select-Object -Last 1) -replace '^.*?(\d+ kontrol, \d+ fark).*$', '$1')
+              $farklar += ($h + $s) | Where-Object { $_ -like "FARK*" } | ForEach-Object { "  $i. $_" }
+              if ($hrc -eq 0 -and $src_rc -eq 0) { $durum = "OK" } else { $durum = "FARK"; $hatali++ }
+            } else {
+              $hatali++
+              $farklar += "  $i. kodlama basarisiz (kod $rc)"
+            }
+            Write-Host "::endgroup::"
+            $satirlar += "| $i | $($k.aciklama) | $bilgi | $hedef | $sag | $durum |"
+          }
+          $tablo = @("| # | Deneme videosu | Programin okudugu | Hedef meta veri | Saglamlik | Sonuc |", "|---|---|---|---|---|---|") + $satirlar
+          "`n===== OZET ====="
+          $tablo | ForEach-Object { $_ }
+          if ($farklar.Count) { "`nFarklar:"; $farklar | ForEach-Object { $_ } }
+          $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          if ($hatali) { "`n$hatali deneme videosunda sorun var."; exit 1 }
+          "`nTum deneme videolari temiz."

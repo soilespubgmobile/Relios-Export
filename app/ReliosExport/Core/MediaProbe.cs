@@ -43,6 +43,9 @@ public static class MediaProbe
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
+            // ffprobe her zaman UTF-8 yazar (Türkçe karakterli dosya adları için).
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
         foreach (var a in new[]
                  {

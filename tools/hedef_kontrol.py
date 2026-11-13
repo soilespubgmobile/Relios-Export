@@ -49,7 +49,7 @@ def probe(*args):
 d = probe("-show_streams", "-show_format")
 streams = d.get("streams", [])
 v = next(s for s in streams if s["codec_type"] == "video")
-a = next(s for s in streams if s["codec_type"] == "audio")
+a = next((s for s in streams if s["codec_type"] == "audio"), None)  # sessiz videoda yok
 fmt = d["format"]
 
 # ---- Kap
@@ -103,14 +103,17 @@ else:
 chk("Yazan kütüphane (XviD4PSP ile aynı)", f"x264 core {TARGET_CORE}", f"x264 core {core}")
 
 # ---- Ses
-chk("Ses codec", "aac", a.get("codec_name"))
-chk("Ses profili", "LC", a.get("profile"))
-chk("Örnekleme hızı", "48000", a.get("sample_rate"))
-chk("Kanal", "2 (stereo)", f"{a.get('channels')} ({a.get('channel_layout')})")
-br = int(a.get("bit_rate") or 0)
-chk("Ses bitrate", "~128 kb/s", f"{br / 1000:.1f} kb/s", ok=126000 <= br <= 130500)
-chk("Ses dili", "eng", a.get("tags", {}).get("language"))
-chk("Ses Default", "Yes", "Yes" if a.get("disposition", {}).get("default") else "No")
+if a is None:
+    note("Ses", "-", "yok (sessiz video)")
+else:
+    chk("Ses codec", "aac", a.get("codec_name"))
+    chk("Ses profili", "LC", a.get("profile"))
+    chk("Örnekleme hızı", "48000", a.get("sample_rate"))
+    chk("Kanal", "2 (stereo)", f"{a.get('channels')} ({a.get('channel_layout')})")
+    br = int(a.get("bit_rate") or 0)
+    chk("Ses bitrate", "~128 kb/s", f"{br / 1000:.1f} kb/s", ok=126000 <= br <= 130500)
+    chk("Ses dili", "eng", a.get("tags", {}).get("language"))
+    chk("Ses Default", "Yes", "Yes" if a.get("disposition", {}).get("default") else "No")
 
 
 # ---- MP4 kutuları (MediaInfo'nun okuduğu alanlar)
@@ -204,3 +207,4 @@ for st, name, want, got in rows:
     print(f"{st:5} {name:<{w}}  hedef: {want:<20} çıktı: {got}")
 fark = [r for r in rows if r[0] == "FARK"]
 print(f"\nToplam {len(rows)} kontrol, {len(fark)} fark.")
+sys.exit(1 if fark else 0)

@@ -100,8 +100,10 @@ public sealed class FfmpegRunner
             try
             {
                 p.Kill(entireProcessTree: true);
+                // Kill hemen döner; ffmpeg gerçekten kapanmadan yarım dosya silinemez.
+                p.WaitForExit(10_000);
             }
-            catch (InvalidOperationException)
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
             {
                 // zaten kapanmış
             }
@@ -168,13 +170,30 @@ public static class Exporter
         }
         finally
         {
-            if (File.Exists(temp))
-            {
-                File.Delete(temp);
-            }
+            DeleteQuietly(temp);
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Yarım kalan geçici dosyayı siler. Dosya bir an kilitli kalırsa birkaç kez dener;
+    /// silinemese bile asıl sonucu (iptal / hata) gizlemez.
+    /// </summary>
+    private static void DeleteQuietly(string path)
+    {
+        for (var i = 0; i < 10 && File.Exists(path); i++)
+        {
+            try
+            {
+                File.Delete(path);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Thread.Sleep(200);
+            }
+        }
     }
 
     /// <summary>Kaynağın kısa Türkçe özeti: çözünürlük, kare hızı ve 9:16 kırpma gerekip gerekmediği.</summary>

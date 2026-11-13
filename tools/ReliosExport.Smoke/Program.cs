@@ -8,6 +8,9 @@ if (args.Length < 2)
     return 2;
 }
 
+// Türkçe karakterler günlükte bozulmasın.
+Console.OutputEncoding = System.Text.Encoding.UTF8;
+
 var input = args[0];
 var outDir = args[1];
 Console.WriteLine($"ffmpeg: {Tools.Ffmpeg} (bulundu: {Tools.Available})");
