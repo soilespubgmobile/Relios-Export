@@ -11,6 +11,9 @@ internal static class CrashReport
     private const string FileName = "Relios Export hata.txt";
     private static int _shown;
 
+    /// <summary>Derleme kontrolünde true: hata penceresi açılmaz, program hata koduyla kapanır.</summary>
+    public static bool Silent { get; set; }
+
     public static string? Write(Exception? ex, string source)
     {
         var text = new StringBuilder()
@@ -45,6 +48,11 @@ internal static class CrashReport
     public static void Show(Exception? ex, string source)
     {
         var path = Write(ex, source);
+        if (Silent)
+        {
+            Environment.Exit(4);
+        }
+
         if (Interlocked.Exchange(ref _shown, 1) == 1)
         {
             return;

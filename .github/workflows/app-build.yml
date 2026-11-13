@@ -68,17 +68,28 @@ jobs:
           if ($exe.Length -lt 70MB) { "HATA: exe cok kucuk, FFmpeg gomulmemis olabilir"; exit 1 }
           "Tek exe hazir: $([math]::Round($exe.Length / 1MB, 1)) MB"
 
-      - name: Tek exe icindeki FFmpeg aciliyor mu
+      - name: Tek exe kontrolu (FFmpeg aciliyor mu, pencere hatasiz aciliyor mu)
         run: |
-          $out = Join-Path $PWD "kontrol.txt"
-          $p = Start-Process -FilePath "out/Relios Export.exe" -ArgumentList '--ffmpeg-kontrol', $out -PassThru
-          if (-not $p.WaitForExit(120000)) { $p.Kill(); "HATA: program 2 dakikada kapanmadi"; exit 1 }
-          Get-Content $out
-          if ($p.ExitCode -ne 0) { "HATA: program icindeki FFmpeg'i bulamadi (kod $($p.ExitCode))"; exit 1 }
-          $ff = ((Get-Content $out) | Where-Object { $_ -like 'ffmpeg=*' }) -replace '^ffmpeg=', ''
+          function Kontrol($arg, $out) {
+            $p = Start-Process -FilePath "out/Relios Export.exe" -ArgumentList $arg, $out -PassThru
+            $null = $p.Handle  # cikis kodunun okunabilmesi icin
+            if (-not $p.WaitForExit(180000)) { $p.Kill(); Write-Host "HATA: program 3 dakikada kapanmadi ($arg)"; return 1 }
+            if (Test-Path $out) { Get-Content $out | ForEach-Object { Write-Host $_ } }
+            if (Test-Path "out/Relios Export hata.txt") {
+              Write-Host "--- hata kaydi"
+              Get-Content "out/Relios Export hata.txt" | ForEach-Object { Write-Host $_ }
+            }
+            return $p.ExitCode
+          }
+          $f = Join-Path $PWD "ffmpeg-kontrol.txt"
+          $rc = Kontrol '--ffmpeg-kontrol' $f
+          if ($rc -ne 0) { "HATA: program icindeki FFmpeg bulunamadi (kod $rc)"; exit 1 }
+          $ff = ((Get-Content $f) | Where-Object { $_ -like 'ffmpeg=*' }) -replace '^ffmpeg=', ''
           & $ff -hide_banner -version | Select-Object -First 1
           if ($LASTEXITCODE -ne 0) { "HATA: acilan ffmpeg.exe calismadi"; exit 1 }
-          "Program icindeki FFmpeg calisiyor."
+          $rc = Kontrol '--pencere-kontrol' (Join-Path $PWD "pencere-kontrol.txt")
+          if ($rc -ne 0) { "HATA: ana pencere acilamadi (kod $rc)"; exit 1 }
+          "Tek exe calisiyor: FFmpeg icinde, pencere hatasiz aciliyor."
 
       - name: Ciktiyi yukle
         uses: actions/upload-artifact@v7
