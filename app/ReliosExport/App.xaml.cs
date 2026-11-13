@@ -80,12 +80,12 @@ public partial class App : Application
 
             var w = new MainWindow();
             MainWindow = w;
-            w.Loaded += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+            w.Loaded += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Func<Task>(async () =>
             {
                 text += "pencere=acildi\n";
                 try
                 {
-                    text += PencereleriDene(w, ekran);
+                    text += await PencereleriDeneAsync(w, ekran);
                     File.WriteAllText(path, text);
                     Shutdown(0);
                 }
@@ -116,7 +116,7 @@ public partial class App : Application
     /// Ayar pencerelerinin hepsini açıp kapatır (XAML ve bağlama hataları burada çıkar);
     /// istenirse ana pencerenin ve her sekmenin görüntüsünü kaydeder.
     /// </summary>
-    private static string PencereleriDene(MainWindow w, string? ekran)
+    private static async Task<string> PencereleriDeneAsync(MainWindow w, string? ekran)
     {
         var rapor = new StringBuilder();
         var arka = (Brush)w.FindResource("BgSurface");
@@ -170,7 +170,7 @@ public partial class App : Application
             var onizlemeAyari = Varsayilanlar.TikTok();
             var k = new KirpmaPenceresi([_ornekVideo], onizlemeAyari) { Owner = w };
             k.Show();
-            var hazir = Bekle(k, () => k.Hazir);
+            var hazir = await BekleAsync(() => k.Hazir);
             if (ekran is not null && hazir)
             {
                 EkranGoruntusu.Pencere(k, Path.Combine(ekran, $"{sira:00}-kirpma-orta.png"));
@@ -178,7 +178,7 @@ public partial class App : Application
 
             var onceki = k.CiktiSayisi;
             onizlemeAyari.Video.KirpmaYatay = 0;
-            var hazir2 = Bekle(k, () => k.CiktiSayisi > onceki && k.Hazir);
+            var hazir2 = await BekleAsync(() => k.CiktiSayisi > onceki && k.Hazir);
             if (ekran is not null && hazir2)
             {
                 EkranGoruntusu.Pencere(k, Path.Combine(ekran, $"{sira:00}-kirpma-sol.png"));
@@ -204,18 +204,21 @@ public partial class App : Application
         return rapor.ToString();
     }
 
-    /// <summary>Koşul sağlanana kadar (en çok 30 sn) pencerenin işlerini yürütür.</summary>
-    private static bool Bekle(Window w, Func<bool> kosul)
+    /// <summary>
+    /// Koşul sağlanana kadar (en çok 30 sn) bekler. Arada pencerenin normal mesaj döngüsü çalışır
+    /// (ffmpeg / ffprobe beklemelerinin devamı ancak böyle işlenir).
+    /// </summary>
+    private static async Task<bool> BekleAsync(Func<bool> kosul)
     {
         for (var i = 0; i < 300; i++)
         {
-            EkranGoruntusu.Bekle(w.Dispatcher);
             if (kosul())
             {
+                await Task.Delay(300); // son çizim
                 return true;
             }
 
-            Thread.Sleep(100);
+            await Task.Delay(100);
         }
 
         return false;
