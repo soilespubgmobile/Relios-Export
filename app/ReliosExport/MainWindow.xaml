@@ -4,7 +4,6 @@
         xmlns:local="clr-namespace:ReliosExport"
         x:Name="Root"
         Title="Relios Export"
-        Icon="pack://application:,,,/Assets/ReliosExport.ico"
         Width="820" Height="620" MinWidth="680" MinHeight="520"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BgBase}"
