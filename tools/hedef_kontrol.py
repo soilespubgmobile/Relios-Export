@@ -213,6 +213,9 @@ if moov:
             sver = struct.unpack(">H", raw[es + 8:es + 10])[0]
             cstart = es + 28 + {0: 0, 1: 16, 2: 36}.get(sver, 0)
             kids = {n: (cs, ce) for n, cs, ce in boxes(raw, cstart, ee)}
+            if "wave" in kids and "esds" not in kids:
+                # MOV: AAC'nin esds kutusu ses örnek tanımındaki "wave" kutusunun içindedir.
+                kids.update({n: (cs, ce) for n, cs, ce in boxes(raw, *kids["wave"])})
             if "esds" in kids:
                 q = kids["esds"][0] + 4
                 q += 1
