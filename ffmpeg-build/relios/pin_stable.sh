@@ -36,12 +36,6 @@ echo "|---|---|---|" >> "$SUMMARY"
 
 if [[ "$ONLY" == all || "$ONLY" == github ]]; then
     pin 50-fdk-aac '^v[0-9]+\.[0-9]+\.[0-9]+$'
-    pin 50-x265    '^[0-9]+\.[0-9]+(\.[0-9]+)?$'
-    pin 50-svtav1  '^v[0-9]+\.[0-9]+\.[0-9]+$'
-    pin 50-libopus '^v[0-9]+\.[0-9]+(\.[0-9]+)?$'
-    pin 50-zimg    '^release-[0-9]+\.[0-9]+\.[0-9]+$'
-    pin 50-amf     '^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$'
-    pin 50-onevpl  '^v2\.[0-9]+\.[0-9]+$'
     pin 20-zlib    '^v[0-9]+\.[0-9]+(\.[0-9]+)*$'
     # NVENC basliklari: gelistirme dali yerine en son surum etiketi (nX.Y.Z.W)
     pin 50-ffnvcodec '^n[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
@@ -58,7 +52,6 @@ fi
 
 if [[ "$ONLY" == all ]]; then
     pin 50-dav1d   '^[0-9]+\.[0-9]+\.[0-9]+$'
-    pin 50-libvpx  '^v[0-9]+\.[0-9]+\.[0-9]+$'
     # x264'un resmi surum yayini yok; resmi "stable" dali kullanilir.
     X264REPO="$(grep -m1 '^SCRIPT_REPO=' scripts.d/50-x264.sh | cut -d'"' -f2)"
     X264SHA="$(git ls-remote "$X264REPO" refs/heads/stable | cut -f1)"
