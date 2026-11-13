@@ -19,7 +19,8 @@ TARGET_X264 = (
     "crf=18.0 / qcomp=0.60 / qpmin=0 / qpmax=33 / qpstep=4 / vbv_maxrate=14000 / "
     "vbv_bufsize=28000 / crf_max=0.0 / nal_hrd=none / filler=0 / ip_ratio=1.40 / aq=1:1.00"
 )
-TARGET_CORE = "165 r3223 (XviD4PSP ile ayni; ilk hedef videoda 164)"
+# XviD4PSP 8.2.14'teki x264 (ilk hedef videoda 164 vardi; kullanici 165 r3223'u kabul etti).
+TARGET_CORE = "165 r3223 0480cb0"
 
 path = sys.argv[1]
 # Kullanıcı 7 iş parçacığı seçti (orijinal hedef 67/11). İkinci argümanla değiştirilebilir.
@@ -99,7 +100,7 @@ else:
     for kv in TARGET_X264.split(" / "):
         k, want = kv.split("=", 1)
         chk(f"x264 {k}", want, opts.get(k, "(yok)"))
-note("Yazan kütüphane", f"x264 core {TARGET_CORE}", f"x264 core {core}")
+chk("Yazan kütüphane (XviD4PSP ile aynı)", f"x264 core {TARGET_CORE}", f"x264 core {core}")
 
 # ---- Ses
 chk("Ses codec", "aac", a.get("codec_name"))
