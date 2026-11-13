@@ -68,7 +68,7 @@ public sealed class DogruysaGorunur : IValueConverter
     public bool Ters { get; set; }
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        (value is true) != Ters ? Visibility.Visible : Visibility.Collapsed;
+        (value is true) != (Ters || parameter is "Ters") ? Visibility.Visible : Visibility.Collapsed;
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         Binding.DoNothing;

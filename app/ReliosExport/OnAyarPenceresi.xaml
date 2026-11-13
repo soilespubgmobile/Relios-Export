@@ -68,7 +68,10 @@
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                             <Button Content="Yükle" Style="{StaticResource SecondaryButton}" Height="28" Padding="12,0" Click="OnYukle"/>
-                                            <Button Content="Sil" Style="{StaticResource GhostButton}" Height="28" Margin="4,0,0,0" Click="OnSil"/>
+                                            <Button Content="Sil" Style="{StaticResource GhostButton}" Height="28" Margin="4,0,0,0" Click="OnSil"
+                                                    Visibility="{Binding Hazir, Converter={StaticResource DogruysaGorunur}, ConverterParameter=Ters}"/>
+                                            <TextBlock Text="hazır" FontSize="11" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="10,0,6,0"
+                                                       Visibility="{Binding Hazir, Converter={StaticResource DogruysaGorunur}}"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>

@@ -39,11 +39,12 @@ public partial class OnAyarPenceresi : Window
     private void Yenile()
     {
         Liste.ItemsSource = null;
-        Liste.ItemsSource = _settings.OnAyarlar
-            .OrderBy(o => o.Profil != _profil.Id)
-            .ThenBy(o => o.Ad, StringComparer.CurrentCultureIgnoreCase)
+        Liste.ItemsSource = Varsayilanlar.Hazirlar()
+            .Concat(_settings.OnAyarlar
+                .OrderBy(o => o.Profil != _profil.Id)
+                .ThenBy(o => o.Ad, StringComparer.CurrentCultureIgnoreCase))
             .ToList();
-        BosListe.Visibility = _settings.OnAyarlar.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        BosListe.Visibility = Visibility.Collapsed;
     }
 
     private void OnAdKutusuKeyDown(object sender, KeyEventArgs e)
@@ -98,7 +99,7 @@ public partial class OnAyarPenceresi : Window
 
     private void OnSil(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is not KayitliOnAyar o)
+        if ((sender as FrameworkElement)?.DataContext is not KayitliOnAyar { Hazir: false } o)
         {
             return;
         }

@@ -161,7 +161,8 @@ public partial class App : Application
         }
 
         // TikTok varsayılanının x264 komutu (önizlemedeki ile aynı fonksiyon) — kontrol çıktısında görünsün.
-        rapor.Append("x264_tiktok=").Append(ArgsBuilder.X264KomutMetni(Varsayilanlar.TikTok(), 30000.0 / 1001)).Append('\n');
+        rapor.Append("x264_dikey916=").Append(ArgsBuilder.X264KomutMetni(Varsayilanlar.Dikey916(), 30000.0 / 1001)).Append('\n');
+        rapor.Append("nvenc_tiktok=").Append(ArgsBuilder.NvencKomutMetni(Varsayilanlar.TikTok(), 60)).Append('\n');
         return rapor.ToString();
     }
 

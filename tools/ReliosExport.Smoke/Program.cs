@@ -3,7 +3,7 @@ using ReliosExport.Core;
 using ReliosExport.Core.Ayarlar;
 
 // Relios Export'un kodlama kodunu (app/ReliosExport/Core) arayüz olmadan çalıştıran deneme aracı.
-// Kullanım: ReliosExport.Smoke.exe <kaynak video> <çıktı klasörü> [--profil tiktok|youtube] [--ayar ayar.json]
+// Kullanım: ReliosExport.Smoke.exe <kaynak video> <çıktı klasörü> [--profil tiktok|tiktok-916|youtube] [--ayar ayar.json]
 //           [--ayarla Yol=Deger ...] [--sadece-komut]
 //   --ayar          profil ayarlarını JSON dosyasından alır (yoksa profilin fabrika ayarları)
 //   --ayarla        tek bir ayarı değiştirir, ör. --ayarla Video.X264.Mod=IkiGecis --ayarla Ses.Kodlayici=Wav
@@ -15,7 +15,7 @@ Console.OutputEncoding = System.Text.Encoding.UTF8;
 
 if (args.Length < 2)
 {
-    Console.Error.WriteLine("Kullanım: ReliosExport.Smoke <kaynak> <çıktı klasörü> [--profil tiktok|youtube] [--ayar dosya.json] [--sadece-komut]");
+    Console.Error.WriteLine("Kullanım: ReliosExport.Smoke <kaynak> <çıktı klasörü> [--profil tiktok|tiktok-916|youtube] [--ayar dosya.json] [--sadece-komut]");
     return 2;
 }
 
@@ -30,7 +30,13 @@ for (var i = 2; i < args.Length; i++)
     switch (args[i])
     {
         case "--profil" when i + 1 < args.Length:
-            profil = args[++i].Equals("youtube", StringComparison.OrdinalIgnoreCase) ? Profiles.YouTube : Profiles.TikTok;
+            var ad = args[++i].ToLowerInvariant();
+            profil = ad == "youtube" ? Profiles.YouTube : Profiles.TikTok;
+            if (ad == "tiktok-916")
+            {
+                // Hazır ön ayar: dikey 9:16 (x264, 1216x2160, 29,97 fps) — doğrulama bunu kullanır.
+                ayarlar = Varsayilanlar.Dikey916();
+            }
             break;
         case "--ayar" when i + 1 < args.Length:
             ayarlar = AyarDosyasi.Oku(File.ReadAllText(args[++i]))

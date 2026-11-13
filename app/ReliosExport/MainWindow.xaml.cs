@@ -415,7 +415,7 @@ public partial class MainWindow : Window
     {
         var p = SelectedProfile;
         var not = p.Id == ExportProfileId.TikTok
-            ? " TikTok: 1216×2160, 29,97 fps, x264 Main@L5.0 CRF 18, FDK AAC 128 kb/s 48 kHz."
+            ? " TikTok: ekran kartıyla (NVENC) CBR 34375 kb/s; boyut, kare hızı, profil ve seviye kaynakla aynı; FDK AAC 128 kb/s 48 kHz. Dikey 9:16 ayarı ön ayarlarda hazır durur."
             : " YouTube: TikTok'la aynı kodlama ayarları; çözünürlük ve kare hızı kaynakla aynı kalır.";
         if (!ConfirmDialog.Ask(
                 this,

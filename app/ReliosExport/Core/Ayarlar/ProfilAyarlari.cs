@@ -56,8 +56,10 @@ public sealed class ProfilAyarlari : Gozlenebilir
     /// <summary>
     /// 2: YouTube varsayılanı TikTok'un kodlama ayarları + kaynakla aynı boyut / fps oldu.
     /// 3: x264 iş parçacığı 7 → 8; YouTube'da H.264 profili ve seviyesi de kaynakla aynı.
+    /// 4: TikTok varsayılanı NVENC CBR 34375 kb/s, kaynakla aynı boyut / fps / profil / seviye
+    ///    (eski 9:16 ayarı "hazır ön ayar" olarak durur).
     /// </summary>
-    public const int GuncelSurum = 3;
+    public const int GuncelSurum = 4;
 
     public VideoAyarlari Video { get => _video; set => Bagla(ref _video, value); }
 

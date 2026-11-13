@@ -8,10 +8,46 @@ namespace ReliosExport.Core.Ayarlar;
 public static class Varsayilanlar
 {
     /// <summary>
-    /// TikTok: doğrulanmış hedef (79 kontrolde fark yok).
-    /// 1216x2160 9:16, 29.97 fps, x264 Main@L5.0 CRF 18, FDK AAC LC 48 kHz 128 kb/s.
+    /// TikTok: ekran kartıyla (NVENC H.264) sabit bit hızı CBR 34375 kb/s; çözünürlük, kare hızı, H.264 profili
+    /// ve seviyesi kaynakla aynı; B-kare yok, 3 referans kare, 30 karede bir anahtar kare.
+    /// Ses: FDK AAC LC 128 kb/s 48 kHz (9:16 ayarıyla aynı).
     /// </summary>
     public static ProfilAyarlari TikTok()
+    {
+        var a = Dikey916();
+        var v = a.Video;
+        v.Cozunurluk = CozunurlukModu.Kaynak;
+        v.KareHiziModu = KareHiziModu.Kaynak;
+        v.Genislik = 1920;
+        v.Yukseklik = 1080;
+        v.Kodlayici = VideoKodlayici.Nvenc;
+
+        var n = v.Nvenc;
+        n.Mod = NvencModu.Cbr;
+        n.BitHizi = 34375;
+        n.Profil = "kaynak";
+        n.Seviye = "kaynak";
+        n.BKare = 0;
+        n.Ref = 3;
+        n.Kodlama = "cabac";
+
+        // x264'e geçilirse de profil / seviye kaynakla aynı kalsın
+        v.X264.Profil = "kaynak";
+        v.X264.Seviye = "kaynak";
+
+        var k = a.AnahtarKare;
+        k.Birim = AralikBirimi.Kare;
+        k.EnBuyuk = 30;
+        k.EnKucuk = null;
+        k.SahneDegisimi = 0;
+        return a;
+    }
+
+    /// <summary>
+    /// Dikey 9:16 (hazır ön ayar; 0.7'ye kadar TikTok varsayılanıydı, 79 kontrolde hedefle fark yok):
+    /// 1216x2160 9:16, 29.97 fps, x264 Main@L5.0 CRF 18, FDK AAC LC 48 kHz 128 kb/s.
+    /// </summary>
+    public static ProfilAyarlari Dikey916()
     {
         var a = new ProfilAyarlari();
 
@@ -99,13 +135,13 @@ public static class Varsayilanlar
     }
 
     /// <summary>
-    /// YouTube: TikTok'la aynı kodlama ayarları — x264, anahtar kare, FDK AAC —
+    /// YouTube: dikey 9:16 ayarıyla aynı kodlama ayarları — x264, anahtar kare, FDK AAC —
     /// tek farkla: çözünürlük, en-boy oranı, kare hızı, H.264 profili ve seviyesi kaynakla aynı
     /// (kırpma, ölçekleme, fps çevirme yok).
     /// </summary>
     public static ProfilAyarlari YouTube()
     {
-        var a = TikTok();
+        var a = Dikey916();
         a.Video.Cozunurluk = CozunurlukModu.Kaynak;
         a.Video.KareHiziModu = KareHiziModu.Kaynak;
         a.Video.X264.Profil = "kaynak";
@@ -120,6 +156,14 @@ public static class Varsayilanlar
     }
 
     public static ProfilAyarlari For(ExportProfileId id) => id == ExportProfileId.TikTok ? TikTok() : YouTube();
+
+    /// <summary>Ön ayarlar penceresinde silinemeyen hazır ayarlar.</summary>
+    public static IReadOnlyList<KayitliOnAyar> Hazirlar() =>
+    [
+        new() { Ad = "TikTok varsayılanı · NVENC CBR 34375 kb/s · kaynak boyut", Profil = ExportProfileId.TikTok, Ayarlar = TikTok(), Hazir = true },
+        new() { Ad = "Dikey 9:16 · 1216×2160 · 29,97 fps · x264 CRF 18", Profil = ExportProfileId.TikTok, Ayarlar = Dikey916(), Hazir = true },
+        new() { Ad = "YouTube varsayılanı · x264 CRF 18 · kaynak boyut", Profil = ExportProfileId.YouTube, Ayarlar = YouTube(), Hazir = true },
+    ];
 }
 
 /// <summary>Ayarların JSON biçimi (ayarlar.json ve kayıtlı ön ayarlar).</summary>

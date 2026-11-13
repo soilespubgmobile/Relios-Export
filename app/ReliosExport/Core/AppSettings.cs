@@ -16,6 +16,10 @@ public sealed class KayitliOnAyar
 
     [JsonPropertyName("ayarlar")]
     public ProfilAyarlari Ayarlar { get; set; } = new();
+
+    /// <summary>Programla gelen hazır ayar (silinemez, dosyaya yazılmaz).</summary>
+    [JsonIgnore]
+    public bool Hazir { get; init; }
 }
 
 /// <summary>
@@ -45,7 +49,8 @@ public sealed class AppSettings
         // Eski sürümlerde kaydedilmiş YouTube ayarı eski varsayılandır: yenisiyle değişir.
         if (!Profiller.TryGetValue(id, out var a) || a is null
             || a.Surum is < 1 or > ProfilAyarlari.GuncelSurum
-            || (id == ExportProfileId.YouTube && a.Surum < 3))
+            || (id == ExportProfileId.YouTube && a.Surum < 3)
+            || (id == ExportProfileId.TikTok && a.Surum < 4))
         {
             a = Varsayilanlar.For(id);
             Profiller[id] = a;
