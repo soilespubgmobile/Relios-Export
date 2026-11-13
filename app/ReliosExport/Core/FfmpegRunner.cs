@@ -14,6 +14,8 @@ public static class Tools
 
     public static string Ffprobe => Path.Combine(Folder, "ffprobe.exe");
 
+    public static bool Available => File.Exists(Ffmpeg) && File.Exists(Ffprobe);
+
     public static string? MissingMessage()
     {
         if (!File.Exists(Ffmpeg) || !File.Exists(Ffprobe))
@@ -139,11 +141,13 @@ public static class Exporter
         return path;
     }
 
+    /// <param name="onInfo">Kaynak incelendikten sonra kısa bilgi verir (ör. "1920×1080 · 60 fps · 9:16 kırpılıyor").</param>
     public static async Task<string> ExportAsync(
         string input,
         string outputFolder,
         ExportProfile profile,
         IProgress<double>? progress,
+        Action<string>? onInfo,
         CancellationToken ct)
     {
         if (!profile.IsReady)
@@ -152,6 +156,7 @@ public static class Exporter
         }
 
         var media = await MediaProbe.ProbeAsync(Tools.Ffprobe, input, ct);
+        onInfo?.Invoke(Describe(media));
         Directory.CreateDirectory(outputFolder);
         var output = OutputPathFor(input, outputFolder, profile);
         var temp = output + ".part.mp4";
@@ -170,5 +175,23 @@ public static class Exporter
         }
 
         return output;
+    }
+
+    /// <summary>Kaynağın kısa Türkçe özeti: çözünürlük, kare hızı ve 9:16 kırpma gerekip gerekmediği.</summary>
+    public static string Describe(MediaInfo media)
+    {
+        var tr = CultureInfo.GetCultureInfo("tr-TR");
+        var text = $"{media.DisplayWidth}×{media.DisplayHeight}";
+        if (media.FrameRate > 0)
+        {
+            text += " · " + media.FrameRate.ToString("0.##", tr) + " fps";
+        }
+
+        if (ArgsBuilder.PlanCrop916(media).IsNeeded)
+        {
+            text += " · 9:16 kırpılıyor";
+        }
+
+        return text;
     }
 }

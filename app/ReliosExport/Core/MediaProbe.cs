@@ -12,7 +12,8 @@ public sealed record MediaInfo(
     int SarDen,
     int Rotation,
     double DurationSeconds,
-    bool HasAudio)
+    bool HasAudio,
+    double FrameRate)
 {
     /// <summary>Döndürme uygulandıktan sonraki görüntü genişliği (piksel).</summary>
     public int DisplayWidth => Rotation is 90 or 270 ? Height : Width;
@@ -86,7 +87,8 @@ public static class MediaProbe
         var (sn, sd) = ParseRatio(v.TryGetProperty("sample_aspect_ratio", out var sar) ? sar.GetString() : null);
         var rotation = ReadRotation(v);
         var duration = ReadDuration(root, v);
-        return new MediaInfo(w, h, sn, sd, rotation, duration, hasAudio);
+        var fps = ReadFrameRate(v);
+        return new MediaInfo(w, h, sn, sd, rotation, duration, hasAudio, fps);
     }
 
     private static bool IsAttachedPicture(JsonElement s) =>
@@ -142,6 +144,27 @@ public static class MediaProbe
         }
 
         return deg;
+    }
+
+    /// <summary>Ortalama kare hızı (ör. 60, 29.97); okunamazsa 0. Yalnızca bilgi için gösterilir.</summary>
+    private static double ReadFrameRate(JsonElement v)
+    {
+        foreach (var key in new[] { "avg_frame_rate", "r_frame_rate" })
+        {
+            if (v.TryGetProperty(key, out var r) && r.GetString() is { } text)
+            {
+                var parts = text.Split('/');
+                if (parts.Length == 2
+                    && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var num)
+                    && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var den)
+                    && num > 0 && den > 0)
+                {
+                    return num / den;
+                }
+            }
+        }
+
+        return 0;
     }
 
     private static double ReadDuration(JsonElement root, JsonElement v)

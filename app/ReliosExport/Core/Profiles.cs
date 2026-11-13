@@ -7,11 +7,14 @@ public enum ExportProfileId
     YouTube,
 }
 
+/// <param name="Tags">Üst çubuktaki profil özeti etiketleri.</param>
+/// <param name="Description">Tek satırlık açıklama; hazır olmayan profilde uyarı olarak görünür.</param>
 public sealed record ExportProfile(
     ExportProfileId Id,
     string DisplayName,
     string FileSuffix,
     bool IsReady,
+    IReadOnlyList<string> Tags,
     string Description);
 
 public static class Profiles
@@ -25,6 +28,7 @@ public static class Profiles
         "TikTok",
         "_TikTok",
         IsReady: true,
+        ["1216×2160 · 9:16", "29,97 fps", "H.264 Main@L5.0", "CRF 18", "FDK AAC · 128 kb/s · 48 kHz"],
         "1216x2160 (9:16) · 29.97 fps · H.264 Main@L5.0 CRF 18 · FDK AAC 128 kb/s");
 
     /// <summary>YouTube: ayrıntıları kullanıcı belirleyecek; o zamana kadar kapalı.</summary>
@@ -33,7 +37,8 @@ public static class Profiles
         "YouTube",
         "_YouTube",
         IsReady: false,
-        "Ayarlar henüz belirlenmedi");
+        [],
+        "YouTube ayarları henüz belirlenmedi");
 
     public static IReadOnlyList<ExportProfile> All { get; } = [TikTok, YouTube];
 }

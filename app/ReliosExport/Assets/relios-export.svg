@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1B2736"/>
+      <stop offset="1" stop-color="#0B1018"/>
+    </linearGradient>
+    <linearGradient id="line" x1="240" y1="780" x2="820" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2EC4D6"/>
+      <stop offset="0.5" stop-color="#7FB8A8"/>
+      <stop offset="1" stop-color="#F4A62A"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FDC86F"/>
+      <stop offset="1" stop-color="#F4A62A"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#F4A62A" stop-opacity="0.45"/>
+      <stop offset="0.6" stop-color="#F4A62A" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#F4A62A" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="50" y="50" width="924" height="924" rx="200" fill="url(#bg)" stroke="#263445" stroke-width="5"/>
+  <!-- frame, open at the top-right corner -->
+  <path d="M 500 296 H 336 Q 252 296 252 380 V 688 Q 252 772 336 772 H 644 Q 728 772 728 688 V 524"
+        fill="none" stroke="url(#line)" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- play triangle -->
+  <circle cx="452" cy="572" r="190" fill="url(#glow)"/>
+  <path d="M 400 474 Q 400 446 425 460 L 568 548 Q 592 563 568 578 L 425 666 Q 400 680 400 652 Z" fill="url(#sun)"/>
+  <!-- export arrow -->
+  <path d="M 560 464 L 792 232" fill="none" stroke="url(#line)" stroke-width="58" stroke-linecap="round"/>
+  <path d="M 628 224 H 800 V 396" fill="none" stroke="url(#line)" stroke-width="58" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -9,12 +9,18 @@
     <AssemblyName>Relios Export</AssemblyName>
     <RootNamespace>ReliosExport</RootNamespace>
     <Product>Relios Export</Product>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Company>Relios</Company>
-    <Description>TikTok ve YouTube icin video disa aktarma</Description>
+    <Description>TikTok ve YouTube için video dışa aktarma</Description>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SatelliteResourceLanguages>tr;en</SatelliteResourceLanguages>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <ApplicationIcon>Assets\ReliosExport.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\ReliosExport.ico" />
+  </ItemGroup>
 
 </Project>
