@@ -1,0 +1,41 @@
+name: Relios Export (uygulama)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - '.github/workflows/app-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: .NET 11 SDK (en son kararli)
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'ga'
+
+      - name: Derle (tek exe, self-contained)
+        run: >
+          dotnet publish app/ReliosExport/ReliosExport.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -o out
+
+      - name: Ciktiyi yukle
+        uses: actions/upload-artifact@v7
+        with:
+          name: relios-export-win64
+          path: out/Relios Export.exe
+          retention-days: 30

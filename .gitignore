@@ -1,0 +1,8 @@
+bin/
+obj/
+out/
+*.user
+.vs/
+ffmpeg-build/artifacts/
+ffmpeg-build/ffbuild/
+ffmpeg-build/.cache/
