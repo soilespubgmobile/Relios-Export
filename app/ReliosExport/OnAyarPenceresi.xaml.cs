@@ -100,7 +100,7 @@ public partial class OnAyarPenceresi : Window
 
     private void OnSil(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is not KayitliOnAyar { Hazir: false } o)
+        if ((sender as FrameworkElement)?.DataContext is not KayitliOnAyar o)
         {
             return;
         }
