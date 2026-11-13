@@ -76,6 +76,7 @@ public static class Secenekler
         ("zerolatency", "Sıfır gecikme"));
 
     public static Secenek[] X264Profiller { get; } = L(
+        ("kaynak", "Kaynakla aynı"),
         ("", "Otomatik"),
         ("baseline", "Baseline"),
         ("main", "Main"),
@@ -85,7 +86,7 @@ public static class Secenekler
         ("high444", "High 4:4:4"));
 
     public static Secenek[] Seviyeler { get; } = L(
-        [("", "Otomatik"), .. new[] { "1.0", "1.1", "1.2", "1.3", "2.0", "2.1", "2.2", "3.0", "3.1", "3.2", "4.0", "4.1", "4.2", "5.0", "5.1", "5.2", "6.0", "6.1", "6.2" }
+        [("kaynak", "Kaynakla aynı"), ("", "Otomatik"), .. new[] { "1.0", "1.1", "1.2", "1.3", "2.0", "2.1", "2.2", "3.0", "3.1", "3.2", "4.0", "4.1", "4.2", "5.0", "5.1", "5.2", "6.0", "6.1", "6.2" }
             .Select(x => ((object?)x, x.Replace('.', ',')))]);
 
     public static Secenek[] X264Modlari { get; } = L(
@@ -192,6 +193,7 @@ public static class Secenekler
         ("lossless", "Kayıpsız"));
 
     public static Secenek[] NvencProfiller { get; } = L(
+        ("kaynak", "Kaynakla aynı"),
         ("", "Otomatik"),
         ("baseline", "Baseline"),
         ("main", "Main"),

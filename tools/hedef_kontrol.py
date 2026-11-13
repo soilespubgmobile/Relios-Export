@@ -2,6 +2,7 @@
 """Bir MP4 çıktısını kullanıcının hedef meta verisiyle karşılaştırır.
 
 Kullanım: python3 -I hedef_kontrol.py <dosya.mp4> [iş parçacığı] [--boyut GxY] [--fps N/D]
+          [--profil kaynak --kaynak <kaynak video>]
 
 --boyut / --fps: YouTube gibi "kaynakla aynı" profillerde beklenen çözünürlük ve kare hızı
 (varsayılan TikTok hedefi: 1216x2160, 30000/1001). Diğer her şey XviD4PSP hedefiyle aynı beklenir.
@@ -33,7 +34,21 @@ _SECENEK = dict(zip(_ek[0::2], _ek[1::2]))
 BOYUT = _SECENEK.get("--boyut", "1216x2160")
 FPS = _SECENEK.get("--fps", "30000/1001")
 BW, BH = (int(x) for x in BOYUT.split("x"))
-LOOKAHEAD = {"7": "1", "67": "11"}.get(THREADS, "?")
+# Beklenen H.264 profili / seviyesi: varsayılan TikTok hedefi (Main@L5.0). "kaynak": programdaki
+# ArgsBuilder.ProfilCoz / SeviyeCoz'un bağımsız karşılığı (H.264 kaynakta aynısı, değilse Main + otomatik).
+BEK_PROFIL, BEK_SEVIYE = "Main", "5.0"
+if _SECENEK.get("--profil") == "kaynak":
+    _k = json.loads(subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name,profile,level",
+         "-of", "json", _SECENEK["--kaynak"]], capture_output=True, text=True, encoding="utf-8").stdout)["streams"][0]
+    if _k.get("codec_name") == "h264" and _k.get("profile"):
+        _p = _k["profile"]
+        BEK_PROFIL = "Constrained Baseline" if "Baseline" in _p else "High" if "High" in _p else "Main"
+        _l = int(_k.get("level") or 0)
+        BEK_SEVIYE = f"{_l / 10:.1f}" if _l > 0 else None
+    else:
+        BEK_PROFIL, BEK_SEVIYE = "Main", None  # seviyeyi x264 seçer
+LOOKAHEAD = {"7": "1", "8": "1", "67": "11"}.get(THREADS, "?")
 TARGET_X264 = TARGET_X264.replace("THREADS", THREADS).replace("LOOKAHEAD", LOOKAHEAD)
 rows = []
 
@@ -66,8 +81,9 @@ chk("Kap", "mp4", "mp4" if "mp4" in fmt.get("format_name", "") and path.lower().
 
 # ---- Video
 chk("Video codec", "h264", v.get("codec_name"))
-chk("Video profil", "Main", v.get("profile"))
-chk("Video level", "5.0", f"{v.get('level', 0) / 10:.1f}")
+chk("Video profil", BEK_PROFIL, v.get("profile"))
+_lv = f"{v.get('level', 0) / 10:.1f}"
+chk("Video level", BEK_SEVIYE or "otomatik (x264)", _lv, ok=_lv == BEK_SEVIYE if BEK_SEVIYE else float(_lv) > 0)
 chk("Çözünürlük", BOYUT, f"{v.get('width')}x{v.get('height')}")
 sar = v.get("sample_aspect_ratio")
 if sar in (None, "0:1", "N/A"):

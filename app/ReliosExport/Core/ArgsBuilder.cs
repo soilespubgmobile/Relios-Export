@@ -196,7 +196,7 @@ public static class ArgsBuilder
         }
         else
         {
-            Nvenc(args, a, CiktiKareHizi(a, media));
+            Nvenc(args, a, CiktiKareHizi(a, media), media);
         }
 
         args.AddRange(
@@ -279,7 +279,7 @@ public static class ArgsBuilder
         }
 
         filters.Add("setsar=1");
-        filters.Add("format=" + PikselBicimi(a));
+        filters.Add("format=" + PikselBicimi(a, media));
         // Renk primeri ve aktarım her zaman BT.709 etiketlenir (hedef video gibi).
         // FFmpeg 7.1 ve sonrası bu ikisini kareden alıyor; -color_primaries / -color_trc
         // tek başına etiketsiz kaynakta işe yaramıyor.
@@ -287,9 +287,9 @@ public static class ArgsBuilder
         return filters;
     }
 
-    private static string PikselBicimi(ProfilAyarlari a)
+    private static string PikselBicimi(ProfilAyarlari a, MediaInfo? media)
     {
-        var profil = a.Video.Kodlayici == VideoKodlayici.X264 ? a.Video.X264.Profil : a.Video.Nvenc.Profil;
+        var profil = ProfilCoz(a.Video.Kodlayici == VideoKodlayici.X264 ? a.Video.X264.Profil : a.Video.Nvenc.Profil, media);
         return profil switch
         {
             "high10" => "yuv420p10le",
@@ -326,7 +326,7 @@ public static class ArgsBuilder
     {
         var x = a.Video.X264;
         var p = X264Parametreleri(a, CiktiKareHizi(a, media));
-        X264Bayraklari(args, x, gecis, gecisDosyasi);
+        X264Bayraklari(args, x, gecis, gecisDosyasi, media);
         args.AddRange(["-x264-params", string.Join(':', p)]);
     }
 
@@ -339,7 +339,7 @@ public static class ArgsBuilder
     public static string X264KomutMetni(ProfilAyarlari a, double fps)
     {
         var args = new List<string>();
-        X264Bayraklari(args, a.Video.X264, 0, string.Empty);
+        X264Bayraklari(args, a.Video.X264, 0, string.Empty, null);
         args.AddRange(["-x264-params", X264ParametreMetni(a, fps)]);
         return KomutMetni(args);
     }
@@ -348,7 +348,7 @@ public static class ArgsBuilder
     public static string NvencKomutMetni(ProfilAyarlari a, double fps)
     {
         var args = new List<string>();
-        Nvenc(args, a, fps);
+        Nvenc(args, a, fps, null);
         return KomutMetni(args);
     }
 
@@ -529,22 +529,77 @@ public static class ArgsBuilder
         return p;
     }
 
-    private static void X264Bayraklari(List<string> args, X264Ayarlari x, int gecis, string gecisDosyasi)
+    // --------------------------------------------------------------------------- Kaynakla aynı profil / seviye
+
+    /// <summary>Ayarlarda profil ve seviye için "kaynakla aynı" değeri.</summary>
+    public const string Kaynak = "kaynak";
+
+    /// <summary>
+    /// "kaynak" profilini çözer: H.264 kaynakta aynı profil (Baseline / Main / High; çıktı 8 bit 4:2:0 olduğu
+    /// için High 10 / 4:2:2 / 4:4:4 → High). Başka codec'lerde (HEVC, AV1, ProRes...) H.264 karşılığı
+    /// olmadığından Main. Kaynak bilinmiyorsa (ayar penceresi önizlemesi) "(kaynak)".
+    /// </summary>
+    public static string ProfilCoz(string profil, MediaInfo? m)
     {
+        if (profil != Kaynak)
+        {
+            return profil;
+        }
+
+        if (m is null)
+        {
+            return "(kaynak)";
+        }
+
+        if (m.VideoCodec != "h264" || string.IsNullOrEmpty(m.VideoProfil))
+        {
+            return "main";
+        }
+
+        return m.VideoProfil.Contains("Baseline", StringComparison.OrdinalIgnoreCase) ? "baseline"
+            : m.VideoProfil.Contains("High", StringComparison.OrdinalIgnoreCase) ? "high"
+            : "main";
+    }
+
+    /// <summary>
+    /// "kaynak" seviyesini çözer: H.264 kaynakta aynı seviye (42 → "4.2", 9 → "1b"); başka codec'lerde
+    /// seviyeler H.264'le aynı anlamda olmadığından otomatik (boş: x264 / NVENC kendisi seçer).
+    /// </summary>
+    public static string SeviyeCoz(string seviye, MediaInfo? m)
+    {
+        if (seviye != Kaynak)
+        {
+            return seviye;
+        }
+
+        if (m is null)
+        {
+            return "(kaynak)";
+        }
+
+        return m.VideoCodec == "h264" && m.VideoSeviye is { } l
+            ? l == 9 ? "1b" : string.Create(Inv, $"{l / 10}.{l % 10}")
+            : string.Empty;
+    }
+
+    private static void X264Bayraklari(List<string> args, X264Ayarlari x, int gecis, string gecisDosyasi, MediaInfo? media)
+    {
+        var profil = ProfilCoz(x.Profil, media);
+        var seviye = SeviyeCoz(x.Seviye, media);
         args.AddRange(["-c:v", "libx264", "-preset", x.OnAyar]);
         if (!string.IsNullOrEmpty(x.Ayar))
         {
             args.AddRange(["-tune", x.Ayar]);
         }
 
-        if (!string.IsNullOrEmpty(x.Profil))
+        if (!string.IsNullOrEmpty(profil))
         {
-            args.AddRange(["-profile:v", x.Profil]);
+            args.AddRange(["-profile:v", profil]);
         }
 
-        if (!string.IsNullOrEmpty(x.Seviye))
+        if (!string.IsNullOrEmpty(seviye))
         {
-            args.AddRange(["-level:v", x.Seviye]);
+            args.AddRange(["-level:v", seviye]);
         }
 
         if (x.Mod is X264Modu.OrtalamaBitHizi or X264Modu.IkiGecis or X264Modu.UcGecis or X264Modu.Cbr)
@@ -562,9 +617,11 @@ public static class ArgsBuilder
         }
     }
 
-    private static void Nvenc(List<string> args, ProfilAyarlari a, double fps)
+    private static void Nvenc(List<string> args, ProfilAyarlari a, double fps, MediaInfo? media)
     {
         var n = a.Video.Nvenc;
+        var profil = ProfilCoz(n.Profil, media);
+        var seviye = SeviyeCoz(n.Seviye, media);
         var k = a.AnahtarKare;
         args.AddRange(["-c:v", "h264_nvenc", "-preset", n.OnAyar]);
         if (!string.IsNullOrEmpty(n.Ayar))
@@ -572,14 +629,14 @@ public static class ArgsBuilder
             args.AddRange(["-tune", n.Ayar]);
         }
 
-        if (!string.IsNullOrEmpty(n.Profil))
+        if (!string.IsNullOrEmpty(profil))
         {
-            args.AddRange(["-profile:v", n.Profil]);
+            args.AddRange(["-profile:v", profil]);
         }
 
-        if (!string.IsNullOrEmpty(n.Seviye))
+        if (!string.IsNullOrEmpty(seviye))
         {
-            args.AddRange(["-level:v", n.Seviye]);
+            args.AddRange(["-level:v", seviye]);
         }
 
         static string Kb(int v) => v.ToString(Inv) + "k";

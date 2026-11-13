@@ -33,7 +33,7 @@ public static class Varsayilanlar
         x.Seviye = "5.0";
         x.Mod = X264Modu.Crf;
         x.Crf = 18;
-        x.IsParcacigi = 7;
+        x.IsParcacigi = 8; // Ryzen 7 5700X: 8 çekirdek
         x.Ref = 3;
         x.Deblock = true;
         x.DeblockAlfa = -1;
@@ -99,18 +99,19 @@ public static class Varsayilanlar
     }
 
     /// <summary>
-    /// YouTube: kaynakla aynı çözünürlük ve kare hızı, yüksek kalite. YouTube'un yükleme önerileri:
-    /// High profil, 2 ardışık B-kare, kapalı GOP (kare hızının yarısı), AAC-LC 48 kHz 384 kb/s.
-    /// </summary>
-    /// <summary>
     /// YouTube: TikTok'la aynı kodlama ayarları — x264, anahtar kare, FDK AAC —
-    /// tek farkla: çözünürlük, en-boy oranı ve kare hızı kaynakla aynı (kırpma, ölçekleme, fps çevirme yok).
+    /// tek farkla: çözünürlük, en-boy oranı, kare hızı, H.264 profili ve seviyesi kaynakla aynı
+    /// (kırpma, ölçekleme, fps çevirme yok).
     /// </summary>
     public static ProfilAyarlari YouTube()
     {
         var a = TikTok();
         a.Video.Cozunurluk = CozunurlukModu.Kaynak;
         a.Video.KareHiziModu = KareHiziModu.Kaynak;
+        a.Video.X264.Profil = "kaynak";
+        a.Video.X264.Seviye = "kaynak";
+        a.Video.Nvenc.Profil = "kaynak";
+        a.Video.Nvenc.Seviye = "kaynak";
 
         // Kullanıcı sonradan "hedef boyut"a geçerse başlangıç değerleri
         a.Video.Genislik = 1920;

@@ -42,13 +42,18 @@ public sealed class AppSettings
     /// <summary>Profilin ayarları; kayıt yoksa ya da bozuksa fabrika ayarları.</summary>
     public ProfilAyarlari ProfilAyari(ExportProfileId id)
     {
-        // 1. sürümde kaydedilmiş YouTube ayarı eski varsayılandır (CRF 16, High, 384 kb/s): yenisiyle değişir.
+        // Eski sürümlerde kaydedilmiş YouTube ayarı eski varsayılandır: yenisiyle değişir.
         if (!Profiller.TryGetValue(id, out var a) || a is null
             || a.Surum is < 1 or > ProfilAyarlari.GuncelSurum
-            || (id == ExportProfileId.YouTube && a.Surum < 2))
+            || (id == ExportProfileId.YouTube && a.Surum < 3))
         {
             a = Varsayilanlar.For(id);
             Profiller[id] = a;
+        }
+        else if (a.Surum < 3 && a.Video.X264.IsParcacigi == 7)
+        {
+            // 7 iş parçacığı eski varsayılandı; artık 8 (işlemcinin çekirdek sayısı).
+            a.Video.X264.IsParcacigi = 8;
         }
 
         a.Surum = ProfilAyarlari.GuncelSurum;

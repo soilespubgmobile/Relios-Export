@@ -48,6 +48,15 @@ public sealed record MediaInfo(
     string? ColorTransfer,
     string? ColorRange)
 {
+    /// <summary>Kaynak video codec'i (ffprobe adı: h264, hevc, av1, prores...).</summary>
+    public string? VideoCodec { get; init; }
+
+    /// <summary>Kaynak videonun profili (ffprobe adı: "High", "Main", "Constrained Baseline"...).</summary>
+    public string? VideoProfil { get; init; }
+
+    /// <summary>Kaynak videonun seviyesi (ffprobe: H.264'te 40 = 4.0, 42 = 4.2, 9 = 1b).</summary>
+    public int? VideoSeviye { get; init; }
+
     /// <summary>Kaynaktaki ses akışları (ilki çıktıda "videonun sesi" olarak kullanılır).</summary>
     public IReadOnlyList<SesAkisi> SesAkislari { get; init; } = [];
 
@@ -145,6 +154,11 @@ public static class MediaProbe
             ReadString(v, "color_range"))
         {
             SesAkislari = sesler,
+            VideoCodec = ReadString(v, "codec_name"),
+            VideoProfil = ReadString(v, "profile"),
+            VideoSeviye = v.TryGetProperty("level", out var lv) && lv.ValueKind == JsonValueKind.Number && lv.TryGetInt32(out var l) && l > 0
+                ? l
+                : null,
         };
     }
 

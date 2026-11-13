@@ -53,8 +53,11 @@ public sealed class ProfilAyarlari : Gozlenebilir
     /// <summary>Ayar dosyasının biçim sürümü (ileride değişirse eski kayıtlar okunabilsin).</summary>
     public int Surum { get; set; } = GuncelSurum;
 
-    /// <summary>2: YouTube varsayılanı TikTok'un kodlama ayarları + kaynakla aynı boyut / fps oldu.</summary>
-    public const int GuncelSurum = 2;
+    /// <summary>
+    /// 2: YouTube varsayılanı TikTok'un kodlama ayarları + kaynakla aynı boyut / fps oldu.
+    /// 3: x264 iş parçacığı 7 → 8; YouTube'da H.264 profili ve seviyesi de kaynakla aynı.
+    /// </summary>
+    public const int GuncelSurum = 3;
 
     public VideoAyarlari Video { get => _video; set => Bagla(ref _video, value); }
 
@@ -754,8 +757,18 @@ public static class Bicim
 
     public static string ProfilSeviye(string profil, string seviye)
     {
+        if (profil == "kaynak" && seviye == "kaynak")
+        {
+            return "Profil ve seviye kaynakla aynı";
+        }
+
         var p = string.IsNullOrEmpty(profil) ? "Otomatik profil" : ProfilAdi(profil);
-        return string.IsNullOrEmpty(seviye) ? p + " (seviye otomatik)" : $"{p}@L{seviye}";
+        return seviye switch
+        {
+            "" => p + " (seviye otomatik)",
+            "kaynak" => p + " (seviye kaynakla aynı)",
+            _ => $"{p}@L{seviye}",
+        };
     }
 
     public static string ProfilAdi(string p) => p switch
@@ -767,6 +780,7 @@ public static class Bicim
         "high422" => "High 4:2:2",
         "high444" => "High 4:4:4",
         "high444p" => "High 4:4:4",
+        "kaynak" => "Kaynak profili",
         _ => p,
     };
 

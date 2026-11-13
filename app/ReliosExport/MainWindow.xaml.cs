@@ -847,10 +847,10 @@ public partial class MainWindow : Window
         var overall = count == 0 ? 0 : Math.Clamp((index + current) / count, 0, 1);
         OverallBar.Value = overall;
         Taskbar.ProgressValue = overall;
+        // Yazı yalnızca videonun satırında (yüzde, kalan süre); alt çubukta yalnızca ince ilerleme şeridi.
         if (_cts is { IsCancellationRequested: false })
         {
-            var pct = ((int)Math.Floor(current * 100)).ToString(CultureInfo.InvariantCulture);
-            StatusText.Text = $"{index + 1}/{count} kodlanıyor · %{pct}" + (kalan is { } k ? " · bu video için kalan " + FileItem.SureMetni(k) : string.Empty);
+            StatusText.Text = string.Empty;
         }
     }
 
