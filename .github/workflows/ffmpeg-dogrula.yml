@@ -275,3 +275,4 @@ jobs:
           $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           if ($hatali) { "`n$hatali ayar denemesinde sorun var."; exit 1 }
           "`nTum ayar denemeleri temiz."
+          exit 0  # son deneme bilerek hata koduyla biter; adimin sonucunu o belirlemesin

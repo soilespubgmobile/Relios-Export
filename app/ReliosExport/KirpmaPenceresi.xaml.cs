@@ -64,6 +64,10 @@ public partial class KirpmaPenceresi : Window
     /// <summary>Pencere kontrolü için: iki kare de hazır mı.</summary>
     internal int CiktiSayisi { get; private set; }
 
+    internal string Teshis =>
+        $"video={_video ?? "-"} bilgi={(_media is null ? "yok" : "var")} kaynak={(KaynakResim.Source is null ? "yok" : "var")} " +
+        $"cikti={(CiktiResim.Source is null ? "yok" : "var")} durum='{Durum.Text}'";
+
     internal bool Hazir => KaynakResim.Source is not null && CiktiResim.Source is not null && Durum.Text.Length == 0;
 
     protected override void OnSourceInitialized(EventArgs e)

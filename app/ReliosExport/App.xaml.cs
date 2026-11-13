@@ -184,11 +184,18 @@ public partial class App : Application
                 EkranGoruntusu.Pencere(k, Path.Combine(ekran, $"{sira:00}-kirpma-sol.png"));
             }
 
+            if (ekran is not null && !(hazir && hazir2))
+            {
+                EkranGoruntusu.Pencere(k, Path.Combine(ekran, $"{sira:00}-kirpma-HAZIR-DEGIL.png"));
+            }
+
+            var teshis = k.Teshis;
             k.Close();
+            rapor.Append($"kirpma_teshis={teshis}\n");
             rapor.Append($"kirpma=acildi (kareler {(hazir && hazir2 ? "hazir" : "HAZIR DEGIL")})\n");
             if (!(hazir && hazir2))
             {
-                throw new InvalidOperationException("Kırpma önizlemesinde kareler 30 saniyede hazırlanmadı.");
+                throw new InvalidOperationException("Kırpma önizlemesinde kareler 30 saniyede hazırlanmadı: " + teshis);
             }
         }
 
