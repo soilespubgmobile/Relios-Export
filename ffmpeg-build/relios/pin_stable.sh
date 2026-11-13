@@ -52,12 +52,11 @@ fi
 
 if [[ "$ONLY" == all ]]; then
     pin 50-dav1d   '^[0-9]+\.[0-9]+\.[0-9]+$'
-    # x264'un resmi surum yayini yok; resmi "stable" dali kullanilir.
-    X264REPO="$(grep -m1 '^SCRIPT_REPO=' scripts.d/50-x264.sh | cut -d'"' -f2)"
-    X264SHA="$(git ls-remote "$X264REPO" refs/heads/stable | cut -f1)"
-    [[ -n "$X264SHA" ]] || { echo "HATA: x264 stable dali bulunamadi"; exit 1; }
+    # x264: kullanicinin istegiyle XviD4PSP 8.2.14'teki surumun birebir aynisi
+    # (H.264 x264 core 165 r3223 0480cb0). Bu commit sabit tutulur, kendiliginden degismez.
+    X264SHA="0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee"
     set_commit 50-x264 "$X264SHA"
-    echo "| 50-x264 | stable dali | ${X264SHA:0:12} |" >> "$SUMMARY"
+    echo "| 50-x264 | XviD4PSP ile ayni: core 165 r3223 | ${X264SHA:0:12} |" >> "$SUMMARY"
 
     # soxr 2018'den beri yeni surum cikarmadi; kullanilan commit ile son etiket bilgi olarak yazilir.
     SOXRREPO="$(grep -m1 '^SCRIPT_REPO=' scripts.d/50-soxr.sh | cut -d'"' -f2)"
