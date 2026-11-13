@@ -1,0 +1,46 @@
+name: Relios FFmpeg (win64, nonfree, en son kararli surumler)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'ffmpeg-build/**'
+      - '.github/workflows/ffmpeg-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    defaults:
+      run:
+        working-directory: ffmpeg-build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Disk alani ac
+        run: ./util/free_disk_space.sh
+
+      - name: Tum bilesenleri en son kararli surume sabitle
+        id: pin
+        run: ./relios/pin_stable.sh all
+
+      - name: Derleme ortamini (Docker imajlari) hazirla
+        run: ./makeimage.sh win64 nonfree ${{ steps.pin.outputs.ffaddin }}
+
+      - name: FFmpeg'i derle
+        run: ./build.sh win64 nonfree ${{ steps.pin.outputs.ffaddin }}
+
+      - name: Ciktiyi listele
+        run: ls -la artifacts
+
+      - name: Ciktiyi yukle
+        uses: actions/upload-artifact@v7
+        with:
+          name: relios-ffmpeg-${{ steps.pin.outputs.fftag }}-win64-nonfree
+          path: ffmpeg-build/artifacts/*.zip
+          retention-days: 30
