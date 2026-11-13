@@ -114,6 +114,12 @@ jobs:
           dotnet build tools/ReliosExport.EskiKomut -c Release -o eski --nologo -v q
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Birim kontrol (H.264 seviye hesabi, NVENC komutu, veri klasoru)
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          & ./smoke/ReliosExport.Smoke.exe --birim-kontrol
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Tum deneme videolari (programin kendi TikTok kodu + kontroller)
         run: |
           [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -219,10 +225,12 @@ jobs:
             @{ ad = 'FDK HE-AAC 48 kb/s (Turkce adli kaynak)'; k = '08_'; arg = @('--profil', 'tiktok-916', '--ayarla', 'Ses.Fdk.Profil=aac_he', '--ayarla', 'Ses.Fdk.BitHizi=48'); sag = @()
                ayar = @('acodec=aac', 'aprofil=HE-AAC', 'abit=48000±10%') },
             @{ ad = 'TikTok varsayilani komutu: H.264 High@4.2 60 fps kaynak (NVENC CBR 34375, kart yok: yalnizca komut)'; k = '01_'; arg = @('--sadece-komut'); komut = @(
-                 '-vf scale=trunc(iw*sar/2)*2:trunc(ih/2)*2:flags=lanczos', '-c:v h264_nvenc -preset p7 -tune hq -profile:v high -level:v 4.2 -rc cbr -b:v 34375k',
+                 '-vf scale=trunc(iw*sar/2)*2:trunc(ih/2)*2:flags=lanczos', '-c:v h264_nvenc -preset p7 -tune hq -profile:v high -level:v 4.2 -rc cbr -b:v 34375k -bufsize 34375k',
                  '-bf 0 -refs 3', '-coder cabac -g 30 -no-scenecut 1', '-c:a libfdk_aac -profile:a aac_low -b:a 128k -ar 48000 -ac 2'); yok = @('crop=', 'fps=', '-b_ref_mode') },
             @{ ad = 'TikTok varsayilani komutu: HEVC 10 bit telefon kaynak (Main, seviye otomatik)'; k = '03_'; arg = @('--sadece-komut'); komut = @(
-                 '-c:v h264_nvenc -preset p7 -tune hq -profile:v main -rc cbr -b:v 34375k', '-bf 0 -refs 3', '-g 30'); yok = @('-level:v', 'crop=', 'fps=') },
+                 '-c:v h264_nvenc -preset p7 -tune hq -profile:v main -rc cbr -b:v 34375k -bufsize 34375k', '-bf 0 -refs 3', '-g 30'); yok = @('-level:v', 'crop=', 'fps=') },
+            @{ ad = 'TikTok varsayilani komutu: High@3.2 kare kaynak (34375 kb/s 3.2 sinirini asar, NVENC reddederdi: seviye 4.1)'; k = '07_'; arg = @('--sadece-komut'); komut = @(
+                 '-c:v h264_nvenc -preset p7 -tune hq -profile:v high -level:v 4.1 -rc cbr -b:v 34375k -bufsize 34375k'); yok = @('-level:v 3.2') },
             @{ ad = 'Hata mesaji: TikTok varsayilani (NVENC) kart yokken (Turkce aciklama + gunluk dosyasi)'; k = '07_'; arg = @(); hata = 'NVENC kullanılamadı' }
           )
           $satirlar = @(); $hatali = 0; $i = 0

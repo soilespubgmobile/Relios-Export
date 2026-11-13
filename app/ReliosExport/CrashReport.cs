@@ -22,16 +22,18 @@ internal static class CrashReport
             .AppendLine($"Windows: {RuntimeInformation.OSDescription} ({Environment.OSVersion.Version})")
             .AppendLine($".NET: {RuntimeInformation.FrameworkDescription}")
             .AppendLine($"Klasör: {AppPaths.AppFolder}")
+            .AppendLine($"Veri klasörü: {AppPaths.VeriKlasoru}")
             .AppendLine($"Kaynak: {source}")
             .AppendLine()
             .AppendLine(ex?.ToString() ?? "(ayrıntı yok)")
             .AppendLine(new string('-', 60))
             .ToString();
 
-        foreach (var dir in new[] { AppPaths.AppFolder, Path.GetTempPath() })
+        foreach (var dir in new[] { AppPaths.VeriKlasoru, Path.GetTempPath() })
         {
             try
             {
+                Directory.CreateDirectory(dir);
                 var path = Path.Combine(dir, FileName);
                 File.AppendAllText(path, text, Encoding.UTF8);
                 return path;

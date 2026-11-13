@@ -25,6 +25,12 @@ public static class HataAciklamasi
             "NVENC kullanılamadı: NVIDIA sürücüsü bu FFmpeg için çok eski. Sürücüyü güncelleyin ya da kodlayıcıyı x264 yapın."),
         (["OpenEncodeSessionEx failed", "out of memory (10)", "incompatible client key"],
             "NVENC oturumu açılamadı: ekran kartı aynı anda başka bir kodlamayla meşgul olabilir. Onu bitirip yeniden deneyin."),
+        (["Invalid Level", "Unsupported Level"],
+            "NVENC bu H.264 seviyesini kabul etmedi: seviye, videonun boyutu, kare hızı, bit hızı ya da referans kare sayısı için düşük. Seviyeyi \"Kaynakla aynı\" ya da \"Otomatik\" yapın."),
+        (["Frame Dimension less than the minimum"],
+            "NVENC bu kadar küçük görüntüyü kodlayamıyor. Çözünürlüğü büyütün ya da kodlayıcıyı x264 yapın."),
+        (["No capable devices found"],
+            "NVENC bu videoyu kodlayamıyor: ekran kartı bu boyutu ya da istenen özelliği desteklemiyor (H.264'te en fazla 4096 piksel). Çözünürlüğü düşürün ya da kodlayıcıyı x264 yapın."),
         (["InitializeEncoder failed", "Provided device doesn't support required NVENC features", "Lossless encoding not supported",
           "B frames as references are not supported", "Weighted prediction"],
             "NVENC bu ayarları kabul etmedi (profil, seviye, B-kare ya da ağırlıklı tahmin kartta desteklenmiyor). NVENC ayarlarını değiştirin."),
@@ -59,7 +65,8 @@ public static class HataAciklamasi
     }
 
     /// <summary>
-    /// Hata günlüğünü program klasöründeki "Günlük" klasörüne yazar (yazılamazsa geçici klasöre).
+    /// Hata günlüğünü veri klasöründeki "Günlük" klasörüne yazar (yazılamazsa geçici klasöre). Veri klasörü exe'nin
+    /// yanıdır; exe bir arşivin içinden çalışıyorsa %LOCALAPPDATA%\Relios Export (arşiv kapanınca silinmesin diye).
     /// Dosya yolunu döndürür; hiçbir yere yazılamazsa null.
     /// </summary>
     public static string? GunlukYaz(string kaynak, string icerik)
@@ -67,7 +74,7 @@ public static class HataAciklamasi
         var ad = $"{DateTime.Now:yyyy-MM-dd HH-mm-ss} {Temizle(Path.GetFileNameWithoutExtension(kaynak))}.txt";
         foreach (var klasor in new[]
                  {
-                     Path.Combine(AppPaths.AppFolder, "Günlük"),
+                     Path.Combine(AppPaths.VeriKlasoru, "Günlük"),
                      Path.Combine(Path.GetTempPath(), "Relios Export", "Günlük"),
                  })
         {

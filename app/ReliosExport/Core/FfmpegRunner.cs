@@ -294,6 +294,17 @@ public static class Exporter
             text += " · HDR kaynak";
         }
 
+        if (a.Video.Kodlayici == VideoKodlayici.Nvenc && a.Video.Nvenc.Seviye == ArgsBuilder.Kaynak)
+        {
+            // Kaynağın seviyesi bit hızına / boyuta yetmiyorsa NVENC için yükseltilir (yoksa kodlama başlamaz).
+            var kaynakSeviye = ArgsBuilder.SeviyeCoz(ArgsBuilder.Kaynak, media);
+            var seviye = ArgsBuilder.NvencSeviyesi(a, media);
+            if (kaynakSeviye.Length > 0 && seviye != kaynakSeviye)
+            {
+                text += $" · seviye {kaynakSeviye} → {seviye}";
+            }
+        }
+
         text += " · Ses: " + ses.Aciklama;
         return text;
     }

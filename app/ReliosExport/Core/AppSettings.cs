@@ -41,7 +41,7 @@ public sealed class AppSettings
     [JsonPropertyName("on_ayarlar")]
     public List<KayitliOnAyar> OnAyarlar { get; set; } = [];
 
-    private static string FilePath => Path.Combine(AppPaths.AppFolder, "ayarlar.json");
+    private static string FilePath => Path.Combine(AppPaths.VeriKlasoru, "ayarlar.json");
 
     /// <summary>Profilin ayarları; kayıt yoksa ya da bozuksa fabrika ayarları.</summary>
     public ProfilAyarlari ProfilAyari(ExportProfileId id)
@@ -87,6 +87,7 @@ public sealed class AppSettings
     {
         try
         {
+            Directory.CreateDirectory(AppPaths.VeriKlasoru);
             var temp = FilePath + ".tmp";
             File.WriteAllText(temp, JsonSerializer.Serialize(this, AyarDosyasi.Secenekler));
             File.Move(temp, FilePath, overwrite: true);

@@ -5,6 +5,7 @@ using ReliosExport.Core.Ayarlar;
 // Relios Export'un kodlama kodunu (app/ReliosExport/Core) arayüz olmadan çalıştıran deneme aracı.
 // Kullanım: ReliosExport.Smoke.exe <kaynak video> <çıktı klasörü> [--profil tiktok|tiktok-916|youtube] [--ayar ayar.json]
 //           [--ayarla Yol=Deger ...] [--sadece-komut]
+//           ReliosExport.Smoke.exe --birim-kontrol   (video gerektirmeyen kontroller)
 //   --ayar          profil ayarlarını JSON dosyasından alır (yoksa profilin fabrika ayarları)
 //   --ayarla        tek bir ayarı değiştirir, ör. --ayarla Video.X264.Mod=IkiGecis --ayarla Ses.Kodlayici=Wav
 //   --sadece-komut  kodlamaz; komutları yer tutucularla (KAYNAK, SES, CIKTI) yazar
@@ -12,6 +13,12 @@ using ReliosExport.Core.Ayarlar;
 
 // Türkçe karakterler günlükte bozulmasın.
 Console.OutputEncoding = System.Text.Encoding.UTF8;
+
+// Video gerektirmeyen kontroller: seviye hesabı, NVENC komutu, veri klasörü.
+if (args.Length >= 1 && args[0] == "--birim-kontrol")
+{
+    return BirimKontrol.Calistir();
+}
 
 if (args.Length < 2)
 {
