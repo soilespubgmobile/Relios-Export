@@ -6,16 +6,16 @@ cd "$(dirname "$0")/.."
 SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 OUT="${GITHUB_OUTPUT:-/dev/null}"
 
-# Sunucuya baglanti anlik koparsa (or. code.videolan.org) birkac kez tekrar dener.
+# Sunucuya baglanilamazsa (or. code.videolan.org kapali) dakikada bir, en fazla 40 dakika bekler.
 lsr() { # git ls-remote argumanlari
     local i out
-    for i in 1 2 3 4 5 6; do
+    for i in $(seq 1 40); do
         if out="$(git ls-remote "$@")"; then
             printf '%s\n' "$out"
             return 0
         fi
-        echo "uyari: git ls-remote basarisiz ($i/6): $*; 30 sn sonra tekrar" >&2
-        sleep 30
+        echo "uyari: git ls-remote basarisiz ($i/40): $*; 60 sn sonra tekrar" >&2
+        sleep 60
     done
     return 1
 }
