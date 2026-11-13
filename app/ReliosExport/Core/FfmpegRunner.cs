@@ -294,6 +294,16 @@ public static class Exporter
             text += " · HDR kaynak";
         }
 
+        if (a.AnahtarKare.Birim != AralikBirimi.Kare)
+        {
+            // Kare hızına göre hesaplanan anahtar kare aralığı (ör. 60 fps'te GOP 100 / 51).
+            var (g, m) = AnahtarKareHesabi.Aralik(a.AnahtarKare, ArgsBuilder.CiktiKareHizi(a, media));
+            if (g is { } enBuyuk)
+            {
+                text += " · GOP " + enBuyuk + (m is { } enKucuk ? " / " + enKucuk : string.Empty);
+            }
+        }
+
         if (a.Video.Kodlayici == VideoKodlayici.Nvenc && a.Video.Nvenc.Seviye == ArgsBuilder.Kaynak)
         {
             // Kaynağın seviyesi bit hızına / boyuta yetmiyorsa NVENC için yükseltilir (yoksa kodlama başlamaz).

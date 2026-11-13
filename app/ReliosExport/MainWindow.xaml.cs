@@ -388,7 +388,12 @@ public partial class MainWindow : Window
         var k = a.AnahtarKare;
         if (k.EnBuyuk is { } enBuyuk)
         {
-            var birim = k.Birim == AralikBirimi.Kare ? string.Empty : " sn";
+            var birim = k.Birim switch
+            {
+                AralikBirimi.Saniye => " sn",
+                AralikBirimi.Kare30 => " (30 fps'e göre)",
+                _ => string.Empty,
+            };
             list.Add("GOP " + Bicim.Sayi(enBuyuk) + (k.EnKucuk is { } enKucuk ? " / " + Bicim.Sayi(enKucuk) : string.Empty) + birim);
         }
 

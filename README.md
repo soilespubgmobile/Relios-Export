@@ -18,7 +18,8 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
   - Dikey 9:16 hazır ön ayarı: 1216×2160 9:16, 29,97 fps, x264 Main@L5.0 CRF 18, FDK AAC 128 kb/s 48 kHz
     (önceki TikTok varsayılanı; hedef videoyla doğrulanmış).
   - YouTube varsayılanı: dikey 9:16 ayarıyla aynı x264 / FDK AAC ayarları; çözünürlük, en-boy oranı, kare hızı,
-    H.264 profili ve seviyesi kaynakla aynı.
+    H.264 profili ve seviyesi kaynakla aynı. Anahtar kare aralığı 30 fps'e göre 50 / 26 ve kare hızıyla orantılı
+    (aynı süre): 25 fps'te 42 / 22, 50 fps'te 83 / 42, 60 fps'te 100 / 51 (en az, en fazlanın yarısı + 1'i geçemez).
   - Videonun yanında aynı adlı ses dosyası (ör. `edit1.mp4` için `edit1.wav`) varsa videonun kendi
     sesi yerine o kullanılır.
   - Ayarlar program klasöründeki `ayarlar.json` dosyasında, hata günlükleri `Günlük` klasöründe durur

@@ -9,7 +9,7 @@
     <AssemblyName>Relios Export</AssemblyName>
     <RootNamespace>ReliosExport</RootNamespace>
     <Product>Relios Export</Product>
-    <Version>0.8.2</Version>
+    <Version>0.8.3</Version>
     <Company>Relios</Company>
     <Description>TikTok ve YouTube için video dışa aktarma</Description>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

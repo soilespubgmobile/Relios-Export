@@ -35,7 +35,11 @@ public enum FdkModu { Cbr, Vbr1, Vbr2, Vbr3, Vbr4, Vbr5 }
 
 public enum WavBitDerinligi { Bit16, Bit24, Bit32, Float32 }
 
-public enum AralikBirimi { Kare, Saniye }
+/// <summary>
+/// Anahtar kare aralığının birimi. <see cref="Kare30"/>: değerler 29,97 fps için yazılır ve çıktının kare hızıyla
+/// orantılı uygulanır (aynı süre): 30 fps'te 50 / 26, 60 fps'te 100 / 51.
+/// </summary>
+public enum AralikBirimi { Kare, Saniye, Kare30 }
 
 public sealed class ProfilAyarlari : Gozlenebilir
 {
@@ -58,8 +62,9 @@ public sealed class ProfilAyarlari : Gozlenebilir
     /// 3: x264 iş parçacığı 7 → 8; YouTube'da H.264 profili ve seviyesi de kaynakla aynı.
     /// 4: TikTok varsayılanı NVENC CBR 34375 kb/s, kaynakla aynı boyut / fps / profil / seviye
     ///    (eski 9:16 ayarı "hazır ön ayar" olarak durur).
+    /// 5: YouTube'da anahtar kare aralığı 30 fps'e göre (50 / 26, 60 fps'te 100 / 51).
     /// </summary>
-    public const int GuncelSurum = 4;
+    public const int GuncelSurum = 5;
 
     public VideoAyarlari Video { get => _video; set => Bagla(ref _video, value); }
 
@@ -717,9 +722,19 @@ public sealed class AnahtarKareAyarlari : Gozlenebilir
     {
         get
         {
-            var b = Birim == AralikBirimi.Kare ? "kare" : "sn";
+            var b = Birim == AralikBirimi.Saniye ? "sn" : "kare";
             var buyuk = EnBuyuk is { } x ? $"en fazla {Bicim.Sayi(x)} {b}" : "en fazla varsayılan";
             var kucuk = EnKucuk is { } y ? $"en az {Bicim.Sayi(y)} {b}" : "en az otomatik";
+            if (Birim == AralikBirimi.Kare30)
+            {
+                // Ör. "en fazla 50 kare · en az 26 kare (30 fps'e göre; 60 fps'te 100 / 51)"
+                var ornek = AnahtarKareHesabi.Aralik(this, 60);
+                var altmis = ornek.EnBuyuk is { } g
+                    ? $"; 60 fps'te {g}" + (ornek.EnKucuk is { } m ? $" / {m}" : string.Empty)
+                    : string.Empty;
+                return $"{buyuk} · {kucuk} (30 fps'e göre{altmis})";
+            }
+
             return $"{buyuk} · {kucuk}";
         }
     }

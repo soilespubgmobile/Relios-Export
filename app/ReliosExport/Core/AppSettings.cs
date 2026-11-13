@@ -55,10 +55,20 @@ public sealed class AppSettings
             a = Varsayilanlar.For(id);
             Profiller[id] = a;
         }
-        else if (a.Surum < 3 && a.Video.X264.IsParcacigi == 7)
+        else
         {
-            // 7 iş parçacığı eski varsayılandı; artık 8 (işlemcinin çekirdek sayısı).
-            a.Video.X264.IsParcacigi = 8;
+            if (a.Surum < 3 && a.Video.X264.IsParcacigi == 7)
+            {
+                // 7 iş parçacığı eski varsayılandı; artık 8 (işlemcinin çekirdek sayısı).
+                a.Video.X264.IsParcacigi = 8;
+            }
+
+            if (id == ExportProfileId.YouTube && a.Surum < 5
+                && a.AnahtarKare is { Birim: AralikBirimi.Kare, EnBuyuk: 50.0, EnKucuk: 26.0 })
+            {
+                // Eski YouTube varsayılanı (her kare hızında 50 / 26): artık 30 fps'e göre (60 fps'te 100 / 51).
+                a.AnahtarKare.Birim = AralikBirimi.Kare30;
+            }
         }
 
         a.Surum = ProfilAyarlari.GuncelSurum;

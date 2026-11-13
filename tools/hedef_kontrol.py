@@ -2,10 +2,11 @@
 """Bir MP4 çıktısını kullanıcının hedef meta verisiyle karşılaştırır.
 
 Kullanım: python3 -I hedef_kontrol.py <dosya.mp4> [iş parçacığı] [--boyut GxY] [--fps N/D]
-          [--profil kaynak --kaynak <kaynak video>]
+          [--gop N/M] [--profil kaynak --kaynak <kaynak video>]
 
 --boyut / --fps: YouTube gibi "kaynakla aynı" profillerde beklenen çözünürlük ve kare hızı
-(varsayılan TikTok hedefi: 1216x2160, 30000/1001). Diğer her şey XviD4PSP hedefiyle aynı beklenir.
+(varsayılan TikTok hedefi: 1216x2160, 30000/1001). --gop: beklenen keyint / min-keyint (varsayılan 50/26;
+YouTube'da 30 fps'e göre: 60 fps'te 100/51). Diğer her şey XviD4PSP hedefiyle aynı beklenir.
 """
 import json
 import re
@@ -32,6 +33,8 @@ _ek = sys.argv[2:]
 THREADS = _ek.pop(0) if _ek and not _ek[0].startswith("--") else "7"
 _SECENEK = dict(zip(_ek[0::2], _ek[1::2]))
 BOYUT = _SECENEK.get("--boyut", "1216x2160")
+GOP_N, GOP_MIN = _SECENEK.get("--gop", "50/26").split("/")
+TARGET_X264 = TARGET_X264.replace("keyint=50 / keyint_min=26", f"keyint={GOP_N} / keyint_min={GOP_MIN}")
 FPS = _SECENEK.get("--fps", "30000/1001")
 BW, BH = (int(x) for x in BOYUT.split("x"))
 # Beklenen H.264 profili / seviyesi: varsayılan TikTok hedefi (Main@L5.0). "kaynak": programdaki
@@ -100,7 +103,7 @@ durs = sorted({int(p.get("duration", 0)) for p in pk})
 chk("Kare hızı modu", "Constant", "Constant" if len(durs) == 1 else f"Variable {durs[:6]}")
 kidx = [i for i, p in enumerate(pk) if "K" in p.get("flags", "")]
 gaps = sorted({b - a_ for a_, b in zip(kidx, kidx[1:])})
-chk("GOP N (anahtar kare aralığı)", "50", ",".join(map(str, gaps)) or "?")
+chk("GOP N (anahtar kare aralığı)", GOP_N, ",".join(map(str, gaps)) or "?")
 chk("GOP M (B-frame yok)", "0", v.get("has_b_frames"))
 chk("Piksel formatı", "yuv420p", v.get("pix_fmt"))
 chk("Bit derinliği", "8", v.get("bits_per_raw_sample"))

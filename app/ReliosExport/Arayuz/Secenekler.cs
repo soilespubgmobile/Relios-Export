@@ -292,5 +292,6 @@ public static class Secenekler
     // ------------------------------------------------------------------ Anahtar kare
     public static Secenek[] AralikBirimleri { get; } = L(
         (AralikBirimi.Kare, "kare"),
+        (AralikBirimi.Kare30, "kare (30 fps'e göre)"),
         (AralikBirimi.Saniye, "saniye"));
 }

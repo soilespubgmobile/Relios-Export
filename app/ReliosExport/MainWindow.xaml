@@ -536,7 +536,7 @@
                                     <DockPanel Style="{StaticResource FormSatiri}">
                                         <TextBlock Text="Birim" Width="130" Style="{StaticResource AlanEtiketi}"/>
                                         <ComboBox ItemsSource="{x:Static a:Secenekler.AralikBirimleri}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
-                                                  SelectedValue="{Binding AnahtarKare.Birim}" Width="120" HorizontalAlignment="Left"/>
+                                                  SelectedValue="{Binding AnahtarKare.Birim}" Width="180" HorizontalAlignment="Left"/>
                                     </DockPanel>
                                     <DockPanel Style="{StaticResource FormSatiri}">
                                         <TextBlock Text="En fazla (keyint)" Width="130" Style="{StaticResource AlanEtiketi}"/>
@@ -549,7 +549,7 @@
                                                  Text="{Binding AnahtarKare.EnKucuk, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                                     </DockPanel>
                                     <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8"
-                                               Text="Varsayılan: TikTok 30 kare; YouTube en fazla 50, en az 26 kare. Saniye seçilirse çıktının kare hızına göre kareye çevrilir. NVENC'te yalnızca 'en fazla' kullanılır."/>
+                                               Text="Varsayılan: TikTok 30 kare; YouTube 30 fps'e göre en fazla 50, en az 26 kare (aynı süre: 60 fps'te 100 / 51). '30 fps'e göre' ve 'saniye' çıktının kare hızına göre kareye çevrilir; en az, en fazlanın yarısı + 1'i geçemez. NVENC'te yalnızca 'en fazla' kullanılır."/>
                                 </StackPanel>
                             </Expander>
 

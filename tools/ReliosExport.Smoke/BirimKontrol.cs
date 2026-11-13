@@ -15,6 +15,7 @@ internal static class BirimKontrol
     {
         Seviyeler();
         NvencKomutlari();
+        AnahtarKareler();
         Klasorler();
         Console.WriteLine();
         Console.WriteLine($"Birim kontrol: {_ok + _fark} kontrol, {_fark} fark.");
@@ -165,6 +166,44 @@ internal static class BirimKontrol
         k = NvencKomutu(Kaynak(1920, 1080, 60, "h264", "High", 42), a => { Nvenc(a); a.Video.Nvenc.Seviye = string.Empty; }, Varsayilanlar.YouTube());
         Icermiyor("Seviye otomatik: DPB'yi kart seçer", k, " -dpb_size ");
         Icermiyor("Seviye otomatik", k, " -level:v ");
+    }
+
+    private static void AnahtarKareler()
+    {
+        Console.WriteLine();
+        Console.WriteLine("--- Anahtar kare aralığı: YouTube 30 fps'e göre 50 / 26 (aynı süre)");
+        var k = Varsayilanlar.YouTube().AnahtarKare;
+        (double Fps, string Beklenen)[] durumlar =
+        [
+            (30000.0 / 1001, "50/26"), (30, "50/26"), (25, "42/22"), (24, "40/21"), (24000.0 / 1001, "40/21"),
+            (50, "83/42"), (60000.0 / 1001, "100/51"), (60, "100/51"), (120, "200/101"),
+        ];
+        foreach (var (fps, beklenen) in durumlar)
+        {
+            var (g, m) = AnahtarKareHesabi.Aralik(k, fps);
+            Kontrol($"YouTube {fps:0.###} fps", beklenen, $"{g}/{m}");
+        }
+
+        var tiktok916 = Varsayilanlar.Dikey916().AnahtarKare;
+        var (g9, m9) = AnahtarKareHesabi.Aralik(tiktok916, 30000.0 / 1001);
+        Kontrol("Dikey 9:16 (sabit 29,97 fps, kare)", "50/26", $"{g9}/{m9}");
+
+        var elle = new AnahtarKareAyarlari { Birim = AralikBirimi.Kare, EnBuyuk = 50, EnKucuk = 40 };
+        var (ge, me) = AnahtarKareHesabi.Aralik(elle, 30);
+        Kontrol("En az, en fazlanın yarısı + 1'i geçemez (50 / 40)", "50/26", $"{ge}/{me}");
+
+        var x = KomutMetni(Kaynak(1920, 1080, 60, "h264", "High", 42), Varsayilanlar.YouTube());
+        Iceriyor("YouTube x264 60 fps", x, ":keyint=100:min-keyint=51:");
+        x = KomutMetni(Kaynak(1920, 1080, 30, "h264", "High", 40), Varsayilanlar.YouTube());
+        Iceriyor("YouTube x264 30 fps", x, ":keyint=50:min-keyint=26:");
+        x = KomutMetni(Kaynak(1920, 1080, 60, "h264", "High", 42), Varsayilanlar.TikTok());
+        Iceriyor("TikTok NVENC 60 fps (30 kare, değişmez)", x, " -g 30 ");
+    }
+
+    private static string KomutMetni(MediaInfo m, ProfilAyarlari a)
+    {
+        var plan = ArgsBuilder.Olustur(a, m, "KAYNAK.mp4", SesSecimi.Yok, "CIKTI.mp4", "GECIS");
+        return " " + string.Join(' ', plan.Gecisler[0]) + " ";
     }
 
     private static void Klasorler()

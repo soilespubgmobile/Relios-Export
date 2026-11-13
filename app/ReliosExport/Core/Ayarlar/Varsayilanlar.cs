@@ -137,7 +137,7 @@ public static class Varsayilanlar
     /// <summary>
     /// YouTube: dikey 9:16 ayarıyla aynı kodlama ayarları — x264, anahtar kare, FDK AAC —
     /// tek farkla: çözünürlük, en-boy oranı, kare hızı, H.264 profili ve seviyesi kaynakla aynı
-    /// (kırpma, ölçekleme, fps çevirme yok).
+    /// (kırpma, ölçekleme, fps çevirme yok); anahtar kare aralığı 30 fps'e göre, kare hızıyla orantılı.
     /// </summary>
     public static ProfilAyarlari YouTube()
     {
@@ -152,6 +152,9 @@ public static class Varsayilanlar
         // Kullanıcı sonradan "hedef boyut"a geçerse başlangıç değerleri
         a.Video.Genislik = 1920;
         a.Video.Yukseklik = 1080;
+
+        // Anahtar kare aralığı aynı süre kalsın: 30 fps'te 50 / 26, 60 fps'te 100 / 51 (kare hızı kaynakla aynı).
+        a.AnahtarKare.Birim = AralikBirimi.Kare30;
         return a;
     }
 

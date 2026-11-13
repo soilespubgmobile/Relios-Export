@@ -311,16 +311,7 @@ public static class ArgsBuilder
         return media.FrameRate > 0 ? media.FrameRate : 30;
     }
 
-    private static int? Kare(AnahtarKareAyarlari k, double? deger, double fps)
-    {
-        if (deger is not { } d)
-        {
-            return null;
-        }
-
-        var kare = k.Birim == AralikBirimi.Saniye ? Math.Round(d * fps, MidpointRounding.AwayFromZero) : Math.Round(d);
-        return Math.Max(1, (int)kare);
-    }
+    private static int? Kare(AnahtarKareAyarlari k, double? deger, double fps) => AnahtarKareHesabi.Kare(k, deger, fps);
 
     private static void X264(List<string> args, ProfilAyarlari a, MediaInfo media, int gecis, string gecisDosyasi)
     {
@@ -426,8 +417,9 @@ public static class ArgsBuilder
         Ekle("constrained-intra", x.KisitliIntra);
         Ekle("bframes", x.BKare);
         Ekle("weightp", x.AgirlikliP);
-        Ekle("keyint", Kare(k, k.EnBuyuk, fps));
-        Ekle("min-keyint", Kare(k, k.EnKucuk, fps));
+        var aralik = AnahtarKareHesabi.Aralik(k, fps);
+        Ekle("keyint", aralik.EnBuyuk);
+        Ekle("min-keyint", aralik.EnKucuk);
         Ekle("scenecut", k.SahneDegisimi);
         Ekle("intra-refresh", k.IntraYenileme);
         Ekle("rc-lookahead", x.IleriBakis);
