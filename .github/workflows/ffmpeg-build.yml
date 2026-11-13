@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - 'ffmpeg-build/**'
+      - '!ffmpeg-build/ONAYLI_DERLEME'
+      - '!ffmpeg-build/**/*.md'
       - '.github/workflows/ffmpeg-build.yml'
 
 permissions:
