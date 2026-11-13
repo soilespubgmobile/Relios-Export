@@ -13,8 +13,8 @@ ffbuild_enabled() {
 }
 
 ffbuild_dockerdl() {
+    # Resmi paket hazir "configure" ile gelir; autoreconf gerekmez (autopoint bu pakette hata veriyor).
     echo "retry-tool sh -c \"rm -rf lame lame-3.100 && curl -fsSL '${SCRIPT_URL}' | tar xz && mv lame-3.100 lame\" && cd lame"
-    echo "autoreconf -i"
 }
 
 ffbuild_dockerbuild() {
@@ -36,7 +36,8 @@ ffbuild_dockerbuild() {
         return -1
     fi
 
-    export CFLAGS="$CFLAGS -DNDEBUG"
+    # 2017 tarihli kod: yeni GCC varsayilan C23 yerine gnu17 ile derlensin
+    export CFLAGS="$CFLAGS -DNDEBUG -std=gnu17 -Wno-error=implicit-function-declaration -Wno-error=incompatible-pointer-types -Wno-error=int-conversion"
 
     ./configure "${myconf[@]}"
     make -j$(nproc)

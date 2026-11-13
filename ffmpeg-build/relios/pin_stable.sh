@@ -43,6 +43,8 @@ if [[ "$ONLY" == all || "$ONLY" == github ]]; then
     pin 50-amf     '^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$'
     pin 50-onevpl  '^v2\.[0-9]+\.[0-9]+$'
     pin 20-zlib    '^v[0-9]+\.[0-9]+(\.[0-9]+)*$'
+    # NVENC basliklari: gelistirme dali yerine en son surum etiketi (nX.Y.Z.W)
+    pin 50-ffnvcodec '^n[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
 
     # FFmpeg: en son kararli surum etiketi (nX.Y.Z)
     FFTAG="$(latest_tag https://github.com/FFmpeg/FFmpeg.git '^n[0-9]+\.[0-9]+(\.[0-9]+)?$')"
@@ -63,4 +65,12 @@ if [[ "$ONLY" == all ]]; then
     [[ -n "$X264SHA" ]] || { echo "HATA: x264 stable dali bulunamadi"; exit 1; }
     set_commit 50-x264 "$X264SHA"
     echo "| 50-x264 | stable dali | ${X264SHA:0:12} |" >> "$SUMMARY"
+
+    # soxr 2018'den beri yeni surum cikarmadi; kullanilan commit ile son etiket bilgi olarak yazilir.
+    SOXRREPO="$(grep -m1 '^SCRIPT_REPO=' scripts.d/50-soxr.sh | cut -d'"' -f2)"
+    SOXRUSED="$(grep -m1 '^SCRIPT_COMMIT=' scripts.d/50-soxr.sh | cut -d'"' -f2)"
+    SOXRTAG="$(latest_tag "$SOXRREPO" '^(v|soxr-)?[0-9]+\.[0-9]+\.[0-9]+$' || true)"
+    SOXRTAGSHA=""
+    [[ -n "$SOXRTAG" ]] && SOXRTAGSHA="$(tag_commit "$SOXRREPO" "$SOXRTAG" || true)"
+    echo "| 50-soxr (bilgi) | son etiket ${SOXRTAG:-?} = ${SOXRTAGSHA:0:12} | kullanilan ${SOXRUSED:0:12} |" >> "$SUMMARY"
 fi
