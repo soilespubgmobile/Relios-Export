@@ -1,0 +1,27 @@
+name: Surum bilgisi (x264)
+
+# Elle calistirilir; yalnizca x264'un resmi deposundaki dallari okur, hicbir sey derlemez.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bilgi:
+    runs-on: ubuntu-latest
+    steps:
+      - name: x264 master / stable / kullanilan commit
+        run: |
+          set -e
+          git clone -q --filter=blob:none --no-checkout https://code.videolan.org/videolan/x264.git x264
+          cd x264
+          KUL=0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee
+          for ref in origin/master origin/stable $KUL; do
+            build=$(git show "$ref:x264.h" | grep -m1 '#define X264_BUILD' | awk '{print $3}')
+            echo "$ref => core $build r$(git rev-list --count "$ref") $(git log -1 --format='%h %cd | %s' --date=short "$ref")"
+          done
+          echo "master'da $KUL sonrasi commit sayisi: $(git rev-list --count $KUL..origin/master)"
+          git log --format='%cd %h %s' --date=short $KUL..origin/master | head -30
+          echo "--- son 10 master commit"
+          git log -10 --format='%cd %h %s' --date=short origin/master
