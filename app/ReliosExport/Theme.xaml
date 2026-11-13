@@ -646,7 +646,7 @@
                                       StrokeStartLineCap="Round" StrokeEndLineCap="Round" Visibility="Collapsed"/>
                             </Grid>
                         </Border>
-                        <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                        <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="False"/>
                     </StackPanel>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -691,6 +691,7 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock Text="{Binding Header, RelativeSource={RelativeSource AncestorType=Expander}}"
+                                                           Foreground="{StaticResource TextPrimary}"
                                                            FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                                                 <TextBlock Grid.Column="1" Text="{Binding Tag, RelativeSource={RelativeSource AncestorType=Expander}}"
                                                            Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" Margin="8,0"

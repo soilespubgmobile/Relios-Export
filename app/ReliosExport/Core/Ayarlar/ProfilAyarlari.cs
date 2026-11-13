@@ -750,9 +750,8 @@ public static class Bicim
 
     public static string ProfilSeviye(string profil, string seviye)
     {
-        var p = string.IsNullOrEmpty(profil) ? "otomatik profil" : ProfilAdi(profil);
-        var s = string.IsNullOrEmpty(seviye) ? "otomatik" : "L" + seviye;
-        return $"{p}@{s}";
+        var p = string.IsNullOrEmpty(profil) ? "Otomatik profil" : ProfilAdi(profil);
+        return string.IsNullOrEmpty(seviye) ? p + " (seviye otomatik)" : $"{p}@L{seviye}";
     }
 
     public static string ProfilAdi(string p) => p switch
