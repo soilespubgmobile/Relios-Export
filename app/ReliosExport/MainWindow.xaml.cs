@@ -687,24 +687,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnKirpmaOnizleme(object sender, RoutedEventArgs e)
-    {
-        GirisKutulari.Uygula(this);
-        if (!_ffmpegOk)
-        {
-            StatusText.Text = "Önizleme için FFmpeg gerekli.";
-            return;
-        }
-
-        var videolar = _files.Select(f => f.Path).Where(File.Exists).ToList();
-        if (videolar.Count == 0)
-        {
-            StatusText.Text = "Kırpma önizlemesi için önce listeye bir video ekleyin.";
-            return;
-        }
-
-        new KirpmaPenceresi(videolar, _ayarlar) { Owner = this }.ShowDialog();
-    }
 
     private void OnClear(object sender, RoutedEventArgs e)
     {

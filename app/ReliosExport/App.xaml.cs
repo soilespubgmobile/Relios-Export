@@ -53,8 +53,6 @@ public partial class App : Application
                 : Path.Combine(AppPaths.AppFolder, "kontrol.txt");
             var ek = Array.IndexOf(e.Args, "--ekran");
             var ekran = ek >= 0 && ek + 1 < e.Args.Length ? e.Args[ek + 1] : null;
-            var ov = Array.IndexOf(e.Args, "--ornek-video");
-            _ornekVideo = ov >= 0 && ov + 1 < e.Args.Length ? e.Args[ov + 1] : null;
             RunCheck(path, window: ff < 0, ekran);
             return;
         }
@@ -62,8 +60,6 @@ public partial class App : Application
         MainWindow = new MainWindow();
         MainWindow.Show();
     }
-
-    private static string? _ornekVideo;
 
     private void RunCheck(string path, bool window, string? ekran)
     {
@@ -164,64 +160,9 @@ public partial class App : Application
             sira++;
         }
 
-        // Kırpma önizlemesi gerçek bir videoyla (ffmpeg ile iki kare üretir): ortadan ve soldan.
-        if (_ornekVideo is not null)
-        {
-            var onizlemeAyari = Varsayilanlar.TikTok();
-            var k = new KirpmaPenceresi([_ornekVideo], onizlemeAyari) { Owner = w };
-            k.Show();
-            var hazir = await BekleAsync(() => k.Hazir);
-            if (ekran is not null && hazir)
-            {
-                EkranGoruntusu.Pencere(k, Path.Combine(ekran, $"{sira:00}-kirpma-orta.png"));
-            }
-
-            var onceki = k.CiktiSayisi;
-            onizlemeAyari.Video.KirpmaYatay = 0;
-            var hazir2 = await BekleAsync(() => k.CiktiSayisi > onceki && k.Hazir);
-            if (ekran is not null && hazir2)
-            {
-                EkranGoruntusu.Pencere(k, Path.Combine(ekran, $"{sira:00}-kirpma-sol.png"));
-            }
-
-            if (ekran is not null && !(hazir && hazir2))
-            {
-                EkranGoruntusu.Pencere(k, Path.Combine(ekran, $"{sira:00}-kirpma-HAZIR-DEGIL.png"));
-            }
-
-            var teshis = k.Teshis;
-            k.Close();
-            rapor.Append($"kirpma_teshis={teshis}\n");
-            rapor.Append($"kirpma=acildi (kareler {(hazir && hazir2 ? "hazir" : "HAZIR DEGIL")})\n");
-            if (!(hazir && hazir2))
-            {
-                throw new InvalidOperationException("Kırpma önizlemesinde kareler 30 saniyede hazırlanmadı: " + teshis);
-            }
-        }
-
         // TikTok varsayılanının x264 komutu (önizlemedeki ile aynı fonksiyon) — kontrol çıktısında görünsün.
         rapor.Append("x264_tiktok=").Append(ArgsBuilder.X264KomutMetni(Varsayilanlar.TikTok(), 30000.0 / 1001)).Append('\n');
         return rapor.ToString();
-    }
-
-    /// <summary>
-    /// Koşul sağlanana kadar (en çok 30 sn) bekler. Arada pencerenin normal mesaj döngüsü çalışır
-    /// (ffmpeg / ffprobe beklemelerinin devamı ancak böyle işlenir).
-    /// </summary>
-    private static async Task<bool> BekleAsync(Func<bool> kosul)
-    {
-        for (var i = 0; i < 300; i++)
-        {
-            if (kosul())
-            {
-                await Task.Delay(300); // son çizim
-                return true;
-            }
-
-            await Task.Delay(100);
-        }
-
-        return false;
     }
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

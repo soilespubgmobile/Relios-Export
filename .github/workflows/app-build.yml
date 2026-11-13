@@ -89,11 +89,7 @@ jobs:
           $v = & $ff -hide_banner -version
           if ($LASTEXITCODE -ne 0) { "HATA: acilan ffmpeg.exe calismadi"; exit 1 }
           $v | Select-Object -First 1
-          # Kirpma onizlemesi icin gercek bir video (yatay 1920x1080: 9:16'ya yanlardan kirpilir)
-          $ornek = Join-Path $PWD 'ornek-yatay.mp4'
-          & $ff -hide_banner -loglevel error -y -f lavfi -i testsrc2=size=1920x1080:rate=30:duration=3 -c:v libx264 -preset veryfast -pix_fmt yuv420p $ornek
-          if ($LASTEXITCODE -ne 0) { "HATA: ornek video uretilemedi"; exit 1 }
-          $rc = Kontrol '--pencere-kontrol' (Join-Path $PWD "pencere-kontrol.txt") @('--ekran', (Join-Path $PWD 'ekran'), '--ornek-video', $ornek)
+          $rc = Kontrol '--pencere-kontrol' (Join-Path $PWD "pencere-kontrol.txt") @('--ekran', (Join-Path $PWD 'ekran'))
           if ($rc -ne 0) { "HATA: pencereler acilamadi (kod $rc)"; exit 1 }
           "Tek exe calisiyor: FFmpeg icinde, ana pencere ve ayar pencereleri hatasiz aciliyor."
 

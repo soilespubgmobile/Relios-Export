@@ -206,10 +206,6 @@ jobs:
                ayar = @('kap=mov', 'acodec=pcm_s24le', 'ar=48000', 'ac=2') },
             @{ ad = 'Oran farkliysa siyah kenar (21:9 -> 9:16)'; k = '12_'; arg = @('--ayarla', 'Video.Oran=KenarEkle'); sag = @('--oran', 'kenar')
                ayar = @('boyut=1216x2160') },
-            @{ ad = 'Kirpma konumu: sol (21:9 -> 9:16)'; k = '12_'; arg = @('--ayarla', 'Video.KirpmaYatay=0'); sag = @('--kirp-yatay', '0')
-               ayar = @('boyut=1216x2160') },
-            @{ ad = 'Kirpma konumu: alt (1080x2400 -> 9:16)'; k = '13_'; arg = @('--ayarla', 'Video.KirpmaDikey=100'); sag = @('--kirp-dikey', '100')
-               ayar = @('boyut=1216x2160') },
             @{ ad = 'Ses kaynagi: sessiz'; k = '10_'; arg = @('--ayarla', 'Ses.Kaynak=Sessiz'); sag = @(); ses = 0
                ayar = @('ses=yok') },
             @{ ad = 'Ses kaynagi: videonun sesi (yaninda WAV olsa da)'; k = '14_'; arg = @('--ayarla', 'Ses.Kaynak=VideonunSesi'); sag = @()
