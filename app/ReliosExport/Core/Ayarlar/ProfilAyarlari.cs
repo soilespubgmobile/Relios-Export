@@ -70,6 +70,8 @@ public sealed class VideoAyarlari : Gozlenebilir
     private int _genislik = 1216;
     private int _yukseklik = 2160;
     private OranUyumu _oran = OranUyumu.OrtadanKirp;
+    private int _kirpmaYatay = 50;
+    private int _kirpmaDikey = 50;
     private string _olcekleme = "lanczos";
     private bool _hassasYuvarlama;
     private KareHiziModu _kareHiziModu = KareHiziModu.Sabit;
@@ -91,6 +93,12 @@ public sealed class VideoAyarlari : Gozlenebilir
     public int Yukseklik { get => _yukseklik; set => Set(ref _yukseklik, Math.Clamp(value, 16, 8192)); }
 
     public OranUyumu Oran { get => _oran; set => Set(ref _oran, value); }
+
+    /// <summary>Yanlardan kırpılırken görüntünün nereden alınacağı: 0 sol, 50 orta, 100 sağ.</summary>
+    public int KirpmaYatay { get => _kirpmaYatay; set => Set(ref _kirpmaYatay, Math.Clamp(value, 0, 100)); }
+
+    /// <summary>Üstten / alttan kırpılırken: 0 üst, 50 orta, 100 alt.</summary>
+    public int KirpmaDikey { get => _kirpmaDikey; set => Set(ref _kirpmaDikey, Math.Clamp(value, 0, 100)); }
 
     /// <summary>FFmpeg ölçekleme yöntemi: lanczos, spline, bicubic, bilinear, area, neighbor.</summary>
     public string Olcekleme { get => _olcekleme; set => Set(ref _olcekleme, value); }
@@ -161,7 +169,27 @@ public sealed class VideoAyarlari : Gozlenebilir
     [JsonIgnore]
     public string CozunurlukOzeti => Cozunurluk == CozunurlukModu.Kaynak
         ? "Kaynakla aynı"
-        : $"{Genislik}×{Yukseklik} · {OranMetni(Oran)} · {OlceklemeAdi(Olcekleme)}";
+        : $"{Genislik}×{Yukseklik} · {(Oran == OranUyumu.OrtadanKirp ? KirpmaMetni : OranMetni(Oran))} · {OlceklemeAdi(Olcekleme)}";
+
+    /// <summary>"ortadan kırp", "kırp · sol" gibi.</summary>
+    [JsonIgnore]
+    public string KirpmaMetni => (KirpmaYatay, KirpmaDikey) switch
+    {
+        (50, 50) => "ortadan kırp",
+        _ => "kırp · " + string.Join(", ", new[]
+        {
+            KirpmaYatay == 50 ? null : KonumAdi(KirpmaYatay, "sol", "sola yakın", "sağa yakın", "sağ"),
+            KirpmaDikey == 50 ? null : KonumAdi(KirpmaDikey, "üst", "üste yakın", "alta yakın", "alt"),
+        }.Where(x => x is not null)),
+    };
+
+    private static string KonumAdi(int v, string bas, string basaYakin, string sonaYakin, string son) => v switch
+    {
+        0 => bas,
+        100 => son,
+        < 50 => basaYakin,
+        _ => sonaYakin,
+    };
 
     [JsonIgnore]
     public string KareHiziOzeti => KareHiziModu == KareHiziModu.Kaynak

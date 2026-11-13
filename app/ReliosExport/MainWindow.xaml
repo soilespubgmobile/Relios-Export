@@ -227,6 +227,8 @@
                                             <DataTrigger Binding="{Binding State}" Value="Failed">
                                                 <Setter TargetName="Dot" Property="Fill" Value="{StaticResource Danger}"/>
                                                 <Setter TargetName="StatusLine" Property="Foreground" Value="{StaticResource Danger}"/>
+                                                <Setter TargetName="BtnShow" Property="Visibility" Value="{Binding GunlukGorunur}"/>
+                                                <Setter TargetName="BtnShow" Property="ToolTip" Value="Hata günlüğünü aç"/>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding State}" Value="Canceled">
                                                 <Setter TargetName="Dot" Property="Fill" Value="{StaticResource Warning}"/>
@@ -311,6 +313,25 @@
                                             <ComboBox ItemsSource="{x:Static a:Secenekler.OranUyumlari}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
                                                       SelectedValue="{Binding Video.Oran}"/>
                                         </DockPanel>
+                                        <StackPanel Visibility="{Binding Video.Oran, Converter={StaticResource Gorunur}, ConverterParameter=OrtadanKirp}">
+                                            <DockPanel Style="{StaticResource FormSatiri}">
+                                                <TextBlock Text="Kırpma konumu" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="6"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <ComboBox ItemsSource="{x:Static a:Secenekler.KirpmaYataylar}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                                              SelectedValue="{Binding Video.KirpmaYatay}" ToolTip="Yatay video dikeye kırpılırken"/>
+                                                    <ComboBox Grid.Column="2" ItemsSource="{x:Static a:Secenekler.KirpmaDikeyler}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                                              SelectedValue="{Binding Video.KirpmaDikey}" ToolTip="Uzun dikey video kırpılırken"/>
+                                                </Grid>
+                                            </DockPanel>
+                                        </StackPanel>
+                                        <Button Content="Kırpma önizlemesi…" Style="{StaticResource SecondaryButton}" Height="28" Padding="12,0" HorizontalAlignment="Left"
+                                                Margin="130,0,0,10" Click="OnKirpmaOnizleme"
+                                                ToolTip="Listedeki videodan bir kare: kaynakta alınacak alan ve çıktının kendisi"/>
                                     </StackPanel>
                                     <DockPanel Style="{StaticResource FormSatiri}">
                                         <TextBlock Text="Ölçekleme" Width="130" Style="{StaticResource AlanEtiketi}"/>

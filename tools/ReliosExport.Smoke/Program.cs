@@ -89,10 +89,19 @@ var progress = new Progress<double>(p =>
     }
 });
 
-var output = await Exporter.ExportAsync(
-    input, outDir, profil, ayarlar, progress, info => Console.WriteLine("Bilgi: " + info), CancellationToken.None);
-Console.WriteLine("Çıktı: " + output);
-return 0;
+try
+{
+    var output = await Exporter.ExportAsync(
+        input, outDir, profil, ayarlar, progress, info => Console.WriteLine("Bilgi: " + info), CancellationToken.None);
+    Console.WriteLine("Çıktı: " + output);
+    return 0;
+}
+catch (FfmpegHatasi ex)
+{
+    Console.WriteLine("HATA: " + ex.Message);
+    Console.WriteLine("Günlük: " + (ex.GunlukDosyasi ?? "(yazılamadı)"));
+    return 5;
+}
 
 // "Video.X264.BitHizi=4000" gibi bir ifadeyle ayar nesnesindeki tek bir özelliği değiştirir ("null": boş).
 static void Ayarla(object kok, string ifade)

@@ -32,7 +32,9 @@ public static class ArgsBuilder
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
     /// <summary>Kaynak videoyu hedef en-boy oranına ortadan kırpma planı (oran zaten aynıysa kırpmaz).</summary>
-    public static CropPlan PlanCrop(MediaInfo m, double target)
+    /// <param name="yatay">Yanlardan kırpılırken konum: 0 sol, 50 orta, 100 sağ.</param>
+    /// <param name="dikey">Üstten / alttan kırpılırken konum: 0 üst, 50 orta, 100 alt.</param>
+    public static CropPlan PlanCrop(MediaInfo m, double target, int yatay = 50, int dikey = 50)
     {
         // ffmpeg döndürmeyi otomatik uyguladığı için kırpma döndürülmüş görüntüye göre yapılır.
         var w = m.DisplayWidth;
@@ -50,14 +52,22 @@ public static class ArgsBuilder
             // Kaynak daha geniş: yanlardan kırp.
             var cw = Even(h * target / sar);
             cw = Math.Min(cw, w - (w % 2));
-            return new CropPlan(cw, h, (w - cw) / 2, 0, IsNeeded: true);
+            return new CropPlan(cw, h, Konum(w - cw, yatay), 0, IsNeeded: true);
         }
 
         // Kaynak daha dar (ör. 9:19.5 telefon kaydı): üstten/alttan kırp.
         var ch = Even(w * sar / target);
         ch = Math.Min(ch, h - (h % 2));
-        return new CropPlan(w, ch, 0, (h - ch) / 2, IsNeeded: true);
+        return new CropPlan(w, ch, 0, Konum(h - ch, dikey), IsNeeded: true);
     }
+
+    /// <summary>Kırpma başlangıcı; 50 (orta) tam olarak eski hesabı verir: (fazla / 2).</summary>
+    private static int Konum(int fazla, int yuzde) =>
+        yuzde == 50 ? fazla / 2 : Math.Clamp((int)Math.Round(fazla * yuzde / 100.0, MidpointRounding.AwayFromZero), 0, fazla);
+
+    /// <summary>Ayarlardaki hedef boyut ve kırpma konumuyla kırpma planı.</summary>
+    public static CropPlan PlanCrop(ProfilAyarlari a, MediaInfo m) =>
+        PlanCrop(m, HedefOran(a.Video.Genislik, a.Video.Yukseklik), a.Video.KirpmaYatay, a.Video.KirpmaDikey);
 
     /// <summary>Kaynak videoyu 9:16'ya ortadan kırpma planı.</summary>
     public static CropPlan PlanCrop916(MediaInfo m) => PlanCrop(m, 9.0 / 16.0);
@@ -87,7 +97,7 @@ public static class ArgsBuilder
     public static bool KirpilacakMi(ProfilAyarlari a, MediaInfo m) =>
         a.Video.Cozunurluk == CozunurlukModu.Hedef
         && a.Video.Oran == OranUyumu.OrtadanKirp
-        && PlanCrop(m, HedefOran(a.Video.Genislik, a.Video.Yukseklik)).IsNeeded;
+        && PlanCrop(a, m).IsNeeded;
 
     /// <summary>Ayarlara göre kullanılacak ses: aynı adlı dosya, videonun sesi ya da hiç.</summary>
     public static SesSecimi SesSec(SesAyarlari s, MediaInfo media, string input)
@@ -259,7 +269,7 @@ public static class ArgsBuilder
             switch (v.Oran)
             {
                 case OranUyumu.OrtadanKirp:
-                    var crop = PlanCrop(media, HedefOran(w, h));
+                    var crop = PlanCrop(media, HedefOran(w, h), v.KirpmaYatay, v.KirpmaDikey);
                     if (crop.IsNeeded)
                     {
                         filters.Add(string.Create(Inv, $"crop={crop.Width}:{crop.Height}:{crop.X}:{crop.Y}"));
@@ -329,6 +339,9 @@ public static class ArgsBuilder
         X264Bayraklari(args, x, gecis, gecisDosyasi);
         args.AddRange(["-x264-params", string.Join(':', p)]);
     }
+
+    /// <summary>-vf değeri (kırpma önizlemesi aynı filtreyle tek kare üretir).</summary>
+    public static string VideoFiltreMetni(ProfilAyarlari a, MediaInfo media) => string.Join(',', VideoFiltreleri(a, media));
 
     /// <summary>-x264-params değeri (ayar penceresindeki önizleme için de kullanılır).</summary>
     public static string X264ParametreMetni(ProfilAyarlari a, double fps) => string.Join(':', X264Parametreleri(a, fps));

@@ -22,6 +22,8 @@ ses_bekleniyor = ses == "1"
 BOYUT = SECENEK.get("--boyut", "1216x2160")
 FPS_METNI = SECENEK.get("--fps", "30000/1001")
 ORAN = SECENEK.get("--oran", "kirp")
+KIRP_YATAY = int(SECENEK.get("--kirp-yatay", "50"))
+KIRP_DIKEY = int(SECENEK.get("--kirp-dikey", "50"))
 rows = []
 
 
@@ -96,9 +98,16 @@ def crop_plan(vs, target):
         return None
     if aspect > target:
         cw = min(even(h * target / sar), w - (w % 2))
-        return (cw, h, (w - cw) // 2, 0)
+        return (cw, h, konum(w - cw, KIRP_YATAY), 0)
     ch = min(even(w * sar / target), h - (h % 2))
-    return (w, ch, 0, (h - ch) // 2)
+    return (w, ch, 0, konum(h - ch, KIRP_DIKEY))
+
+
+def konum(fazla, yuzde):
+    # Programdaki ArgsBuilder.Konum: 50 -> fazla // 2, digerleri yuzdeye gore (yuvarlama sifirdan uzaga)
+    if yuzde == 50:
+        return fazla // 2
+    return max(0, min(fazla, int(math.floor(fazla * yuzde / 100 + 0.5))))
 
 
 src = probe(kaynak)

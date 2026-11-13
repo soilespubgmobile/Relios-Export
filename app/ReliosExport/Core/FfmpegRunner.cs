@@ -70,7 +70,11 @@ public sealed class FfmpegRunner
         }
 
         using var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
+
+        // Hata günlüğü için ffmpeg'in çıktısı: ilk 200 satır (ayarlar, kodlayıcı açılışı) ve son 400 satır.
+        var errHead = new List<string>();
         var errTail = new Queue<string>();
+        var atlanan = 0;
         p.ErrorDataReceived += (_, e) =>
         {
             if (e.Data is null)
@@ -80,10 +84,17 @@ public sealed class FfmpegRunner
 
             lock (errTail)
             {
+                if (errHead.Count < 200)
+                {
+                    errHead.Add(e.Data);
+                    return;
+                }
+
                 errTail.Enqueue(e.Data);
-                while (errTail.Count > 30)
+                if (errTail.Count > 400)
                 {
                     errTail.Dequeue();
+                    atlanan++;
                 }
             }
         };
@@ -129,13 +140,23 @@ public sealed class FfmpegRunner
 
         if (p.ExitCode != 0)
         {
-            string tail;
+            string gunluk;
+            List<string> son;
             lock (errTail)
             {
-                tail = string.Join(Environment.NewLine, errTail);
+                var satirlar = new List<string>(errHead);
+                if (atlanan > 0)
+                {
+                    satirlar.Add($"... ({atlanan} satır atlandı) ...");
+                }
+
+                satirlar.AddRange(errTail);
+                gunluk = string.Join(Environment.NewLine, satirlar);
+                son = errHead.Concat(errTail).Where(l => !string.IsNullOrWhiteSpace(l)).TakeLast(8).ToList();
             }
 
-            throw new InvalidOperationException($"ffmpeg hata verdi (kod {p.ExitCode}):\n{tail}");
+            var aciklama = HataAciklamasi.Bul(gunluk) ?? $"ffmpeg hata verdi (kod {p.ExitCode}).";
+            throw new FfmpegHatasi(aciklama + Environment.NewLine + string.Join(Environment.NewLine, son), gunluk);
         }
 
         onProgress?.Report(1);
@@ -192,6 +213,29 @@ public static class Exporter
 
             File.Move(temp, output, overwrite: false);
             progress?.Report(1);
+        }
+        catch (FfmpegHatasi ex)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("Relios Export · hata günlüğü · " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
+            sb.AppendLine("Kaynak : " + input);
+            sb.AppendLine("Profil : " + profile.DisplayName);
+            sb.AppendLine("Bilgi  : " + Describe(media, a, ses));
+            sb.AppendLine("Açıklama: " + ex.Message);
+            sb.AppendLine();
+            for (var i = 0; i < plan.Gecisler.Count; i++)
+            {
+                sb.AppendLine($"Komut {i + 1}/{plan.Gecisler.Count}: \"{Tools.Ffmpeg}\" " + ArgsBuilder.KomutMetni(plan.Gecisler[i]));
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("----- ffmpeg çıktısı -----");
+            sb.AppendLine(ex.Gunluk);
+            sb.AppendLine();
+            sb.AppendLine("----- ayarlar -----");
+            sb.AppendLine(AyarDosyasi.Yaz(a));
+            ex.GunlukDosyasi = HataAciklamasi.GunlukYaz(input, sb.ToString());
+            throw;
         }
         finally
         {

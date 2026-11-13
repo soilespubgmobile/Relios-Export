@@ -28,6 +28,12 @@ public static class Secenekler
         (OranUyumu.KenarEkle, "Siyah kenar ekle"),
         (OranUyumu.Esnet, "Esnet (oran bozulur)"));
 
+    public static Secenek[] KirpmaYataylar { get; } = L(
+        (0, "Sol"), (25, "Sola yakın"), (50, "Orta"), (75, "Sağa yakın"), (100, "Sağ"));
+
+    public static Secenek[] KirpmaDikeyler { get; } = L(
+        (0, "Üst"), (25, "Üste yakın"), (50, "Orta"), (75, "Alta yakın"), (100, "Alt"));
+
     public static Secenek[] Olceklemeler { get; } = L(
         ("lanczos", "Lanczos (keskin, XviD4PSP)"),
         ("spline", "Spline"),

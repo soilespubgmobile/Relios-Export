@@ -33,8 +33,52 @@ public sealed class FileItem : INotifyPropertyChanged
     private string _status = "Bekliyor";
     private string? _detail;
     private double _progress;
+    private string? _gunlukYolu;
+    private DateTime? _baslangic;
 
     public FileItem(string path) => Path = path;
+
+    /// <summary>Başarısız olduysa ffmpeg günlüğünün yazıldığı dosya.</summary>
+    public string? GunlukYolu
+    {
+        get => _gunlukYolu;
+        set
+        {
+            if (Set(ref _gunlukYolu, value))
+            {
+                OnChanged(nameof(GunlukGorunur));
+            }
+        }
+    }
+
+    public Visibility GunlukGorunur => _gunlukYolu is null ? Visibility.Collapsed : Visibility.Visible;
+
+    /// <summary>Kodlamanın başladığı an (kalan süre ve toplam süre için).</summary>
+    public void Basla() => _baslangic = DateTime.UtcNow;
+
+    /// <summary>Başlangıçtan bu yana geçen süre.</summary>
+    public TimeSpan? Gecen => _baslangic is { } b ? DateTime.UtcNow - b : null;
+
+    /// <summary>Tahmini kalan süre (ilerleme hızından); başta güvenilir olmadığı için bir süre gösterilmez.</summary>
+    public TimeSpan? Kalan
+    {
+        get
+        {
+            if (Gecen is not { } g || _progress < 0.02 || _progress >= 1 || g.TotalSeconds < 3)
+            {
+                return null;
+            }
+
+            return TimeSpan.FromSeconds(g.TotalSeconds * (1 - _progress) / _progress);
+        }
+    }
+
+    /// <summary>"45 sn", "2 dk 05 sn", "1 sa 12 dk".</summary>
+    public static string SureMetni(TimeSpan t)
+    {
+        var s = (int)Math.Ceiling(t.TotalSeconds);
+        return s < 60 ? $"{s} sn" : s < 3600 ? $"{s / 60} dk {s % 60:00} sn" : $"{s / 3600} sa {s % 3600 / 60} dk";
+    }
 
     public string Path { get; }
 
@@ -77,9 +121,10 @@ public sealed class FileItem : INotifyPropertyChanged
         }
     }
 
-    /// <summary>Türkçe yüzde yazımı: %45.</summary>
+    /// <summary>Türkçe yüzde yazımı ve kalan süre: "%45 · kalan 1 dk 10 sn".</summary>
     public string PercentText =>
-        "%" + ((int)Math.Floor(Math.Clamp(_progress, 0, 1) * 100)).ToString(CultureInfo.InvariantCulture);
+        "%" + ((int)Math.Floor(Math.Clamp(_progress, 0, 1) * 100)).ToString(CultureInfo.InvariantCulture)
+        + (Kalan is { } k ? " · kalan " + SureMetni(k) : string.Empty);
 
     public void Reset()
     {
@@ -88,6 +133,8 @@ public sealed class FileItem : INotifyPropertyChanged
         Detail = null;
         Progress = 0;
         OutputPath = null;
+        GunlukYolu = null;
+        _baslangic = null;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -628,10 +675,35 @@ public partial class MainWindow : Window
 
     private void OnShowItem(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is FileItem { OutputPath: { } output } && File.Exists(output))
+        switch ((sender as FrameworkElement)?.DataContext)
         {
-            OpenExplorer($"/select,\"{output}\"");
+            case FileItem { State: ItemState.Failed, GunlukYolu: { } gunluk } when File.Exists(gunluk):
+                // Günlük, .txt dosyalarını açan programla (Not Defteri) açılır.
+                OpenExplorer($"\"{gunluk}\"");
+                break;
+            case FileItem { OutputPath: { } output } when File.Exists(output):
+                OpenExplorer($"/select,\"{output}\"");
+                break;
         }
+    }
+
+    private void OnKirpmaOnizleme(object sender, RoutedEventArgs e)
+    {
+        GirisKutulari.Uygula(this);
+        if (!_ffmpegOk)
+        {
+            StatusText.Text = "Önizleme için FFmpeg gerekli.";
+            return;
+        }
+
+        var videolar = _files.Select(f => f.Path).Where(File.Exists).ToList();
+        if (videolar.Count == 0)
+        {
+            StatusText.Text = "Kırpma önizlemesi için önce listeye bir video ekleyin.";
+            return;
+        }
+
+        new KirpmaPenceresi(videolar, _ayarlar) { Owner = this }.ShowDialog();
     }
 
     private void OnClear(object sender, RoutedEventArgs e)
@@ -729,11 +801,12 @@ public partial class MainWindow : Window
                 var index = i;
                 item.State = ItemState.Running;
                 item.Status = "Hazırlanıyor…";
-                ShowOverall(index, queue.Count, 0);
+                item.Basla();
+                ShowOverall(index, queue.Count, 0, null);
                 var progress = new Progress<double>(v =>
                 {
                     item.Progress = v;
-                    ShowOverall(index, queue.Count, v);
+                    ShowOverall(index, queue.Count, v, item.Kalan);
                 });
 
                 try
@@ -749,7 +822,8 @@ public partial class MainWindow : Window
                     item.OutputPath = output;
                     item.Progress = 1;
                     item.State = ItemState.Done;
-                    item.Status = "Hazır · " + Path.GetFileName(output);
+                    item.Status = "Hazır · " + Path.GetFileName(output)
+                                  + (item.Gecen is { } sure ? " · " + FileItem.SureMetni(sure) : string.Empty);
                     item.Detail = output;
                     ok++;
                 }
@@ -765,7 +839,8 @@ public partial class MainWindow : Window
                 {
                     item.State = ItemState.Failed;
                     item.Status = "Hata: " + FirstLine(ex.Message);
-                    item.Detail = ex.Message;
+                    item.GunlukYolu = (ex as FfmpegHatasi)?.GunlukDosyasi;
+                    item.Detail = ex.Message + (item.GunlukYolu is { } g ? "\n\nAyrıntılı günlük: " + g : string.Empty);
                     item.Progress = 0;
                     failed++;
                 }
@@ -785,7 +860,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ShowOverall(int index, int count, double current)
+    private void ShowOverall(int index, int count, double current, TimeSpan? kalan)
     {
         var overall = count == 0 ? 0 : Math.Clamp((index + current) / count, 0, 1);
         OverallBar.Value = overall;
@@ -793,7 +868,7 @@ public partial class MainWindow : Window
         if (_cts is { IsCancellationRequested: false })
         {
             var pct = ((int)Math.Floor(current * 100)).ToString(CultureInfo.InvariantCulture);
-            StatusText.Text = $"{index + 1}/{count} kodlanıyor · %{pct}";
+            StatusText.Text = $"{index + 1}/{count} kodlanıyor · %{pct}" + (kalan is { } k ? " · bu video için kalan " + FileItem.SureMetni(k) : string.Empty);
         }
     }
 
