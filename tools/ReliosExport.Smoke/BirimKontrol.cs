@@ -87,9 +87,9 @@ internal static class BirimKontrol
             VideoSeviye = seviye,
         };
 
-    private static string NvencKomutu(MediaInfo m, Action<ProfilAyarlari>? degistir = null)
+    private static string NvencKomutu(MediaInfo m, Action<ProfilAyarlari>? degistir = null, ProfilAyarlari? temel = null)
     {
-        var a = Varsayilanlar.TikTok();
+        var a = temel ?? Varsayilanlar.TikTok();
         degistir?.Invoke(a);
         var plan = ArgsBuilder.Olustur(a, m, "KAYNAK.mp4", SesSecimi.Yok, "CIKTI.mp4", "GECIS");
         return " " + string.Join(' ', plan.Gecisler[0]) + " ";
@@ -108,6 +108,9 @@ internal static class BirimKontrol
 
         var k = NvencKomutu(Kaynak(1080, 1920, 60, "h264", "Main", 42));
         Iceriyor("Main@4.2 1080×1920@60", k, " -profile:v main -level:v 4.2 -rc cbr -b:v 34375k -bufsize 34375k ");
+        // ffmpeg'de -refs yalnızca kare başına referans; DPB ayrıca verilmezse kart 6 kare seçer ve 4.2'yi reddeder
+        // (kullanıcının kartında denendi: -dpb_size 3 ile High@4.2, max_num_ref_frames 3).
+        Iceriyor("Main@4.2 1080×1920@60", k, " -bf 0 -refs 3 -dpb_size 3 ");
 
         k = NvencKomutu(Kaynak(1920, 1080, 60, "h264", "High", 42));
         Iceriyor("High@4.2 1920×1080@60", k, " -profile:v high -level:v 4.2 -rc cbr -b:v 34375k -bufsize 34375k ");
@@ -145,6 +148,23 @@ internal static class BirimKontrol
 
         k = NvencKomutu(Kaynak(1920, 1080, 30, "h264", "High", 40), a => a.Video.Nvenc.Tampon = 20000);
         Iceriyor("Elle girilen tampon", k, " -bufsize 20000k ");
+
+        Console.WriteLine();
+        Console.WriteLine("--- YouTube'da NVENC seçilirse (referans kare boş, 3 B-kare, sabit kalite)");
+        static void Nvenc(ProfilAyarlari a) => a.Video.Kodlayici = VideoKodlayici.Nvenc;
+
+        k = NvencKomutu(Kaynak(1920, 1080, 60, "h264", "High", 42), Nvenc, Varsayilanlar.YouTube());
+        Iceriyor("High@4.2 1080p60", k, " -profile:v high -level:v 4.2 ");
+        Iceriyor("High@4.2 1080p60 (4.2, 1080p'de en fazla 4 kare)", k, " -dpb_size 4 ");
+        Icermiyor("High@4.2 1080p60", k, " -refs ");
+
+        k = NvencKomutu(Kaynak(2160, 3840, 30, "h264", "High", 51), Nvenc, Varsayilanlar.YouTube());
+        Iceriyor("High@5.1 2160×3840@30 (5.1'de en fazla 5 kare)", k, " -level:v 5.1 ");
+        Iceriyor("High@5.1 2160×3840@30", k, " -dpb_size 5 ");
+
+        k = NvencKomutu(Kaynak(1920, 1080, 60, "h264", "High", 42), a => { Nvenc(a); a.Video.Nvenc.Seviye = string.Empty; }, Varsayilanlar.YouTube());
+        Icermiyor("Seviye otomatik: DPB'yi kart seçer", k, " -dpb_size ");
+        Icermiyor("Seviye otomatik", k, " -level:v ");
     }
 
     private static void Klasorler()

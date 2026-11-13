@@ -12,7 +12,9 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
     H.264 profili ve seviyesi kaynakla aynı; B-kare yok, 3 referans kare, 30 karede bir anahtar kare;
     FDK AAC 128 kb/s 48 kHz. NVENC seviyeyi katı denetler: kaynağın seviyesi çıktının boyutuna, kare hızına,
     bit hızına ya da tamponuna yetmiyorsa (ör. 34375 kb/s, 4.0 ve altının sınırını aşar) seviye yeten en düşük
-    seviyeye çıkar; yoksa kart kodlamayı hiç başlatmaz.
+    seviyeye çıkar; yoksa kart kodlamayı hiç başlatmaz. Referans kare tamponu (DPB) da referans kare sayısı kadar
+    verilir (`-dpb_size`): ffmpeg'de `-refs` yalnızca kare başına referanstır, DPB boş kalınca kart 6 kare seçer
+    ve 1080p'de 4.x seviyelerini (en fazla 4 kare) aşar.
   - Dikey 9:16 hazır ön ayarı: 1216×2160 9:16, 29,97 fps, x264 Main@L5.0 CRF 18, FDK AAC 128 kb/s 48 kHz
     (önceki TikTok varsayılanı; hedef videoyla doğrulanmış).
   - YouTube varsayılanı: dikey 9:16 ayarıyla aynı x264 / FDK AAC ayarları; çözünürlük, en-boy oranı, kare hızı,

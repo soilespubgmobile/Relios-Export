@@ -642,11 +642,35 @@ public static class ArgsBuilder
 
         var profil = NvencProfili(n, media);
         var (w, h) = CiktiBoyutu(a, media);
-        var refs = (n.Ref ?? 1) + (NvencBKare(n, profil) > 0 && n.BRefModu != "disabled" ? 1 : 0);
+
+        // DPB, referans kare sayısı kadar verilir (NvencDpb); boşsa seviyeye göre seçildiği için 1 kare yeter.
         var gerekli = H264Seviye.EnAz(
-            w, h, CiktiKareHizi(a, media), NvencBitHizi(n), NvencTampon(n), refs,
+            w, h, CiktiKareHizi(a, media), NvencBitHizi(n), NvencTampon(n), n.Ref ?? 1,
             high: profil.StartsWith("high", StringComparison.Ordinal));
         return H264Seviye.EnYuksek(seviye, gerekli);
+    }
+
+    /// <summary>
+    /// NVENC'in DPB'si (dosyadaki referans kare tamponu, max_num_ref_frames). ffmpeg'de -refs yalnızca bir karenin
+    /// kaç kareye baktığıdır; DPB ayrı ayardır (-dpb_size) ve boşsa kart kendisi seçer (6 kare). 1080p'de 4.x
+    /// seviyeleri en fazla 4 kare taşır: kartın seçtiği 6 kare seviyeyi aşar ve NVENC "Invalid Level" verir.
+    /// Bu yüzden referans kare sayısı verilmişse DPB de o kadar; verilmemişse ve seviye belliyse seviyenin
+    /// taşıyabildiği kadar (en fazla kartın seçeceği 6 kare). Seviye otomatikse kart seçer.
+    /// </summary>
+    private static int? NvencDpb(NvencAyarlari n, string seviye, ProfilAyarlari a, MediaInfo? media)
+    {
+        if (n.Ref is { } r)
+        {
+            return r;
+        }
+
+        if (media is null || H264Seviye.Sira(seviye) < 0)
+        {
+            return null;
+        }
+
+        var (w, h) = CiktiBoyutu(a, media);
+        return H264Seviye.EnFazlaDpb(seviye, w, h) is { } enFazla ? Math.Min(6, enFazla) : null;
     }
 
     private static string NvencProfili(NvencAyarlari n, MediaInfo? media) => ProfilCoz(n.Profil, media);
@@ -765,6 +789,11 @@ public static class ArgsBuilder
         if (n.Ref is { } refs)
         {
             args.AddRange(["-refs", refs.ToString(Inv)]);
+        }
+
+        if (NvencDpb(n, seviye, a, media) is { } dpb)
+        {
+            args.AddRange(["-dpb_size", dpb.ToString(Inv)]);
         }
 
         if (n.AgirlikliTahmin)

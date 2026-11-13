@@ -131,6 +131,22 @@ public static class H264Seviye
         return null;
     }
 
+    /// <summary>
+    /// Seviyenin bu kare boyutunda taşıyabileceği en çok referans kare (DPB, en fazla 16);
+    /// seviye ya da boyut bilinmiyorsa null.
+    /// </summary>
+    public static int? EnFazlaDpb(string? seviye, int genislik, int yukseklik)
+    {
+        var i = Sira(seviye);
+        if (i < 0 || genislik <= 0 || yukseklik <= 0)
+        {
+            return null;
+        }
+
+        long kare = ((genislik + 15) / 16) * (long)((yukseklik + 15) / 16);
+        return (int)Math.Max(1, Math.Min(Tablo[i].MaksDpb / kare, 16));
+    }
+
     /// <summary>İki seviyeden yüksek olanı (biri bilinmiyorsa diğeri).</summary>
     public static string EnYuksek(string a, string? b)
     {
