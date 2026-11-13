@@ -1,0 +1,342 @@
+<Window x:Class="ReliosExport.X264Penceresi"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:a="clr-namespace:ReliosExport.Arayuz"
+        Title="x264 ayarları"
+        Width="680" Height="660" MinWidth="560" MinHeight="420"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BgSurface}"
+        Foreground="{StaticResource TextPrimary}"
+        FontFamily="{StaticResource UiFont}"
+        FontSize="13"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+
+    <DockPanel Margin="18,16,18,14">
+
+        <!-- Alt düğmeler -->
+        <Grid DockPanel.Dock="Bottom" Margin="0,14,0,0">
+            <Button Content="Tümünü ön ayara bırak" Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Click="OnOnAyaraBirak"
+                    ToolTip="Ana sekme dışındaki bütün değerler boşaltılır; hız ayarı (preset) belirler."/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Vazgeç" Style="{StaticResource SecondaryButton}" MinWidth="96" IsCancel="True"/>
+                <Button Content="Tamam" Style="{StaticResource PrimaryButton}" MinWidth="96" Margin="8,0,0,0" IsDefault="True" Click="OnTamam"/>
+            </StackPanel>
+        </Grid>
+
+        <TabControl x:Name="Sekmeler">
+
+            <!-- ================= Ana ================= -->
+            <TabItem Header="Ana">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                    <StackPanel Margin="2,0,8,0">
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Kodlama modu" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.X264Modlari}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Mod}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=Crf}">
+                            <TextBlock Text="CRF (0–51, düşük = kaliteli)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Tag="" Text="{Binding Crf, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitQp}">
+                            <TextBlock Text="QP (0–69)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Tag="" Text="{Binding Qp, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=OrtalamaBitHizi|IkiGecis|UcGecis|Cbr}">
+                            <TextBlock Text="Bit hızı (kb/s)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Tag="" Text="{Binding BitHizi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <CheckBox Content="Hızlı ilk geçiş" IsChecked="{Binding HizliIlkGecis}" Margin="220,0,0,10"
+                                  Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=IkiGecis|UcGecis}"/>
+
+                        <TextBlock Text="HIZ VE UYUMLULUK" Style="{StaticResource AltBaslik}"/>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Hız ayarı (preset)" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.X264OnAyarlar}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding OnAyar}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Ayar (tune)" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.X264Ayarlar}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Ayar}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Profil" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.X264Profiller}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Profil}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Seviye (level)" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.Seviyeler}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Seviye}"/>
+                        </DockPanel>
+
+                        <TextBlock Text="İŞLEMCİ" Style="{StaticResource AltBaslik}"/>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="İş parçacığı (threads)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Tag="otomatik" Text="{Binding IsParcacigi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="İleri bakış iş parçacığı" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Tag="otomatik" Text="{Binding IleriBakisIsParcacigi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+
+                        <TextBlock Style="{StaticResource Ipucu}" Margin="0,6,0,4"
+                                   Text="Boş bırakılan kutular ve 'Ön ayar' seçilen listeler komuta yazılmaz; değerlerini hız ayarı (preset) belirler. Üç durumlu kutularda çizgi de 'ön ayar' demektir."/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ================= Hareket ================= -->
+            <TabItem Header="Hareket">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                    <StackPanel Margin="2,0,8,0">
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Hareket arama yöntemi (me)" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.HareketArama}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                      SelectedValue="{Binding Me, Converter={StaticResource Bos}}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Arama aralığı (merange)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding MeAraligi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Alt piksel inceltme (subme)" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.AltPikseller}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                      SelectedValue="{Binding AltPiksel, Converter={StaticResource Bos}}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Doğrudan MV tahmini (direct)" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.DogrudanMvler}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                      SelectedValue="{Binding DogrudanMv, Converter={StaticResource Bos}}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Ağırlıklı P tahmini (weightp)" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.AgirlikliPler}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                      SelectedValue="{Binding AgirlikliP, Converter={StaticResource Bos}}"/>
+                        </DockPanel>
+
+                        <CheckBox Content="Ağırlıklı B tahmini (weightb)" IsChecked="{Binding AgirlikliB}" Margin="0,6,0,10"/>
+                        <CheckBox Content="Karışık referans (mixed-refs)" IsChecked="{Binding KarisikRef}" IsThreeState="True" Margin="0,0,0,10"/>
+                        <CheckBox Content="Kroma hareket tahmini (chroma-me)" IsChecked="{Binding KromaMe}" IsThreeState="True" Margin="0,0,0,10"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ================= Kare ================= -->
+            <TabItem Header="Kare">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                    <StackPanel Margin="2,0,8,0">
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Referans kare (ref)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding Ref, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+
+                        <TextBlock Text="B-KARELER" Style="{StaticResource AltBaslik}"/>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Ardışık B-kare (bframes)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding BKare, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="B-kare sapması (b-bias)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding BSapma, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Uyarlamalı B-kare (b-adapt)" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.BUyarlamalilar}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                      SelectedValue="{Binding BUyarlamali, Converter={StaticResource Bos}}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="B-piramit (b-pyramid)" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.BPiramitler}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                      SelectedValue="{Binding BPiramit, Converter={StaticResource Bos}}"/>
+                        </DockPanel>
+
+                        <TextBlock Text="ÖNDEN BAKIŞ VE DİLİMLER" Style="{StaticResource AltBaslik}"/>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Önden bakış (rc-lookahead)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding IleriBakis, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Dilim sayısı (slices)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding Dilim, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+
+                        <TextBlock Text="BLOKLAŞMA GİDERİCİ" Style="{StaticResource AltBaslik}"/>
+                        <CheckBox Content="Bloklaşma giderici (deblock)" IsChecked="{Binding Deblock}" Margin="0,0,0,10"/>
+                        <DockPanel Style="{StaticResource FormSatiri}" IsEnabled="{Binding Deblock}">
+                            <TextBlock Text="Güç · eşik (alfa, beta)" Style="{StaticResource PencereEtiketi}"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding DeblockAlfa, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Text="," Margin="6,0" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding DeblockBeta, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource Ipucu}" Margin="220,-2,0,10" Text="-6 ile 6 arası. İkisi birlikte girilirse yazılır."/>
+
+                        <TextBlock Text="DİĞER" Style="{StaticResource AltBaslik}"/>
+                        <CheckBox Content="CABAC (kapatılırsa CAVLC; dosya büyür)" IsChecked="{Binding Cabac}" Margin="0,0,0,10"/>
+                        <CheckBox Content="Geçmeli kodlama (interlaced)" IsChecked="{Binding Gecmeli}" Margin="0,0,0,10"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ================= Analiz ================= -->
+            <TabItem Header="Analiz">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                    <StackPanel Margin="2,0,8,0">
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Makro blok bölümleri (partitions)" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.Bolumler}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                      SelectedValue="{Binding Bolumler, Converter={StaticResource Bos}}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Trellis niceleme" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.Trellisler}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                      SelectedValue="{Binding Trellis, Converter={StaticResource Bos}}"/>
+                        </DockPanel>
+
+                        <TextBlock Text="PSİKOGÖRSEL" Style="{StaticResource AltBaslik}"/>
+                        <CheckBox Content="Psikogörsel iyileştirme (psy)" IsChecked="{Binding Psy}" Margin="0,0,0,10"/>
+                        <DockPanel Style="{StaticResource FormSatiri}" IsEnabled="{Binding Psy}">
+                            <TextBlock Text="Psy-RD · Psy-Trellis" Style="{StaticResource PencereEtiketi}"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding PsyRd, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Text="," Margin="6,0" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding PsyTrellis, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource Ipucu}" Margin="220,-2,0,10" Text="Ör. 1 ve 0,15. İkisi birlikte girilirse yazılır."/>
+
+                        <TextBlock Text="ÖLÜ BÖLGE VE GÜRÜLTÜ" Style="{StaticResource AltBaslik}"/>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Ölü bölge · inter, intra" Style="{StaticResource PencereEtiketi}"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding OluBolgeInter, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Text="," Margin="6,0" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding OluBolgeIntra, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Gürültü azaltma (nr)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding GurultuAzaltma, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+
+                        <TextBlock Text="AÇ / KAPAT" Style="{StaticResource AltBaslik}"/>
+                        <CheckBox Content="8x8 DCT dönüşümü (8x8dct)" IsChecked="{Binding Dct8x8}" IsThreeState="True" Margin="0,0,0,10"/>
+                        <CheckBox Content="Makro blok ağacı (mbtree)" IsChecked="{Binding MbAgaci}" IsThreeState="True" Margin="0,0,0,10"/>
+                        <CheckBox Content="Hızlı P atlama (fast-pskip)" IsChecked="{Binding HizliPAtlama}" IsThreeState="True" Margin="0,0,0,10"/>
+                        <CheckBox Content="DCT seyreltme (dct-decimate)" IsChecked="{Binding DctSeyreltme}" IsThreeState="True" Margin="0,0,0,10"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ================= Niceleyici ================= -->
+            <TabItem Header="Niceleyici">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                    <StackPanel Margin="2,0,8,0">
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="QP en az · en çok" Style="{StaticResource PencereEtiketi}"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding QpMin, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Text="," Margin="6,0" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding QpMax, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="En büyük QP adımı (qpstep)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding QpAdim, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="I/P · P/B oranı" Style="{StaticResource PencereEtiketi}"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding IpOrani, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Text="," Margin="6,0" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding PbOrani, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Kroma QP ofseti" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding KromaQpOfseti, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+
+                        <TextBlock Text="ORAN DENETİMİ" Style="{StaticResource AltBaslik}"/>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="QP sıkıştırma (qcomp)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding Qcomp, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Karmaşıklık bulanıklığı (cplxblur)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding CplxBlur, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="QP bulanıklığı (qblur)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding QBlur, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Niceleme matrisi (cqm)" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.Cqmler}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                      SelectedValue="{Binding Cqm, Converter={StaticResource Bos}}"/>
+                        </DockPanel>
+
+                        <TextBlock Text="UYARLAMALI NİCELEME (AQ)" Style="{StaticResource AltBaslik}"/>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="AQ modu" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.AqModlari}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                      SelectedValue="{Binding AqModu, Converter={StaticResource Bos}}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="AQ gücü" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding AqGucu, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ================= Gelişmiş ================= -->
+            <TabItem Header="Gelişmiş">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                    <StackPanel Margin="2,0,8,0">
+                        <TextBlock Text="VBV (TAMPON)" Style="{StaticResource AltBaslik}" Margin="0,0,0,8"/>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="En yüksek bit hızı (kb/s)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding VbvMaks, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Tampon boyutu (kb)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding VbvTampon, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="Başlangıç doluluğu (vbv-init)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding VbvBaslangic, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}">
+                            <TextBlock Text="NAL HRD" Style="{StaticResource PencereEtiketi}"/>
+                            <ComboBox ItemsSource="{x:Static a:Secenekler.NalHrdler}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                      SelectedValue="{Binding NalHrd, Converter={StaticResource Bos}}"/>
+                        </DockPanel>
+
+                        <TextBlock Text="AKIŞ" Style="{StaticResource AltBaslik}"/>
+                        <CheckBox Content="Dolgu verisi (filler)" IsChecked="{Binding Dolgu}" Margin="0,0,0,10"/>
+                        <CheckBox Content="Erişim birimi ayracı (aud)" IsChecked="{Binding Aud}" Margin="0,0,0,10"/>
+                        <CheckBox Content="Resim yapısı bilgisi (pic-struct)" IsChecked="{Binding PicStruct}" Margin="0,0,0,10"/>
+                        <CheckBox Content="Blu-ray uyumlu (bluray-compat)" IsChecked="{Binding BlurayUyumlu}" Margin="0,0,0,10"/>
+                        <CheckBox Content="Kısıtlı intra tahmini (constrained-intra)" IsChecked="{Binding KisitliIntra}" Margin="0,0,0,10"/>
+
+                        <TextBlock Text="EK PARAMETRELER" Style="{StaticResource AltBaslik}"/>
+                        <TextBox Style="{StaticResource InputArea}" Tag="anahtar=değer:anahtar=değer (x264-params sonuna eklenir)"
+                                 Text="{Binding EkParametreler, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Style="{StaticResource Ipucu}" Margin="0,6,0,4"
+                                   Text="Burada yazılan ayar, yukarıdaki aynı ayarın yerine geçer (x264 son değeri kullanır)."/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ================= Komut ================= -->
+            <TabItem Header="Komut">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Bottom" x:Name="KomutNotu" Style="{StaticResource Ipucu}" Margin="0,8,0,0"/>
+                    <TextBox x:Name="KomutKutusu" Style="{StaticResource InputArea}" IsReadOnly="True" IsReadOnlyCaretVisible="True"
+                             VerticalScrollBarVisibility="Auto"/>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

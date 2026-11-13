@@ -1,18 +1,57 @@
+using System.Globalization;
 using ReliosExport.Core;
+using ReliosExport.Core.Ayarlar;
 
-// Kullanım: ReliosExport.Smoke.exe <kaynak video> <çıktı klasörü>
+// Relios Export'un kodlama kodunu (app/ReliosExport/Core) arayüz olmadan çalıştıran deneme aracı.
+// Kullanım: ReliosExport.Smoke.exe <kaynak video> <çıktı klasörü> [--profil tiktok|youtube] [--ayar ayar.json]
+//           [--ayarla Yol=Deger ...] [--sadece-komut]
+//   --ayar          profil ayarlarını JSON dosyasından alır (yoksa profilin fabrika ayarları)
+//   --ayarla        tek bir ayarı değiştirir, ör. --ayarla Video.X264.Mod=IkiGecis --ayarla Ses.Kodlayici=Wav
+//   --sadece-komut  kodlamaz; komutları yer tutucularla (KAYNAK, SES, CIKTI) yazar
 // ffmpeg.exe ve ffprobe.exe bu exe'nin yanındaki "ffmpeg" klasöründe olmalı (programdaki gibi).
-if (args.Length < 2)
-{
-    Console.Error.WriteLine("Kullanım: ReliosExport.Smoke <kaynak> <çıktı klasörü>");
-    return 2;
-}
 
 // Türkçe karakterler günlükte bozulmasın.
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
+if (args.Length < 2)
+{
+    Console.Error.WriteLine("Kullanım: ReliosExport.Smoke <kaynak> <çıktı klasörü> [--profil tiktok|youtube] [--ayar dosya.json] [--sadece-komut]");
+    return 2;
+}
+
 var input = args[0];
 var outDir = args[1];
+var profil = Profiles.TikTok;
+ProfilAyarlari? ayarlar = null;
+var degisiklikler = new List<string>();
+var sadeceKomut = false;
+for (var i = 2; i < args.Length; i++)
+{
+    switch (args[i])
+    {
+        case "--profil" when i + 1 < args.Length:
+            profil = args[++i].Equals("youtube", StringComparison.OrdinalIgnoreCase) ? Profiles.YouTube : Profiles.TikTok;
+            break;
+        case "--ayar" when i + 1 < args.Length:
+            ayarlar = AyarDosyasi.Oku(File.ReadAllText(args[++i]))
+                      ?? throw new InvalidOperationException("Ayar dosyası okunamadı: " + args[i]);
+            break;
+        case "--ayarla" when i + 1 < args.Length:
+            degisiklikler.Add(args[++i]);
+            break;
+        case "--sadece-komut":
+            sadeceKomut = true;
+            break;
+    }
+}
+
+ayarlar ??= Varsayilanlar.For(profil.Id);
+foreach (var d in degisiklikler)
+{
+    Ayarla(ayarlar, d);
+    Console.WriteLine("Ayar: " + d);
+}
+
 Console.WriteLine($"ffmpeg: {Tools.Ffmpeg} (bulundu: {Tools.Available})");
 if (!Tools.Available)
 {
@@ -20,9 +59,24 @@ if (!Tools.Available)
 }
 
 var media = await MediaProbe.ProbeAsync(Tools.Ffprobe, input, CancellationToken.None);
-Console.WriteLine($"Kaynak: {Exporter.Describe(media)}");
-var preview = ArgsBuilder.Build(Profiles.TikTok, media, input, "CIKTI.mp4");
-Console.WriteLine("Komut: ffmpeg " + string.Join(' ', preview.Select(a => a.Contains(' ') ? $"\"{a}\"" : a)));
+var ses = ArgsBuilder.SesSec(ayarlar.Ses, media, input);
+Console.WriteLine($"Profil: {profil.DisplayName}");
+Console.WriteLine($"Kaynak: {Exporter.Describe(media, ayarlar, ses)}");
+Console.WriteLine($"Video: {ayarlar.Video.Ozet} · {ayarlar.Video.KodlayiciOzeti}");
+Console.WriteLine($"Ses ayarı: {ayarlar.Ses.KaynakOzeti} · {ayarlar.Ses.KodlayiciOzeti}");
+
+var plan = ArgsBuilder.Olustur(ayarlar, media, input, ses, "CIKTI" + ArgsBuilder.Uzanti(ayarlar), "GECIS");
+for (var g = 0; g < plan.Gecisler.Count; g++)
+{
+    var komut = string.Join(' ', plan.Gecisler[g].Select(a =>
+        a == input ? "KAYNAK" : ses.Dosya is { } d && a == d ? "SES" : a.Contains(' ') ? $"\"{a}\"" : a));
+    Console.WriteLine($"Komut {g + 1}/{plan.Gecisler.Count}: ffmpeg {komut}");
+}
+
+if (sadeceKomut)
+{
+    return 0;
+}
 
 var last = -1;
 var progress = new Progress<double>(p =>
@@ -36,6 +90,33 @@ var progress = new Progress<double>(p =>
 });
 
 var output = await Exporter.ExportAsync(
-    input, outDir, Profiles.TikTok, progress, info => Console.WriteLine("Bilgi: " + info), CancellationToken.None);
+    input, outDir, profil, ayarlar, progress, info => Console.WriteLine("Bilgi: " + info), CancellationToken.None);
 Console.WriteLine("Çıktı: " + output);
 return 0;
+
+// "Video.X264.BitHizi=4000" gibi bir ifadeyle ayar nesnesindeki tek bir özelliği değiştirir ("null": boş).
+static void Ayarla(object kok, string ifade)
+{
+    var esit = ifade.IndexOf('=');
+    if (esit <= 0)
+    {
+        throw new ArgumentException("--ayarla Yol=Deger biçiminde olmalı: " + ifade);
+    }
+
+    var yol = ifade[..esit].Split('.');
+    var metin = ifade[(esit + 1)..];
+    var hedef = kok;
+    for (var i = 0; i < yol.Length - 1; i++)
+    {
+        hedef = hedef.GetType().GetProperty(yol[i])?.GetValue(hedef)
+                ?? throw new ArgumentException("Ayar bulunamadı: " + string.Join('.', yol[..(i + 1)]));
+    }
+
+    var p = hedef.GetType().GetProperty(yol[^1]) ?? throw new ArgumentException("Ayar bulunamadı: " + ifade[..esit]);
+    var tip = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+    object? deger = metin == "null" ? null
+        : tip.IsEnum ? Enum.Parse(tip, metin)
+        : tip == typeof(string) ? metin
+        : Convert.ChangeType(metin, tip, CultureInfo.InvariantCulture);
+    p.SetValue(hedef, deger);
+}

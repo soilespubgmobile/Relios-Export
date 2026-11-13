@@ -1,9 +1,22 @@
 using System.IO;
-using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ReliosExport.Core.Ayarlar;
 
 namespace ReliosExport.Core;
+
+/// <summary>Kullanıcının adını verip kaydettiği ayarlar.</summary>
+public sealed class KayitliOnAyar
+{
+    [JsonPropertyName("ad")]
+    public string Ad { get; set; } = string.Empty;
+
+    [JsonPropertyName("profil")]
+    public ExportProfileId Profil { get; set; }
+
+    [JsonPropertyName("ayarlar")]
+    public ProfilAyarlari Ayarlar { get; set; } = new();
+}
 
 /// <summary>
 /// Programın hatırladığı ayarlar: program klasöründeki "ayarlar.json" (taşınabilir, kurulum yok).
@@ -11,19 +24,32 @@ namespace ReliosExport.Core;
 /// </summary>
 public sealed class AppSettings
 {
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        WriteIndented = true,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
-
     [JsonPropertyName("kayit_yeri")]
     public string? OutputFolder { get; set; }
 
     [JsonPropertyName("platform")]
     public string? Platform { get; set; }
 
+    /// <summary>Her profilin son kullanılan ayarları.</summary>
+    [JsonPropertyName("profiller")]
+    public Dictionary<ExportProfileId, ProfilAyarlari> Profiller { get; set; } = [];
+
+    [JsonPropertyName("on_ayarlar")]
+    public List<KayitliOnAyar> OnAyarlar { get; set; } = [];
+
     private static string FilePath => Path.Combine(AppPaths.AppFolder, "ayarlar.json");
+
+    /// <summary>Profilin ayarları; kayıt yoksa ya da bozuksa fabrika ayarları.</summary>
+    public ProfilAyarlari ProfilAyari(ExportProfileId id)
+    {
+        if (!Profiller.TryGetValue(id, out var a) || a is null || a.Surum != 1)
+        {
+            a = Varsayilanlar.For(id);
+            Profiller[id] = a;
+        }
+
+        return a;
+    }
 
     public static AppSettings Load()
     {
@@ -31,10 +57,11 @@ public sealed class AppSettings
         {
             if (File.Exists(FilePath))
             {
-                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath), Options) ?? new AppSettings();
+                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath), AyarDosyasi.Secenekler)
+                       ?? new AppSettings();
             }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
         {
             // Bozuk ya da okunamayan dosya: varsayılanlarla devam.
         }
@@ -46,7 +73,9 @@ public sealed class AppSettings
     {
         try
         {
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(this, Options));
+            var temp = FilePath + ".tmp";
+            File.WriteAllText(temp, JsonSerializer.Serialize(this, AyarDosyasi.Secenekler));
+            File.Move(temp, FilePath, overwrite: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

@@ -1,11 +1,14 @@
 name: FFmpeg dogrulama (Windows)
 
 # FFmpeg derlemesi bitince kendiliginden calisir (ya da elle, run numarasiyla):
-# 1) Linux'ta ozellikleri bilinen 13 deneme videosu uretilir (farkli bicim, boyut, kare hizi,
-#    ses, dondurme bilgisi, renk araligi, HDR, Turkce dosya adi...).
-# 2) Windows'ta derlenen ffmpeg.exe ile programin kendi TikTok kodu her birini cevirir.
+# 1) Linux'ta ozellikleri bilinen 15 deneme videosu uretilir (farkli bicim, boyut, kare hizi,
+#    ses, dondurme bilgisi, renk araligi, HDR, Turkce dosya adi, yaninda ayni adli WAV...).
+# 2) Windows'ta derlenen ffmpeg.exe ile programin kendi kodu (TikTok varsayilani) her birini cevirir.
 #    Her cikti hedef meta veriyle (tools/hedef_kontrol.py) ve kaynakla
 #    (tools/saglamlik_kontrol.py: sure, kare sayisi, senkron, dondurme, renk, kirpma) karsilastirilir.
+#    Programin urettigi komut, XviD4PSP ile dogrulanan 0.3.0'in komutuyla harf harf karsilastirilir.
+# 3) Diger ayarlar da denenir: YouTube varsayilani, 2 / 3 gecisli x264, WAV sesli MOV, siyah kenar,
+#    sessiz, ses seviyesi / gecikme, HE-AAC, NVENC komutu (tools/ayar_kontrol.py).
 on:
   workflow_run:
     workflows: ["Relios FFmpeg (win64, nonfree, en son kararli surumler)"]
@@ -107,6 +110,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           New-Item -ItemType Directory smoke/ffmpeg -Force | Out-Null
           Copy-Item "$env:FFBIN/ffmpeg.exe","$env:FFBIN/ffprobe.exe" smoke/ffmpeg/
+          # Karsilastirma icin 0.3.0'in (ayar menusunden onceki, dogrulanmis) TikTok komut ureticisi
+          dotnet build tools/ReliosExport.EskiKomut -c Release -o eski --nologo -v q
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Tum deneme videolari (programin kendi TikTok kodu + kontroller)
         run: |
@@ -131,7 +137,18 @@ jobs:
             $rc = $LASTEXITCODE
             $log | ForEach-Object { Write-Host $_ }
             $bilgi = (($log | Where-Object { $_ -like "Kaynak: *" } | Select-Object -First 1) -replace '^Kaynak: ', '')
-            $hedef = "-"; $sag = "-"; $durum = "HATA (kodlama)"
+            $hedef = "-"; $sag = "-"; $durum = "HATA (kodlama)"; $komut = "-"; $komutFarki = $false
+            # Yeni programin komutu 0.3.0'inkiyle ayni mi (ayni adli ses dosyasi olan denemeler haric)
+            if ($k.eski_komut -ne $false) {
+              $yeniKomut = (($log | Where-Object { $_ -like "Komut 1/1: *" } | Select-Object -First 1) -replace '^Komut 1/1: ', '')
+              $eskiKomut = (& ./eski/ReliosExport.EskiKomut.exe "$env:FFBIN/ffprobe.exe" $src 2>&1 | ForEach-Object { "$_" } | Select-Object -Last 1)
+              if ($yeniKomut -ceq $eskiKomut) { $komut = "aynı" } else {
+                $komut = "FARK"; $komutFarki = $true
+                Write-Host "0.3.0 komutu: $eskiKomut"
+                Write-Host "Yeni komut  : $yeniKomut"
+                $farklar += "  $i. komut 0.3.0'dan farkli"
+              }
+            }
             if ($rc -eq 0) {
               $mp4 = (Get-ChildItem -LiteralPath $dir -Filter *.mp4 | Select-Object -First 1).FullName
               $h = & python -X utf8 -I tools/hedef_kontrol.py $mp4 7 2>&1 | ForEach-Object { "$_" }
@@ -142,19 +159,104 @@ jobs:
               $s | ForEach-Object { Write-Host $_ }
               $hedef = ((($h | Where-Object { $_ -match '\d+ kontrol, \d+ fark' }) | Select-Object -Last 1) -replace '^.*?(\d+ kontrol, \d+ fark).*$', '$1')
               $sag = ((($s | Where-Object { $_ -match '\d+ kontrol, \d+ fark' }) | Select-Object -Last 1) -replace '^.*?(\d+ kontrol, \d+ fark).*$', '$1')
+              $erc = 0
+              if ($k.ek) {
+                $e = & python -X utf8 -I tools/ayar_kontrol.py $mp4 @($k.ek -split ' ') 2>&1 | ForEach-Object { "$_" }
+                $erc = $LASTEXITCODE
+                $e | ForEach-Object { Write-Host $_ }
+                $s += $e
+              }
               $farklar += ($h + $s) | Where-Object { $_ -like "FARK*" } | ForEach-Object { "  $i. $_" }
-              if ($hrc -eq 0 -and $src_rc -eq 0) { $durum = "OK" } else { $durum = "FARK"; $hatali++ }
+              if ($hrc -eq 0 -and $src_rc -eq 0 -and $erc -eq 0 -and -not $komutFarki) { $durum = "OK" } else { $durum = "FARK"; $hatali++ }
             } else {
               $hatali++
               $farklar += "  $i. kodlama basarisiz (kod $rc)"
             }
             Write-Host "::endgroup::"
-            $satirlar += "| $i | $($k.aciklama) | $bilgi | $hedef | $sag | $durum |"
+            $satirlar += "| $i | $($k.aciklama) | $bilgi | $komut | $hedef | $sag | $durum |"
           }
-          $tablo = @("| # | Deneme videosu | Programin okudugu | Hedef meta veri | Saglamlik | Sonuc |", "|---|---|---|---|---|---|") + $satirlar
+          $tablo = @("| # | Deneme videosu | Programin okudugu | 0.3.0 komutu | Hedef meta veri | Saglamlik | Sonuc |", "|---|---|---|---|---|---|---|") + $satirlar
           "`n===== OZET ====="
           $tablo | ForEach-Object { $_ }
           if ($farklar.Count) { "`nFarklar:"; $farklar | ForEach-Object { $_ } }
           $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           if ($hatali) { "`n$hatali deneme videosunda sorun var."; exit 1 }
           "`nTum deneme videolari temiz."
+
+      - name: Diger ayarlar (YouTube, 2 / 3 gecis, WAV + MOV, siyah kenar, ses, NVENC komutu)
+        if: always()
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          $kok = (Resolve-Path kaynaklar).Path
+          $man = Get-Content (Join-Path $kok manifest.json) -Raw -Encoding utf8 | ConvertFrom-Json
+          function Kaynak($ad) { $man | Where-Object { $_.dosya -like "$ad*" } | Select-Object -First 1 }
+          $yt = @('--profil', 'youtube')
+          $testler = @(
+            @{ ad = 'YouTube varsayilani: 1080p60 yatay'; k = '01_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
+               ayar = @('kap=mp4', 'boyut=1920x1080', 'fps=60/1', 'profil=High', 'x264:keyint=30', 'x264:bframes=2', 'acodec=aac', 'ar=48000', 'ac=2', 'abit=384000±6%') },
+            @{ ad = 'YouTube varsayilani: telefon (dondurulmus HEVC 10 bit)'; k = '03_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
+               ayar = @('boyut=1080x1920', 'fps=30/1', 'profil=High', 'x264:keyint=15', 'ar=48000') },
+            @{ ad = 'YouTube varsayilani: 1080x2400 uzun dikey'; k = '13_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
+               ayar = @('boyut=1080x2400', 'fps=30/1', 'profil=High', 'x264:keyint=15') },
+            @{ ad = 'x264 2 gecis 4000 kb/s'; k = '12_'; arg = @('--ayarla', 'Video.X264.Mod=IkiGecis', '--ayarla', 'Video.X264.BitHizi=4000'); sag = @()
+               ayar = @('x264:rc=2pass', 'x264:bitrate=4000', 'vbit=4000000±30%') },
+            @{ ad = 'x264 3 gecis 4000 kb/s'; k = '12_'; arg = @('--ayarla', 'Video.X264.Mod=UcGecis', '--ayarla', 'Video.X264.BitHizi=4000'); sag = @()
+               ayar = @('x264:rc=2pass', 'x264:bitrate=4000', 'vbit=4000000±30%') },
+            @{ ad = 'WAV ses (MOV kabi, 24 bit)'; k = '02_'; arg = @('--ayarla', 'Ses.Kodlayici=Wav'); sag = @()
+               ayar = @('kap=mov', 'acodec=pcm_s24le', 'ar=48000', 'ac=2') },
+            @{ ad = 'Oran farkliysa siyah kenar (21:9 -> 9:16)'; k = '12_'; arg = @('--ayarla', 'Video.Oran=KenarEkle'); sag = @('--oran', 'kenar')
+               ayar = @('boyut=1216x2160') },
+            @{ ad = 'Ses kaynagi: sessiz'; k = '10_'; arg = @('--ayarla', 'Ses.Kaynak=Sessiz'); sag = @(); ses = 0
+               ayar = @('ses=yok') },
+            @{ ad = 'Ses kaynagi: videonun sesi (yaninda WAV olsa da)'; k = '14_'; arg = @('--ayarla', 'Ses.Kaynak=VideonunSesi'); sag = @()
+               ayar = @('ses_seviye=-12.1±2.5') },
+            @{ ad = 'Ayni adli WAV + ses seviyesi -6 dB + 250 ms gecikme'; k = '15_'; arg = @('--ayarla', 'Ses.Seviye=-6', '--ayarla', 'Ses.Gecikme=250'); sag = @()
+               ayar = @('ses_seviye=-42.8±2.5') },
+            @{ ad = 'FDK HE-AAC 48 kb/s (Turkce adli kaynak)'; k = '08_'; arg = @('--ayarla', 'Ses.Fdk.Profil=aac_he', '--ayarla', 'Ses.Fdk.BitHizi=48'); sag = @()
+               ayar = @('acodec=aac', 'aprofil=HE-AAC', 'abit=48000±10%') },
+            @{ ad = 'NVENC komutu (kart yok: yalnizca komut)'; k = '01_'; arg = @('--ayarla', 'Video.Kodlayici=Nvenc', '--sadece-komut'); komut = @(
+                 '-c:v h264_nvenc -preset p7 -tune hq -profile:v high -rc vbr -cq 19 -b:v 0', '-multipass fullres', '-rc-lookahead 32',
+                 '-spatial-aq 1 -aq-strength 8', '-temporal-aq 1', '-bf 3 -b_ref_mode middle', '-coder cabac', '-g 50', '-no-scenecut 1') }
+          )
+          $satirlar = @(); $hatali = 0; $i = 0
+          foreach ($t in $testler) {
+            $i++
+            $k = Kaynak $t.k
+            $src = Join-Path $kok $k.dosya
+            if ($k.windows_adi) {
+              $yeni = Join-Path $kok $k.windows_adi
+              Copy-Item -LiteralPath $src -Destination $yeni -Force
+              $src = $yeni
+            }
+            $dir = Join-Path $PWD "diger/$i"
+            Write-Host "::group::$i. $($t.ad)"
+            $log = & ./smoke/ReliosExport.Smoke.exe $src $dir @($t.arg) 2>&1 | ForEach-Object { "$_" }
+            $rc = $LASTEXITCODE
+            $log | ForEach-Object { Write-Host $_ }
+            $sonuc = "OK"; $ozet = ""
+            if ($rc -ne 0) { $sonuc = "HATA (kod $rc)" }
+            elseif ($t.komut) {
+              $satir = ($log | Where-Object { $_ -like "Komut 1/1: *" } | Select-Object -First 1)
+              $eksik = @($t.komut | Where-Object { -not $satir.Contains($_) })
+              if ($eksik.Count) { $sonuc = "FARK"; $ozet = "komutta yok: " + ($eksik -join ' | ') } else { $ozet = "$($t.komut.Count) parça komutta var" }
+            } else {
+              $out = (Get-ChildItem -LiteralPath $dir | Where-Object { $_.Extension -in '.mp4', '.mov' } | Select-Object -First 1).FullName
+              $ses = if ($null -ne $t.ses) { $t.ses } else { [int][bool]$k.ses }
+              $s = & python -X utf8 -I tools/saglamlik_kontrol.py $src $out $k.matris $k.aralik $ses @($t.sag) 2>&1 | ForEach-Object { "$_" }
+              $src_rc = $LASTEXITCODE
+              $a = & python -X utf8 -I tools/ayar_kontrol.py $out @($t.ayar) 2>&1 | ForEach-Object { "$_" }
+              $arc = $LASTEXITCODE
+              ($s + $a) | ForEach-Object { Write-Host $_ }
+              $ozet = ((($s + $a) | Where-Object { $_ -match '\d+ kontrol, \d+ fark' }) -replace '^(.*?): (\d+ kontrol, \d+ fark).*$', '$1 $2') -join ' · '
+              if ($src_rc -ne 0 -or $arc -ne 0) { $sonuc = "FARK"; $ozet += " · " + ((($s + $a) | Where-Object { $_ -like "FARK*" }) -join ' | ') }
+            }
+            if ($sonuc -ne "OK") { $hatali++ }
+            Write-Host "::endgroup::"
+            $satirlar += "| $i | $($t.ad) | $ozet | $sonuc |"
+          }
+          $tablo = @("", "| # | Ayar denemesi | Kontroller | Sonuc |", "|---|---|---|---|") + $satirlar
+          "`n===== DIGER AYARLAR ====="
+          $tablo | ForEach-Object { $_ }
+          $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          if ($hatali) { "`n$hatali ayar denemesinde sorun var."; exit 1 }
+          "`nTum ayar denemeleri temiz."

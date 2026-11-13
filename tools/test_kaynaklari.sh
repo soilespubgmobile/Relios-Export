@@ -18,9 +18,10 @@ video() { # boyut hiz sure matris aralik pikselformati etiketler
 vf() { # matris aralik pikselformati etiket_filtresi
     echo "format=gbrp,scale=out_color_matrix=$1:out_range=$2,format=$3,$4"
 }
-add() { # dosya matris aralik ses aciklama [windows_adi]
+add() { # dosya matris aralik ses aciklama [windows_adi] [ek_json]
     local extra=""
     [[ -n "${6:-}" ]] && extra=", \"windows_adi\": \"$6\""
+    [[ -n "${7:-}" ]] && extra="$extra, $7"
     MANIFEST+=("{\"dosya\": \"$1\", \"matris\": \"$2\", \"aralik\": \"$3\", \"ses\": $4, \"aciklama\": \"$5\"$extra}")
 }
 T709="$(tags bt709 bt709 bt709 tv)"
@@ -120,6 +121,26 @@ f="13_uzun_dikey_1080x2400.mp4"
     -vf "$(vf bt709 tv yuv420p "$T709")" -c:v libx264 -preset veryfast -crf 14 \
     -ac 2 -c:a aac -b:a 192k "$f"
 add "$f" bt709 tv true "1080x2400 uzun dikey (ustten/alttan kirpma)"
+
+# 14) Yaninda ayni adli WAV (videodan KISA): videonun kendi yuksek sesi (ortalama ~-12 dB) kullanilmamali,
+#     WAV'in alcak sesi (~-36.5 dB; mono -> stereo -3 dB) kullanilmali; WAV bitince kalan sure sessiz
+#     (3 saniyenin ortalamasi ~-38.3 dB).
+f="14_harici_ses_kisa.mp4"
+"${FF[@]}" $(video 1920x1080 30 3) -f lavfi -i sine=frequency=440:sample_rate=48000:duration=3 \
+    -vf "$(vf bt709 tv yuv420p "$T709")" -af volume=4 -c:v libx264 -preset veryfast -crf 14 \
+    -ac 2 -c:a aac -b:a 192k "$f"
+"${FF[@]}" -f lavfi -i sine=frequency=1000:sample_rate=48000:duration=2 -af volume=0.24 -ac 2 -c:a pcm_s24le "${f%.mp4}.wav"
+add "$f" bt709 tv true "Yaninda ayni adli 24 bit WAV (videodan kisa: sonu sessiz)" "" \
+    '"ek": "ses_seviye=-38.3±2.5", "eski_komut": false'
+
+# 15) Yaninda ayni adli WAV (videodan UZUN): video bitince ses de kesilmeli.
+f="15_harici_ses_uzun.mp4"
+"${FF[@]}" $(video 1920x1080 30 3) -f lavfi -i sine=frequency=440:sample_rate=48000:duration=3 \
+    -vf "$(vf bt709 tv yuv420p "$T709")" -af volume=4 -c:v libx264 -preset veryfast -crf 14 \
+    -ac 2 -c:a aac -b:a 192k "$f"
+"${FF[@]}" -f lavfi -i sine=frequency=1000:sample_rate=44100:duration=5 -af volume=0.24 -ac 2 -c:a pcm_s16le "${f%.mp4}.wav"
+add "$f" bt709 tv true "Yaninda ayni adli 16 bit 44.1 kHz WAV (videodan uzun: kesilir)" "" \
+    '"ek": "ses_seviye=-36.5±2.5", "eski_komut": false'
 
 {
     echo "["

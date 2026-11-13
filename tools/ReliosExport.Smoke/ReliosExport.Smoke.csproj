@@ -12,7 +12,7 @@
 
   <ItemGroup>
     <Using Remove="System.Net.Http" />
-    <Compile Include="..\..\app\ReliosExport\Core\*.cs" Link="Core\%(Filename)%(Extension)" />
+    <Compile Include="..\..\app\ReliosExport\Core\**\*.cs" Link="Core\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

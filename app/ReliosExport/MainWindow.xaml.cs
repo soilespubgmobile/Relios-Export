@@ -5,10 +5,14 @@ using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Shell;
+using System.Windows.Threading;
 using Microsoft.Win32;
+using ReliosExport.Arayuz;
 using ReliosExport.Core;
+using ReliosExport.Core.Ayarlar;
 
 namespace ReliosExport;
 
@@ -36,6 +40,9 @@ public sealed class FileItem : INotifyPropertyChanged
 
     public string FileName => System.IO.Path.GetFileName(Path);
 
+    /// <summary>Videonun yanındaki aynı adlı ses dosyası (yoksa null).</summary>
+    public string? HariciSes { get; set; }
+
     /// <summary>Bittiğinde oluşan dosya.</summary>
     public string? OutputPath { get; set; }
 
@@ -51,7 +58,7 @@ public sealed class FileItem : INotifyPropertyChanged
         set => Set(ref _status, value);
     }
 
-    /// <summary>Hata ayrıntısı (durum satırının ipucunda görünür).</summary>
+    /// <summary>Durum satırının ipucu (hata ayrıntısı ya da kullanılacak ses dosyasının yolu).</summary>
     public string? Detail
     {
         get => _detail;
@@ -116,7 +123,9 @@ public partial class MainWindow : Window
 
     private readonly ObservableCollection<FileItem> _files = [];
     private readonly AppSettings _settings;
+    private readonly DispatcherTimer _kayit;
     private readonly bool _ready;
+    private ProfilAyarlari _ayarlar = null!;
     private CancellationTokenSource? _cts;
     private ExportProfileId _lastProfile;
     private string _outputFolder;
@@ -135,6 +144,14 @@ public partial class MainWindow : Window
             RbYouTube.IsChecked = true;
         }
 
+        // Ayar değişikliği kısa bir beklemeyle kaydedilir (her tuşta diske yazılmasın).
+        _kayit = new DispatcherTimer(DispatcherPriority.Background, Dispatcher) { Interval = TimeSpan.FromMilliseconds(600) };
+        _kayit.Tick += (_, _) =>
+        {
+            _kayit.Stop();
+            _settings.Save();
+        };
+
         _lastProfile = SelectedProfile.Id;
         FileList.ItemsSource = _files;
         _files.CollectionChanged += (_, _) => OnListChanged();
@@ -144,12 +161,13 @@ public partial class MainWindow : Window
             if (!IsBusy)
             {
                 CheckTools();
+                HariciSesleriYenile();
             }
         };
 
         _ready = true;
+        AyarlariBagla();
         CheckTools();
-        UpdateProfileInfo();
         OnListChanged();
     }
 
@@ -213,20 +231,10 @@ public partial class MainWindow : Window
             _lastProfile = id;
         }
 
-        UpdateProfileInfo();
+        AyarlariBagla();
         OnListChanged();
         _settings.Platform = id.ToString();
         _settings.Save();
-    }
-
-    private void UpdateProfileInfo()
-    {
-        var p = SelectedProfile;
-        ProfileTags.ItemsSource = p.Tags;
-        ProfileTags.Visibility = p.IsReady ? Visibility.Visible : Visibility.Collapsed;
-        ProfileNote.Visibility = p.IsReady ? Visibility.Collapsed : Visibility.Visible;
-        ProfileNoteText.Text = p.Description;
-        UpdateStartState();
     }
 
     private void OnListChanged()
@@ -265,7 +273,204 @@ public partial class MainWindow : Window
 
         BtnStart.IsEnabled = IsBusy
             ? _cts is { IsCancellationRequested: false }
-            : _ffmpegOk && SelectedProfile.IsReady && _files.Any(f => f.State != ItemState.Done);
+            : _ffmpegOk && _files.Any(f => f.State != ItemState.Done);
+    }
+
+    // ---------------------------------------------------------------- ayarlar
+
+    /// <summary>Seçili profilin ayarlarını panele bağlar.</summary>
+    private void AyarlariBagla()
+    {
+        if (_ayarlar is not null)
+        {
+            _ayarlar.Degisti -= OnAyarDegisti;
+        }
+
+        _ayarlar = _settings.ProfilAyari(SelectedProfile.Id);
+        _ayarlar.Degisti += OnAyarDegisti;
+        AyarPaneli.DataContext = _ayarlar;
+        ProfilAdiniYaz();
+        EtiketleriYaz();
+        BekleyenleriYaz();
+    }
+
+    private void OnAyarDegisti(object? sender, EventArgs e)
+    {
+        _kayit.Stop();
+        _kayit.Start();
+        EtiketleriYaz();
+        BekleyenleriYaz();
+    }
+
+    private void KaydetHemen()
+    {
+        _kayit.Stop();
+        _settings.Save();
+    }
+
+    private void ProfilAdiniYaz()
+    {
+        var ad = SelectedProfile.DisplayName;
+        AyarProfilAdi.Text = IsBusy ? ad + " · değişiklikler sonraki başlatmada geçerli" : ad;
+        AyarProfilAdi.ToolTip = IsBusy ? "Kodlanan videolar başlatıldıkları ayarlarla biter." : null;
+    }
+
+    /// <summary>Üst çubuktaki kısa özet: seçili profilin ayarlarından.</summary>
+    private void EtiketleriYaz() => ProfileTags.ItemsSource = Etiketler(_ayarlar);
+
+    private static List<string> Etiketler(ProfilAyarlari a)
+    {
+        var v = a.Video;
+        var list = new List<string>
+        {
+            v.Cozunurluk == CozunurlukModu.Kaynak ? "Kaynak çözünürlük" : $"{v.Genislik}×{v.Yukseklik}",
+            v.KareHiziModu == KareHiziModu.Kaynak ? "Kaynak kare hızı" : Bicim.KareHiziMetni(v.KareHizi) + " fps",
+        };
+
+        if (v.Kodlayici == VideoKodlayici.X264)
+        {
+            list.Add("x264 · " + v.X264.ModOzeti);
+            list.Add(Bicim.ProfilSeviye(v.X264.Profil, v.X264.Seviye));
+        }
+        else
+        {
+            list.Add("NVENC · " + v.Nvenc.ModOzeti);
+            list.Add(Bicim.ProfilSeviye(v.Nvenc.Profil, v.Nvenc.Seviye));
+        }
+
+        var k = a.AnahtarKare;
+        if (k.EnBuyuk is { } enBuyuk)
+        {
+            var birim = k.Birim == AralikBirimi.Kare ? string.Empty : " sn";
+            list.Add("GOP " + Bicim.Sayi(enBuyuk) + (k.EnKucuk is { } enKucuk ? " / " + Bicim.Sayi(enKucuk) : string.Empty) + birim);
+        }
+
+        var s = a.Ses;
+        if (s.Kaynak == SesKaynagi.Sessiz)
+        {
+            list.Add("Sessiz");
+        }
+        else
+        {
+            list.Add(s.Kodlayici == SesKodlayici.FdkAac ? s.Fdk.Ozet : "WAV · " + SesAyarlari.WavMetni(s.WavBit));
+            list.Add(s.OrnekHizi is { } hz ? Bicim.Khz(hz) : "Kaynak örnekleme");
+            if (s.Kaynak == SesKaynagi.AyniAdliDosyaOncelikli)
+            {
+                list.Add("Aynı adlı WAV");
+            }
+        }
+
+        list.Add(ArgsBuilder.Uzanti(a) == ".mov" ? "MOV" : "MP4");
+        return list;
+    }
+
+    private void OnVarsayilan(object sender, RoutedEventArgs e)
+    {
+        var p = SelectedProfile;
+        var not = p.Id == ExportProfileId.TikTok
+            ? " TikTok'un fabrika ayarı XviD4PSP'deki hedefle aynıdır (1216×2160, 29,97 fps, CRF 18)."
+            : " YouTube'un fabrika ayarı kaynakla aynı çözünürlük ve kare hızıdır.";
+        if (!ConfirmDialog.Ask(
+                this,
+                $"{p.DisplayName} ayarları varsayılana dönsün mü?",
+                "Video, ses ve anahtar kare ayarlarının hepsi fabrika ayarına döner." + not,
+                "Varsayılana dön",
+                "Vazgeç"))
+        {
+            return;
+        }
+
+        _settings.Profiller[p.Id] = Varsayilanlar.For(p.Id);
+        AyarlariBagla();
+        KaydetHemen();
+    }
+
+    private void OnOnAyarlar(object sender, RoutedEventArgs e)
+    {
+        GirisKutulari.Uygula(this);
+        var dlg = new OnAyarPenceresi(_settings, SelectedProfile, _ayarlar) { Owner = this };
+        if (dlg.ShowDialog() == true && dlg.Yuklenen is { } yeni)
+        {
+            _settings.Profiller[SelectedProfile.Id] = yeni;
+            AyarlariBagla();
+            KaydetHemen();
+        }
+    }
+
+    private void OnX264Ayrintili(object sender, RoutedEventArgs e)
+    {
+        GirisKutulari.Uygula(this);
+        var dlg = new X264Penceresi(_ayarlar) { Owner = this };
+        if (dlg.ShowDialog() == true)
+        {
+            _ayarlar.Video.X264 = dlg.Sonuc;
+        }
+    }
+
+    private void OnNvencAyrintili(object sender, RoutedEventArgs e)
+    {
+        GirisKutulari.Uygula(this);
+        var dlg = new NvencPenceresi(_ayarlar) { Owner = this };
+        if (dlg.ShowDialog() == true)
+        {
+            _ayarlar.Video.Nvenc = dlg.Sonuc;
+        }
+    }
+
+    private void OnFdkAyrintili(object sender, RoutedEventArgs e)
+    {
+        GirisKutulari.Uygula(this);
+        var dlg = new FdkPenceresi(_ayarlar) { Owner = this };
+        if (dlg.ShowDialog() == true)
+        {
+            _ayarlar.Ses.Fdk = dlg.Sonuc;
+        }
+    }
+
+    // ---------------------------------------------------------------- aynı adlı ses
+
+    /// <summary>Bekleyen videoların durum satırı: hangi sesin kullanılacağı.</summary>
+    private void BekleyenleriYaz()
+    {
+        foreach (var item in _files)
+        {
+            if (item.State == ItemState.Waiting)
+            {
+                BekliyorYaz(item);
+            }
+        }
+    }
+
+    private void BekliyorYaz(FileItem item)
+    {
+        switch (_ayarlar.Ses.Kaynak)
+        {
+            case SesKaynagi.Sessiz:
+                item.Status = "Bekliyor · Ses yok (sessiz)";
+                item.Detail = null;
+                break;
+            case SesKaynagi.AyniAdliDosyaOncelikli when item.HariciSes is { } ses:
+                item.Status = "Bekliyor · Ses: " + Path.GetFileName(ses);
+                item.Detail = "Videonun kendi sesi yerine kullanılacak ses:\n" + ses;
+                break;
+            default:
+                item.Status = "Bekliyor";
+                item.Detail = null;
+                break;
+        }
+    }
+
+    /// <summary>Program dışında ses dosyası eklenmiş / silinmiş olabilir: bekleyenler yeniden aranır.</summary>
+    private void HariciSesleriYenile()
+    {
+        foreach (var item in _files)
+        {
+            if (item.State == ItemState.Waiting)
+            {
+                item.HariciSes = HariciSes.Bul(item.Path);
+                BekliyorYaz(item);
+            }
+        }
     }
 
     // ---------------------------------------------------------------- dosya ekleme
@@ -323,8 +528,16 @@ public partial class MainWindow : Window
     private void AddPaths(IEnumerable<string> paths)
     {
         var skipped = 0;
+        var sesler = new List<string>();
         foreach (var path in Expand(paths))
         {
+            // Ses dosyası listeye eklenmez: aynı adlı videoyla birlikte otomatik kullanılır.
+            if (HariciSes.SesDosyasiMi(path))
+            {
+                sesler.Add(path);
+                continue;
+            }
+
             var ext = Path.GetExtension(path).ToLowerInvariant();
             if (!VideoExtensions.Contains(ext))
             {
@@ -337,12 +550,43 @@ public partial class MainWindow : Window
                 continue;
             }
 
-            _files.Add(new FileItem(path));
+            var item = new FileItem(path) { HariciSes = HariciSes.Bul(path) };
+            BekliyorYaz(item);
+            _files.Add(item);
         }
 
+        var eslesmeyen = sesler.Count(s => !_files.Any(f => AyniYol(f.HariciSes, s)));
+        var notlar = new List<string>();
         if (skipped > 0)
         {
-            StatusText.Text = $"{skipped} dosya video olmadığı için eklenmedi";
+            notlar.Add($"{skipped} dosya video olmadığı için eklenmedi");
+        }
+
+        if (eslesmeyen > 0)
+        {
+            notlar.Add($"{eslesmeyen} ses dosyasının aynı adlı videosu listede yok");
+        }
+
+        if (notlar.Count > 0)
+        {
+            StatusText.Text = string.Join(" · ", notlar);
+        }
+    }
+
+    private static bool AyniYol(string? a, string b)
+    {
+        if (a is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
         }
     }
 
@@ -412,7 +656,7 @@ public partial class MainWindow : Window
             _outputFolder = dlg.FolderName;
             OutputFolderBox.Text = _outputFolder;
             _settings.OutputFolder = _outputFolder;
-            _settings.Save();
+            KaydetHemen();
         }
     }
 
@@ -448,16 +692,21 @@ public partial class MainWindow : Window
         }
 
         CheckTools();
+        GirisKutulari.Uygula(this);
         var profile = SelectedProfile;
         var queue = _files.Where(f => f.State != ItemState.Done).ToList();
-        if (!_ffmpegOk || !profile.IsReady || queue.Count == 0)
+        if (!_ffmpegOk || queue.Count == 0)
         {
             return;
         }
 
+        // Kuyruktaki her video aynı ayarla kodlanır; kodlama sürerken paneldeki değişiklik sonraki başlatmaya kalır.
+        var ayarlar = _ayarlar.Kopya();
+        KaydetHemen();
         foreach (var item in queue)
         {
             item.Reset();
+            item.HariciSes = HariciSes.Bul(item.Path);
         }
 
         _cts = new CancellationTokenSource();
@@ -493,6 +742,7 @@ public partial class MainWindow : Window
                         item.Path,
                         _outputFolder,
                         profile,
+                        ayarlar,
                         progress,
                         info => item.Status = "Kodlanıyor · " + info,
                         token);
@@ -500,6 +750,7 @@ public partial class MainWindow : Window
                     item.Progress = 1;
                     item.State = ItemState.Done;
                     item.Status = "Hazır · " + Path.GetFileName(output);
+                    item.Detail = output;
                     ok++;
                 }
                 catch (OperationCanceledException)
@@ -587,6 +838,12 @@ public partial class MainWindow : Window
         OverallBar.Value = 0;
         Taskbar.ProgressValue = 0;
         Taskbar.ProgressState = busy ? TaskbarItemProgressState.Normal : TaskbarItemProgressState.None;
+        ProfilAdiniYaz();
+        if (!busy)
+        {
+            BekleyenleriYaz();
+        }
+
         UpdateStartState();
     }
 
@@ -594,6 +851,8 @@ public partial class MainWindow : Window
     {
         if (!IsBusy)
         {
+            GirisKutulari.Uygula(this);
+            KaydetHemen();
             return;
         }
 
@@ -615,4 +874,56 @@ public partial class MainWindow : Window
             _cts?.Cancel();
         }
     }
+
+    // ---------------------------------------------------------------- derleme kontrolü
+
+    /// <summary>
+    /// Yalnızca GitHub'daki pencere kontrolü için: listeye örnek satırlar konur ve ayar satırları açılır,
+    /// böylece ekran görüntüsünde arayüzün dolu hâli görünür. Dosyalar diskte yoktur, kodlanmaz.
+    /// </summary>
+    internal void KontrolIcinDoldur()
+    {
+        var klasor = Path.Combine(Path.GetTempPath(), "Relios Export örnek");
+        var bekleyen = new FileItem(Path.Combine(klasor, "edit1.mp4")) { HariciSes = Path.Combine(klasor, "edit1.wav") };
+        BekliyorYaz(bekleyen);
+        var calisan = new FileItem(Path.Combine(klasor, "Türkçe ğüşıöç İsim.mov"))
+        {
+            State = ItemState.Running,
+            Status = "Kodlanıyor · 1920×1080 · 60 fps · kırpılıyor · Ses: Türkçe ğüşıöç İsim.wav",
+            Progress = 0.42,
+        };
+        var biten = new FileItem(Path.Combine(klasor, "klip.mp4"))
+        {
+            State = ItemState.Done,
+            Status = "Hazır · klip_TikTok.mp4",
+            Progress = 1,
+        };
+        var hatali = new FileItem(Path.Combine(klasor, "bozuk.mkv"))
+        {
+            State = ItemState.Failed,
+            Status = "Hata: ffmpeg çalışmadı (kod 1)",
+        };
+        _files.Add(bekleyen);
+        _files.Add(calisan);
+        _files.Add(biten);
+        _files.Add(hatali);
+
+        foreach (var exp in AyarPaneli.Children.OfType<Expander>().Take(3))
+        {
+            exp.IsExpanded = true;
+        }
+    }
+
+    /// <summary>Yalnızca pencere kontrolü için: panelin bütün satırları açılır (tam görüntü).</summary>
+    internal void KontrolIcinTumSatirlariAc()
+    {
+        foreach (var exp in AyarPaneli.Children.OfType<Expander>())
+        {
+            exp.IsExpanded = true;
+        }
+    }
+
+    internal ProfilAyarlari KontrolAyarlari => _ayarlar;
+
+    internal AppSettings KontrolAyarDosyasi => _settings;
 }

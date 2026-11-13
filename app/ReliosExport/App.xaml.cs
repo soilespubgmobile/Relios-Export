@@ -1,5 +1,11 @@
+using System.IO;
+using System.Text;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Threading;
+using ReliosExport.Arayuz;
+using ReliosExport.Core;
+using ReliosExport.Core.Ayarlar;
 
 namespace ReliosExport;
 
@@ -31,10 +37,12 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        GirisKutulari.Etkinlestir();
 
-        // Yalnızca GitHub'daki derleme kontrolü için (pencere görünmeden sonucu dosyaya yazar, kapanır):
+        // Yalnızca GitHub'daki derleme kontrolü için (sonucu dosyaya yazar, kapanır):
         //   --ffmpeg-kontrol <dosya>   tek exe'nin içindeki FFmpeg açılıyor mu
-        //   --pencere-kontrol <dosya>  ana pencere hatasız açılıyor mu
+        //   --pencere-kontrol <dosya>  ana pencere ve ayar pencereleri hatasız açılıyor mu
+        //   --ekran <klasör>           (pencere kontrolüyle) pencerelerin görüntüsünü PNG olarak kaydeder
         var ff = Array.IndexOf(e.Args, "--ffmpeg-kontrol");
         var win = Array.IndexOf(e.Args, "--pencere-kontrol");
         var k = ff >= 0 ? ff : win;
@@ -42,8 +50,10 @@ public partial class App : Application
         {
             var path = k + 1 < e.Args.Length
                 ? e.Args[k + 1]
-                : System.IO.Path.Combine(Core.AppPaths.AppFolder, "kontrol.txt");
-            RunCheck(path, window: ff < 0);
+                : Path.Combine(AppPaths.AppFolder, "kontrol.txt");
+            var ek = Array.IndexOf(e.Args, "--ekran");
+            var ekran = ek >= 0 && ek + 1 < e.Args.Length ? e.Args[ek + 1] : null;
+            RunCheck(path, window: ff < 0, ekran);
             return;
         }
 
@@ -51,16 +61,16 @@ public partial class App : Application
         MainWindow.Show();
     }
 
-    private void RunCheck(string path, bool window)
+    private void RunCheck(string path, bool window, string? ekran)
     {
         try
         {
-            var text = $"klasor={Core.Tools.Folder}\nffmpeg={Core.Tools.Ffmpeg}\n" +
-                       $"ffprobe={Core.Tools.Ffprobe}\nbulundu={Core.Tools.Available}\n";
+            var text = $"klasor={Tools.Folder}\nffmpeg={Tools.Ffmpeg}\n" +
+                       $"ffprobe={Tools.Ffprobe}\nbulundu={Tools.Available}\n";
             if (!window)
             {
-                System.IO.File.WriteAllText(path, text);
-                Shutdown(Core.Tools.Available ? 0 : 1);
+                File.WriteAllText(path, text);
+                Shutdown(Tools.Available ? 0 : 1);
                 return;
             }
 
@@ -68,8 +78,18 @@ public partial class App : Application
             MainWindow = w;
             w.Loaded += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
             {
-                System.IO.File.WriteAllText(path, text + "pencere=acildi\n");
-                Shutdown(0);
+                text += "pencere=acildi\n";
+                try
+                {
+                    text += PencereleriDene(w, ekran);
+                    File.WriteAllText(path, text);
+                    Shutdown(0);
+                }
+                catch (Exception ex)
+                {
+                    File.WriteAllText(path, text + "hata=" + ex);
+                    Shutdown(3);
+                }
             }));
             w.Show();
         }
@@ -77,7 +97,7 @@ public partial class App : Application
         {
             try
             {
-                System.IO.File.WriteAllText(path, "hata=" + ex);
+                File.WriteAllText(path, "hata=" + ex);
             }
             catch (Exception)
             {
@@ -86,6 +106,63 @@ public partial class App : Application
 
             Shutdown(2);
         }
+    }
+
+    /// <summary>
+    /// Ayar pencerelerinin hepsini açıp kapatır (XAML ve bağlama hataları burada çıkar);
+    /// istenirse ana pencerenin ve her sekmenin görüntüsünü kaydeder.
+    /// </summary>
+    private static string PencereleriDene(MainWindow w, string? ekran)
+    {
+        var rapor = new StringBuilder();
+        var arka = (Brush)w.FindResource("BgSurface");
+        w.KontrolIcinDoldur();
+        EkranGoruntusu.Bekle(w.Dispatcher);
+        if (ekran is not null)
+        {
+            EkranGoruntusu.Pencere(w, Path.Combine(ekran, "01-ana-pencere-tiktok.png"));
+            w.KontrolIcinTumSatirlariAc();
+            EkranGoruntusu.Bekle(w.Dispatcher);
+            EkranGoruntusu.Oge(w.AyarPaneli, arka, Path.Combine(ekran, "02-ayar-paneli-tiktok.png"));
+            w.RbYouTube.IsChecked = true;
+            EkranGoruntusu.Bekle(w.Dispatcher);
+            EkranGoruntusu.Oge(w.AyarPaneli, arka, Path.Combine(ekran, "03-ayar-paneli-youtube.png"));
+            EkranGoruntusu.Pencere(w, Path.Combine(ekran, "04-ana-pencere-youtube.png"));
+            w.RbTikTok.IsChecked = true;
+            EkranGoruntusu.Bekle(w.Dispatcher);
+        }
+
+        // Ön ayar penceresi boş görünmesin: bellekte iki örnek (diske yazılmaz).
+        var ayarlar = w.KontrolAyarlari;
+        var dosya = w.KontrolAyarDosyasi;
+        dosya.OnAyarlar.Add(new KayitliOnAyar { Ad = "TikTok dans", Profil = ExportProfileId.TikTok, Ayarlar = Varsayilanlar.TikTok() });
+        dosya.OnAyarlar.Add(new KayitliOnAyar { Ad = "YouTube 4K", Profil = ExportProfileId.YouTube, Ayarlar = Varsayilanlar.YouTube() });
+
+        var pencereler = new (string Ad, Func<Window> Yap)[]
+        {
+            ("x264", () => new X264Penceresi(ayarlar)),
+            ("nvenc", () => new NvencPenceresi(ayarlar)),
+            ("fdk", () => new FdkPenceresi(ayarlar)),
+            ("onayar", () => new OnAyarPenceresi(dosya, Profiles.TikTok, ayarlar)),
+        };
+
+        var sira = 5;
+        foreach (var (ad, yap) in pencereler)
+        {
+            var d = yap();
+            d.Owner = w;
+            d.Show();
+            EkranGoruntusu.Bekle(d.Dispatcher);
+            var sekme = ekran is null ? 0 : EkranGoruntusu.Sekmeler(d, ekran, $"{sira:00}-{ad}");
+            d.Close();
+            rapor.Append($"{ad}=acildi");
+            rapor.Append(ekran is null ? "\n" : $" ({sekme} görüntü)\n");
+            sira++;
+        }
+
+        // TikTok varsayılanının x264 komutu (önizlemedeki ile aynı fonksiyon) — kontrol çıktısında görünsün.
+        rapor.Append("x264_tiktok=").Append(ArgsBuilder.X264KomutMetni(Varsayilanlar.TikTok(), 30000.0 / 1001)).Append('\n');
+        return rapor.ToString();
     }
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

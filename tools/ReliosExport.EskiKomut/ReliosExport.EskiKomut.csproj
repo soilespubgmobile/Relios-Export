@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Karşılaştırma aracı: Relios Export 0.3.0'ın (ayar menüsünden önceki, XviD4PSP ile doğrulanmış)
+       TikTok komutunu üretir. Doğrulama iş akışı yeni programın TikTok varsayılanının bu komutla
+       birebir aynı olduğunu her deneme videosunda kontrol eder. Programın parçası değildir. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Remove="System.Net.Http" />
+  </ItemGroup>
+
+</Project>

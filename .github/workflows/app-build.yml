@@ -71,8 +71,8 @@ jobs:
 
       - name: Tek exe kontrolu (FFmpeg aciliyor mu, pencere hatasiz aciliyor mu)
         run: |
-          function Kontrol($arg, $out) {
-            $p = Start-Process -FilePath "out/Relios Export.exe" -ArgumentList $arg, $out -PassThru
+          function Kontrol($arg, $out, $ek = @()) {
+            $p = Start-Process -FilePath "out/Relios Export.exe" -ArgumentList (@($arg, $out) + $ek) -PassThru
             $null = $p.Handle  # cikis kodunun okunabilmesi icin
             if (-not $p.WaitForExit(180000)) { $p.Kill(); Write-Host "HATA: program 3 dakikada kapanmadi ($arg)"; return 1 }
             if (Test-Path $out) { Get-Content $out | ForEach-Object { Write-Host $_ } }
@@ -89,9 +89,23 @@ jobs:
           $v = & $ff -hide_banner -version
           if ($LASTEXITCODE -ne 0) { "HATA: acilan ffmpeg.exe calismadi"; exit 1 }
           $v | Select-Object -First 1
-          $rc = Kontrol '--pencere-kontrol' (Join-Path $PWD "pencere-kontrol.txt")
-          if ($rc -ne 0) { "HATA: ana pencere acilamadi (kod $rc)"; exit 1 }
-          "Tek exe calisiyor: FFmpeg icinde, pencere hatasiz aciliyor."
+          $rc = Kontrol '--pencere-kontrol' (Join-Path $PWD "pencere-kontrol.txt") @('--ekran', (Join-Path $PWD 'ekran'))
+          if ($rc -ne 0) { "HATA: pencereler acilamadi (kod $rc)"; exit 1 }
+          "Tek exe calisiyor: FFmpeg icinde, ana pencere ve ayar pencereleri hatasiz aciliyor."
+
+      # Arayuzun goruntuleri (ana pencere, ayar paneli, x264 / NVENC / FDK / on ayar pencerelerinin her sekmesi).
+      # Gunlukte base64 olarak durur; gozle kontrol icin.
+      - name: Ekran goruntuleri
+        if: always()
+        run: |
+          if (-not (Test-Path ekran)) { "Ekran goruntusu yok."; exit 0 }
+          Get-ChildItem ekran -Filter *.png | Sort-Object Name | ForEach-Object {
+            $b = [Convert]::ToBase64String([IO.File]::ReadAllBytes($_.FullName))
+            Write-Host ("EKRAN-BASLA|{0}|{1}" -f $_.Name, $_.Length)
+            for ($i = 0; $i -lt $b.Length; $i += 3000) {
+              Write-Host ("EKRAN|{0}|{1}" -f $_.Name, $b.Substring($i, [Math]::Min(3000, $b.Length - $i)))
+            }
+          }
 
       - name: Ciktiyi yukle
         uses: actions/upload-artifact@v7

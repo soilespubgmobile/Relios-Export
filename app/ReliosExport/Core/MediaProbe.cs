@@ -4,6 +4,36 @@ using System.Text.Json;
 
 namespace ReliosExport.Core;
 
+/// <summary>Kaynaktaki bir ses akışı (bilgi için).</summary>
+public sealed record SesAkisi(int Indeks, string Codec, int OrnekHizi, int Kanal, int? BitDerinligi, int? BitHizi)
+{
+    /// <summary>Ör. "PCM 16 bit · 44,1 kHz · 2 kanal".</summary>
+    public string Ozet
+    {
+        get
+        {
+            var codec = Codec.StartsWith("pcm_", StringComparison.Ordinal) ? "PCM" : Codec.ToUpperInvariant();
+            var parts = new List<string> { codec };
+            if (BitDerinligi is { } b && b > 0)
+            {
+                parts.Add(b + " bit");
+            }
+
+            if (OrnekHizi > 0)
+            {
+                parts.Add(ReliosExport.Core.Ayarlar.Bicim.Khz(OrnekHizi));
+            }
+
+            if (Kanal > 0)
+            {
+                parts.Add(Kanal == 1 ? "mono" : Kanal == 2 ? "stereo" : Kanal + " kanal");
+            }
+
+            return string.Join(" · ", parts);
+        }
+    }
+}
+
 /// <summary>ffprobe ile okunan kaynak video bilgisi.</summary>
 public sealed record MediaInfo(
     int Width,
@@ -18,6 +48,9 @@ public sealed record MediaInfo(
     string? ColorTransfer,
     string? ColorRange)
 {
+    /// <summary>Kaynaktaki ses akışları (ilki çıktıda "videonun sesi" olarak kullanılır).</summary>
+    public IReadOnlyList<SesAkisi> SesAkislari { get; init; } = [];
+
     /// <summary>Kaynakta renk matrisi etiketi yoksa true (ffprobe "unknown" ya da hiç yazmaz).</summary>
     public bool ColorSpaceUnknown => ColorSpace is null or "" or "unknown" or "unspecified" or "reserved";
 
@@ -35,7 +68,10 @@ public sealed record MediaInfo(
 
 public static class MediaProbe
 {
-    public static async Task<MediaInfo> ProbeAsync(string ffprobePath, string inputPath, CancellationToken ct)
+    public static async Task<MediaInfo> ProbeAsync(string ffprobePath, string inputPath, CancellationToken ct) =>
+        Parse(await RunProbeAsync(ffprobePath, inputPath, ct));
+
+    private static async Task<string> RunProbeAsync(string ffprobePath, string inputPath, CancellationToken ct)
     {
         var psi = new ProcessStartInfo(ffprobePath)
         {
@@ -67,7 +103,7 @@ public static class MediaProbe
             throw new InvalidOperationException($"ffprobe dosyayı okuyamadı: {err.Trim()}");
         }
 
-        return Parse(json);
+        return json;
     }
 
     public static MediaInfo Parse(string json)
@@ -75,7 +111,7 @@ public static class MediaProbe
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
         JsonElement? video = null;
-        var hasAudio = false;
+        var sesler = new List<SesAkisi>();
         foreach (var s in root.GetProperty("streams").EnumerateArray())
         {
             var type = s.TryGetProperty("codec_type", out var t) ? t.GetString() : null;
@@ -85,9 +121,11 @@ public static class MediaProbe
             }
             else if (type == "audio")
             {
-                hasAudio = true;
+                sesler.Add(ReadAudio(s));
             }
         }
+
+        var hasAudio = sesler.Count > 0;
 
         if (video is not { } v)
         {
@@ -104,7 +142,62 @@ public static class MediaProbe
             w, h, sn, sd, rotation, duration, hasAudio, fps,
             ReadString(v, "color_space"),
             ReadString(v, "color_transfer"),
-            ReadString(v, "color_range"));
+            ReadString(v, "color_range"))
+        {
+            SesAkislari = sesler,
+        };
+    }
+
+    /// <summary>Yalnızca ses içeren bir dosyayı (ör. aynı adlı WAV) okur; ses yoksa null.</summary>
+    public static async Task<SesAkisi?> ProbeAudioAsync(string ffprobePath, string path, CancellationToken ct)
+    {
+        var json = await RunProbeAsync(ffprobePath, path, ct);
+        using var doc = JsonDocument.Parse(json);
+        foreach (var s in doc.RootElement.GetProperty("streams").EnumerateArray())
+        {
+            if (s.TryGetProperty("codec_type", out var t) && t.GetString() == "audio")
+            {
+                return ReadAudio(s);
+            }
+        }
+
+        return null;
+    }
+
+    private static SesAkisi ReadAudio(JsonElement s)
+    {
+        static int Int(JsonElement e, string key)
+        {
+            if (!e.TryGetProperty(key, out var v))
+            {
+                return 0;
+            }
+
+            if (v.ValueKind == JsonValueKind.Number)
+            {
+                return v.TryGetInt32(out var n) ? n : 0;
+            }
+
+            return v.ValueKind == JsonValueKind.String
+                && int.TryParse(v.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var m)
+                    ? m
+                    : 0;
+        }
+
+        var bits = Int(s, "bits_per_raw_sample");
+        if (bits == 0)
+        {
+            bits = Int(s, "bits_per_sample");
+        }
+
+        var bitRate = Int(s, "bit_rate");
+        return new SesAkisi(
+            Int(s, "index"),
+            ReadString(s, "codec_name") ?? "?",
+            Int(s, "sample_rate"),
+            Int(s, "channels"),
+            bits > 0 ? bits : null,
+            bitRate > 0 ? bitRate : null);
     }
 
     private static bool IsAttachedPicture(JsonElement s) =>

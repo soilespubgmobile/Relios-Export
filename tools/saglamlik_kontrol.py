@@ -2,8 +2,11 @@
 """Relios Export TikTok ciktisinin saglamlik kontrolu (kaynakla karsilastirarak).
 
 Kullanim: python -I saglamlik_kontrol.py <kaynak> <cikti.mp4> <matris> <aralik> <ses 1/0>
+          [--boyut GxY|kaynak] [--fps N/D|kaynak] [--oran kirp|kenar|esnet]
 
 matris / aralik: kaynagin GERCEK renk matrisi ve araligi (deneme kaynagi uretilirken bilinir).
+--boyut / --fps: ayarlardaki hedef (varsayilan TikTok: 1216x2160, 30000/1001). "kaynak": kaynakla ayni,
+kirpma yok.
 Kontroller: hatasiz cozulme, dondurme bilgisi, ses var/yok, sure, kare sayisi,
 ses-goruntu suresi ve baslangici, renk + kirpma (bagimsiz hesaplanan referans kareyle).
 """
@@ -13,9 +16,12 @@ import subprocess
 import sys
 
 kaynak, cikti, matris, aralik, ses = sys.argv[1:6]
+_ek = sys.argv[6:]
+SECENEK = dict(zip(_ek[0::2], _ek[1::2]))
 ses_bekleniyor = ses == "1"
-FPS = 30000 / 1001
-W, H = 1216, 2160
+BOYUT = SECENEK.get("--boyut", "1216x2160")
+FPS_METNI = SECENEK.get("--fps", "30000/1001")
+ORAN = SECENEK.get("--oran", "kirp")
 rows = []
 
 
@@ -57,8 +63,8 @@ def even(v):
     return r if r % 2 == 0 else r + 1
 
 
-def crop_plan(vs):
-    # Programdaki ArgsBuilder.PlanCrop916'nin bagimsiz karsiligi: gorunen goruntu ortadan 9:16.
+def gorunen(vs):
+    """Dondurme uygulandiktan sonraki genislik, yukseklik ve piksel orani."""
     rot = rotation(vs)
     w, h = vs["width"], vs["height"]
     sar_txt = vs.get("sample_aspect_ratio") or "1:1"
@@ -70,7 +76,21 @@ def crop_plan(vs):
     if rot in (90, 270):
         w, h = h, w
         sar = 1.0 / sar
-    target = 9 / 16
+    return w, h, sar
+
+
+def hedef_oran(w, h):
+    # Programdaki ArgsBuilder.HedefOran: yaygin bir orana %0,5'ten yakinsa o oran (1216x2160 -> 9:16).
+    r = w / h
+    for c in (9 / 16, 16 / 9, 1, 4 / 5, 5 / 4, 3 / 4, 4 / 3, 2 / 3, 3 / 2, 9 / 21, 21 / 9):
+        if abs(r - c) / c < 0.005:
+            return c
+    return r
+
+
+def crop_plan(vs, target):
+    # Programdaki ArgsBuilder.PlanCrop'un bagimsiz karsiligi: gorunen goruntu ortadan hedef orana.
+    w, h, sar = gorunen(vs)
     aspect = w * sar / h
     if abs(aspect - target) < 0.002:
         return None
@@ -107,11 +127,28 @@ src_dur = fnum(src.get("format", {}).get("duration"))
 ov_dur = fnum(ov.get("duration"))
 chk("Süre (kaynak / çıktı video)", f"{src_dur:.3f} s", f"{ov_dur:.3f} s", abs(src_dur - ov_dur) <= 0.15)
 
-# 5) Kare sayisi (29.97 fps sabit)
-r = run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_packets",
-         "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", cikti])
-nb = int(fnum(r.stdout.strip().split(",")[0], 0))
-beklenen = src_dur * FPS
+# 5) Boyut ve kare sayisi
+gw, gh, gsar = gorunen(sv)
+if BOYUT == "kaynak":
+    # Programdaki scale=trunc(iw*sar/2)*2:trunc(ih/2)*2
+    W, H = int(gw * gsar / 2) * 2, int(gh / 2) * 2
+else:
+    W, H = (int(x) for x in BOYUT.split("x"))
+chk("Çözünürlük", f"{W}x{H}", f"{ov.get('width')}x{ov.get('height')}", (ov.get("width"), ov.get("height")) == (W, H))
+
+
+def paket_sayisi(path):
+    r = run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_packets",
+             "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0", path])
+    return int(fnum(r.stdout.strip().split(",")[0], 0))
+
+
+nb = paket_sayisi(cikti)
+if FPS_METNI == "kaynak":
+    beklenen = paket_sayisi(kaynak)
+else:
+    _n, _, _d = FPS_METNI.partition("/")
+    beklenen = src_dur * float(_n) / float(_d or 1)
 chk("Kare sayısı", f"~{beklenen:.1f}", nb, abs(nb - beklenen) <= 3)
 
 # 6) Ses-goruntu suresi ve baslangici
@@ -125,7 +162,8 @@ if oa:
 # Iki kare 304x540'a kucultulur; piksel basina en buyuk kanal farki (0-255) olculur.
 # Keskin renk kenarlarinda (renk alt ornekleme) fark dogal olarak buyuk oldugu icin
 # ortanca ve %90 degeri kullanilir: yanlis matris / aralik / kirpma bunlari belirgin buyutur.
-SW, SH = 304, 540
+SW = 304
+SH = 540 if (W, H) == (1216, 2160) else max(2, int(round(SW * H / W / 2)) * 2)
 ORTANCA_ESIK, P90_ESIK = 6, 15
 
 
@@ -141,12 +179,17 @@ def fark_olcusu(a, b):
     return d[len(d) // 2], d[int(len(d) * 0.9)]
 
 
-crop = crop_plan(sv)
-chain = ["fps=30000/1001"]
+crop = crop_plan(sv, hedef_oran(W, H)) if BOYUT != "kaynak" and ORAN == "kirp" else None
+chain = [] if FPS_METNI == "kaynak" else [f"fps={FPS_METNI}"]
 if crop:
     chain.append("crop=%d:%d:%d:%d" % crop)
-chain += [f"scale={W}:{H}:flags=lanczos:in_color_matrix={matris}:in_range={aralik}",
-          "format=gbrp", r"select=eq(n\,15)", f"scale={SW}:{SH}:flags=area", "format=rgb24"]
+if ORAN == "kenar" and BOYUT != "kaynak":
+    # Programdaki gibi: orani koruyarak sigdir, kalan yeri siyah kenarla doldur.
+    chain += [f"scale={W}:{H}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos:"
+              f"in_color_matrix={matris}:in_range={aralik}", f"pad={W}:{H}:-1:-1:color=black"]
+else:
+    chain.append(f"scale={W}:{H}:flags=lanczos:in_color_matrix={matris}:in_range={aralik}")
+chain += ["format=gbrp", r"select=eq(n\,15)", f"scale={SW}:{SH}:flags=area", "format=rgb24"]
 ref = rgb_kare(kaynak, ",".join(chain))
 en_iyi = None
 if ref:
@@ -157,7 +200,7 @@ if ref:
             m = fark_olcusu(ref, o)
             if en_iyi is None or m < en_iyi:
                 en_iyi = m
-kirp = "kırpma %dx%d+%d+%d" % crop if crop else "kırpma yok"
+kirp = "kırpma %dx%d+%d+%d" % crop if crop else ("siyah kenar" if ORAN == "kenar" else "kırpma yok")
 chk(f"Renk ve kırpma ({kirp})", f"ortanca ≤ {ORTANCA_ESIK}, %90 ≤ {P90_ESIK}",
     "hesaplanamadı" if en_iyi is None else f"ortanca {en_iyi[0]}, %90 {en_iyi[1]}",
     en_iyi is not None and en_iyi[0] <= ORTANCA_ESIK and en_iyi[1] <= P90_ESIK)

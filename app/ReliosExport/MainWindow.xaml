@@ -2,9 +2,10 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:ReliosExport"
+        xmlns:a="clr-namespace:ReliosExport.Arayuz"
         x:Name="Root"
         Title="Relios Export"
-        Width="820" Height="620" MinWidth="680" MinHeight="520"
+        Width="1240" Height="800" MinWidth="980" MinHeight="600"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BgBase}"
         Foreground="{StaticResource TextPrimary}"
@@ -28,7 +29,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- ===== Üst çubuk: platform + profil özeti ===== -->
+        <!-- ===== Üst çubuk: platform + ayar özeti ===== -->
         <Border Grid.Row="0" Background="{StaticResource BgSurface}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1" Padding="16,12,16,6">
             <StackPanel>
                 <Border HorizontalAlignment="Left" Background="{StaticResource BgInput}" BorderBrush="{StaticResource BorderDefault}" BorderThickness="1" CornerRadius="8" Padding="2">
@@ -38,221 +39,540 @@
                     </StackPanel>
                 </Border>
 
-                <Grid Margin="0,10,0,0">
-                    <ItemsControl x:Name="ProfileTags" Focusable="False">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Style="{StaticResource Chip}">
-                                    <TextBlock Text="{Binding}" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <Border x:Name="ProfileNote" Visibility="Collapsed" HorizontalAlignment="Left" Margin="0,0,0,6"
-                            Background="{StaticResource WarningBg}" BorderBrush="{StaticResource WarningLine}" BorderThickness="1" CornerRadius="6" Padding="10,4">
-                        <TextBlock x:Name="ProfileNoteText" FontSize="12" Foreground="{StaticResource Warning}"/>
-                    </Border>
-                </Grid>
+                <ItemsControl x:Name="ProfileTags" Focusable="False" Margin="0,10,0,0">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource Chip}">
+                                <TextBlock Text="{Binding}" FontSize="12" Foreground="{StaticResource TextSecondary}"/>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
         </Border>
 
-        <!-- ===== İçerik ===== -->
+        <!-- ===== İçerik: solda videolar, sağda ayarlar ===== -->
         <Grid Grid.Row="1" Margin="16,14,16,14">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="420"/>
+                <ColumnDefinition Width="14"/>
+                <ColumnDefinition Width="460"/>
+            </Grid.ColumnDefinitions>
 
-            <!-- FFmpeg yoksa uyarı -->
-            <Border x:Name="FfmpegBanner" Grid.Row="0" Visibility="Collapsed" Margin="0,0,0,12"
-                    Background="{StaticResource WarningBg}" BorderBrush="{StaticResource WarningLine}" BorderThickness="1" CornerRadius="8" Padding="14,10">
-                <StackPanel>
-                    <TextBlock Text="FFmpeg bulunamadı" FontWeight="SemiBold" Foreground="{StaticResource Warning}"/>
-                    <TextBlock x:Name="FfmpegBannerText" FontSize="12" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="0,3,0,0"/>
-                </StackPanel>
-            </Border>
+            <!-- ===== Sol: videolar ===== -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-            <!-- Video listesi kartı -->
-            <Border Grid.Row="1" Background="{StaticResource BgSurface}" BorderThickness="1" CornerRadius="8">
-                <Border.Style>
-                    <Style TargetType="Border">
-                        <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsDragOver, ElementName=Root}" Value="True">
-                                <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Border.Style>
+                <!-- FFmpeg yoksa uyarı -->
+                <Border x:Name="FfmpegBanner" Grid.Row="0" Visibility="Collapsed" Margin="0,0,0,12"
+                        Background="{StaticResource WarningBg}" BorderBrush="{StaticResource WarningLine}" BorderThickness="1" CornerRadius="8" Padding="14,10">
+                    <StackPanel>
+                        <TextBlock Text="FFmpeg bulunamadı" FontWeight="SemiBold" Foreground="{StaticResource Warning}"/>
+                        <TextBlock x:Name="FfmpegBannerText" FontSize="12" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Video listesi kartı -->
+                <Border Grid.Row="1" Background="{StaticResource BgSurface}" BorderThickness="1" CornerRadius="8">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsDragOver, ElementName=Root}" Value="True">
+                                    <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Border BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1" Padding="14,8,8,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Videolar" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <Border Grid.Column="1" Background="{StaticResource BgInput}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
+                                        CornerRadius="9" Padding="8,0,8,1" Margin="8,0,0,0" VerticalAlignment="Center" MinWidth="26">
+                                    <TextBlock x:Name="CountText" Text="0" FontSize="11" Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"/>
+                                </Border>
+                                <Button x:Name="BtnAdd" Grid.Column="3" Style="{StaticResource SecondaryButton}" Height="28" Padding="12,0" Click="OnAddFiles"
+                                        ToolTip="Video ekle (Ctrl+O)">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path Data="M6,1 L6,11 M1,6 L11,6" Width="12" Height="12" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                                        <TextBlock Text="Video ekle" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="BtnClear" Grid.Column="4" Content="Temizle" Style="{StaticResource GhostButton}" Height="28" Margin="4,0,0,0" Click="OnClear"
+                                        ToolTip="Listeyi temizle"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Boşken: sürükle-bırak alanı -->
+                        <Grid x:Name="DropZone" Grid.Row="1" Margin="12">
+                            <Rectangle RadiusX="8" RadiusY="8" StrokeThickness="1.5" StrokeDashArray="5 4" SnapsToDevicePixels="True">
+                                <Rectangle.Style>
+                                    <Style TargetType="Rectangle">
+                                        <Setter Property="Stroke" Value="{StaticResource BorderDefault}"/>
+                                        <Setter Property="Fill" Value="{StaticResource BgInput}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsDragOver, ElementName=Root}" Value="True">
+                                                <Setter Property="Stroke" Value="{StaticResource Accent}"/>
+                                                <Setter Property="Fill" Value="{StaticResource AccentMuted}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Rectangle.Style>
+                            </Rectangle>
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Path Data="M20,5 L20,23 M13,16 L20,23 L27,16 M7,25 L7,30 Q7,34 11,34 L29,34 Q33,34 33,30 L33,25"
+                                      Width="40" Height="40" StrokeThickness="2.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                      HorizontalAlignment="Center">
+                                    <Path.Style>
+                                        <Style TargetType="Path">
+                                            <Setter Property="Stroke" Value="{StaticResource TextMuted}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsDragOver, ElementName=Root}" Value="True">
+                                                    <Setter Property="Stroke" Value="{StaticResource Accent}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Path.Style>
+                                </Path>
+                                <TextBlock Text="Videoları buraya sürükleyip bırakın" FontSize="14" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                                <TextBlock Text="MP4 · MOV · MKV · AVI · WEBM · TS · FLV · WMV" FontSize="11" Foreground="{StaticResource TextMuted}" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                                <TextBlock Text="Yanındaki aynı adlı WAV otomatik bulunur" FontSize="11" Foreground="{StaticResource TextMuted}" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Doluyken: video satırları -->
+                        <ScrollViewer x:Name="ListScroller" Grid.Row="1" Visibility="Collapsed" Margin="0,0,0,7"
+                                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                            <ItemsControl x:Name="FileList" AlternationCount="2" Focusable="False">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type local:FileItem}">
+                                        <Border x:Name="RowBd" Background="{StaticResource RowA}" Padding="14,9,8,9">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+
+                                                <Ellipse x:Name="Dot" Width="8" Height="8" Fill="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding FileName}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}"/>
+                                                    <TextBlock x:Name="StatusLine" Text="{Binding Status}" FontSize="12" Foreground="{StaticResource TextSecondary}"
+                                                               TextTrimming="CharacterEllipsis" Margin="0,2,0,0" ToolTip="{Binding Detail}"
+                                                               ToolTipService.ShowDuration="60000"/>
+                                                </StackPanel>
+
+                                                <TextBlock x:Name="Percent" Grid.Column="2" Text="{Binding PercentText}" FontSize="12" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource Accent}" VerticalAlignment="Center" Margin="12,0,6,0" Visibility="Collapsed"/>
+
+                                                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Button x:Name="BtnShow" Style="{StaticResource IconButton}" Visibility="Collapsed" ToolTip="Klasörde göster" Click="OnShowItem">
+                                                        <Path Data="M1.5,4 Q1.5,2.5 3,2.5 L5.6,2.5 L7.1,4 L11,4 Q12.5,4 12.5,5.5 L12.5,10 Q12.5,11.5 11,11.5 L3,11.5 Q1.5,11.5 1.5,10 Z"
+                                                              Width="14" Height="14" StrokeThickness="1.3" StrokeLineJoin="Round"
+                                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                                    </Button>
+                                                    <Button x:Name="BtnRemove" Style="{StaticResource IconButton}" ToolTip="Listeden çıkar" Click="OnRemoveItem">
+                                                        <Path Data="M2,2 L10,10 M10,2 L2,10" Width="12" Height="12" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                                                    </Button>
+                                                </StackPanel>
+
+                                                <ProgressBar x:Name="Bar" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource ThinProgress}"
+                                                             Value="{Binding Progress, Mode=OneWay}" Margin="0,8,8,0"/>
+                                            </Grid>
+                                        </Border>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding (ItemsControl.AlternationIndex), RelativeSource={RelativeSource TemplatedParent}}" Value="1">
+                                                <Setter TargetName="RowBd" Property="Background" Value="{StaticResource RowB}"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding State}" Value="Running">
+                                                <Setter TargetName="Dot" Property="Fill" Value="{StaticResource Accent}"/>
+                                                <Setter TargetName="Percent" Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding State}" Value="Done">
+                                                <Setter TargetName="Dot" Property="Fill" Value="{StaticResource Success}"/>
+                                                <Setter TargetName="StatusLine" Property="Foreground" Value="{StaticResource Success}"/>
+                                                <Setter TargetName="Bar" Property="Foreground" Value="{StaticResource Success}"/>
+                                                <Setter TargetName="BtnShow" Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding State}" Value="Failed">
+                                                <Setter TargetName="Dot" Property="Fill" Value="{StaticResource Danger}"/>
+                                                <Setter TargetName="StatusLine" Property="Foreground" Value="{StaticResource Danger}"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding State}" Value="Canceled">
+                                                <Setter TargetName="Dot" Property="Fill" Value="{StaticResource Warning}"/>
+                                                <Setter TargetName="StatusLine" Property="Foreground" Value="{StaticResource Warning}"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsBusy, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                                <Setter TargetName="BtnRemove" Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <!-- Kayıt yeri -->
+                <Grid Grid.Row="2" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Kayıt yeri" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <TextBox x:Name="OutputFolderBox" Grid.Column="1" Style="{StaticResource PathBox}"/>
+                    <Button x:Name="BtnFolder" Grid.Column="2" Content="Değiştir" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="OnChooseFolder"/>
+                    <Button Grid.Column="3" Content="Aç" Style="{StaticResource GhostButton}" Margin="4,0,0,0" Click="OnOpenFolder" ToolTip="Kayıt klasörünü aç"/>
+                </Grid>
+            </Grid>
+
+            <!-- ===== Sağ: ayarlar ===== -->
+            <Border x:Name="AyarKarti" Grid.Column="2" Background="{StaticResource BgSurface}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Kart başlığı -->
                     <Border BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1" Padding="14,8,8,8">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="Videolar" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                            <Border Grid.Column="1" Background="{StaticResource BgInput}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1"
-                                    CornerRadius="9" Padding="8,0,8,1" Margin="8,0,0,0" VerticalAlignment="Center" MinWidth="26">
-                                <TextBlock x:Name="CountText" Text="0" FontSize="11" Foreground="{StaticResource TextSecondary}" HorizontalAlignment="Center"/>
-                            </Border>
-                            <Button x:Name="BtnAdd" Grid.Column="3" Style="{StaticResource SecondaryButton}" Height="28" Padding="12,0" Click="OnAddFiles"
-                                    ToolTip="Video ekle (Ctrl+O)">
-                                <StackPanel Orientation="Horizontal">
-                                    <Path Data="M6,1 L6,11 M1,6 L11,6" Width="12" Height="12" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                                    <TextBlock Text="Video ekle" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </Button>
-                            <Button x:Name="BtnClear" Grid.Column="4" Content="Temizle" Style="{StaticResource GhostButton}" Height="28" Margin="4,0,0,0" Click="OnClear"
-                                    ToolTip="Listeyi temizle"/>
+                            <TextBlock Text="Ayarlar" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="AyarProfilAdi" Grid.Column="1" Text="TikTok" FontSize="12" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="8,1,8,0"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <Button x:Name="BtnOnAyarlar" Grid.Column="2" Content="Ön ayarlar" Style="{StaticResource SecondaryButton}" Height="28" Padding="12,0" Click="OnOnAyarlar"
+                                    ToolTip="Ayarları adıyla kaydet, kayıtlı ayarı yükle ya da sil"/>
+                            <Button x:Name="BtnVarsayilan" Grid.Column="3" Content="Varsayılan" Style="{StaticResource GhostButton}" Height="28" Margin="4,0,0,0" Click="OnVarsayilan"
+                                    ToolTip="Bu profilin ayarlarını fabrika ayarına döndür (TikTok: XviD4PSP ile aynı)"/>
                         </Grid>
                     </Border>
 
-                    <!-- Boşken: sürükle-bırak alanı -->
-                    <Grid x:Name="DropZone" Grid.Row="1" Margin="12">
-                        <Rectangle RadiusX="8" RadiusY="8" StrokeThickness="1.5" StrokeDashArray="5 4" SnapsToDevicePixels="True">
-                            <Rectangle.Style>
-                                <Style TargetType="Rectangle">
-                                    <Setter Property="Stroke" Value="{StaticResource BorderDefault}"/>
-                                    <Setter Property="Fill" Value="{StaticResource BgInput}"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsDragOver, ElementName=Root}" Value="True">
-                                            <Setter Property="Stroke" Value="{StaticResource Accent}"/>
-                                            <Setter Property="Fill" Value="{StaticResource AccentMuted}"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Rectangle.Style>
-                        </Rectangle>
-                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <Path Data="M20,5 L20,23 M13,16 L20,23 L27,16 M7,25 L7,30 Q7,34 11,34 L29,34 Q33,34 33,30 L33,25"
-                                  Width="40" Height="40" StrokeThickness="2.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
-                                  HorizontalAlignment="Center">
-                                <Path.Style>
-                                    <Style TargetType="Path">
-                                        <Setter Property="Stroke" Value="{StaticResource TextMuted}"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsDragOver, ElementName=Root}" Value="True">
-                                                <Setter Property="Stroke" Value="{StaticResource Accent}"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Path.Style>
-                            </Path>
-                            <TextBlock Text="Videoları buraya sürükleyip bırakın" FontSize="14" HorizontalAlignment="Center" Margin="0,12,0,0"/>
-                            <TextBlock Text="MP4 · MOV · MKV · AVI · WEBM · TS · FLV · WMV" FontSize="11" Foreground="{StaticResource TextMuted}" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                        <StackPanel x:Name="AyarPaneli" Margin="0,0,0,10">
+
+                            <!-- ============ VİDEO ============ -->
+                            <TextBlock Text="VİDEO" Style="{StaticResource BolumBasligi}"/>
+
+                            <Expander Header="Çözünürlük" Tag="{Binding Video.CozunurlukOzeti}" Style="{StaticResource AyarSatiri}">
+                                <StackPanel>
+                                    <DockPanel Style="{StaticResource FormSatiri}">
+                                        <TextBlock Text="Boyut" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <ComboBox ItemsSource="{x:Static a:Secenekler.Boyutlar}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                                  SelectedValue="{Binding Video.BoyutSecimi, Converter={StaticResource ListeDisi}, ConverterParameter={x:Static a:Secenekler.Boyutlar}}"/>
+                                    </DockPanel>
+                                    <StackPanel Visibility="{Binding Video.Cozunurluk, Converter={StaticResource Gorunur}, ConverterParameter=Hedef}">
+                                        <DockPanel Style="{StaticResource FormSatiri}">
+                                            <TextBlock Text="Genişlik × yükseklik" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBox Width="76" Style="{StaticResource InputBox}" Text="{Binding Video.Genislik, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                                <TextBlock Text="×" Margin="8,0" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
+                                                <TextBox Width="76" Style="{StaticResource InputBox}" Text="{Binding Video.Yukseklik, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                            </StackPanel>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}">
+                                            <TextBlock Text="Oran farklıysa" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <ComboBox ItemsSource="{x:Static a:Secenekler.OranUyumlari}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                                      SelectedValue="{Binding Video.Oran}"/>
+                                        </DockPanel>
+                                    </StackPanel>
+                                    <DockPanel Style="{StaticResource FormSatiri}">
+                                        <TextBlock Text="Ölçekleme" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <ComboBox ItemsSource="{x:Static a:Secenekler.Olceklemeler}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                                  SelectedValue="{Binding Video.Olcekleme}"/>
+                                    </DockPanel>
+                                    <CheckBox Content="Hassas yuvarlama (accurate_rnd)" IsChecked="{Binding Video.HassasYuvarlama}" Margin="130,0,0,8"/>
+                                </StackPanel>
+                            </Expander>
+
+                            <Expander Header="Kare hızı" Tag="{Binding Video.KareHiziOzeti}" Style="{StaticResource AyarSatiri}">
+                                <StackPanel>
+                                    <DockPanel Style="{StaticResource FormSatiri}">
+                                        <TextBlock Text="Kare hızı (fps)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <ComboBox ItemsSource="{x:Static a:Secenekler.KareHizlari}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                                  SelectedValue="{Binding Video.KareHiziSecimi}"/>
+                                    </DockPanel>
+                                    <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8"
+                                               Text="Seçilen değere sabit kare hızıyla çevrilir; değişken kare hızlı kaynaklar (telefon kayıtları) da sabitlenir."/>
+                                </StackPanel>
+                            </Expander>
+
+                            <Expander Header="Kodlayıcı" Tag="{Binding Video.KodlayiciOzeti}" Style="{StaticResource AyarSatiri}">
+                                <StackPanel>
+                                    <DockPanel Style="{StaticResource FormSatiri}">
+                                        <TextBlock Text="Kodlayıcı" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <ComboBox ItemsSource="{x:Static a:Secenekler.VideoKodlayicilar}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                                  SelectedValue="{Binding Video.Kodlayici}"/>
+                                    </DockPanel>
+
+                                    <!-- x264 -->
+                                    <StackPanel DataContext="{Binding Video.X264}"
+                                                Visibility="{Binding DataContext.Video.Kodlayici, ElementName=AyarPaneli, Converter={StaticResource Gorunur}, ConverterParameter=X264}">
+                                        <DockPanel Style="{StaticResource FormSatiri}">
+                                            <TextBlock Text="Kodlama modu" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <ComboBox ItemsSource="{x:Static a:Secenekler.X264Modlari}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Mod}"/>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=Crf}">
+                                            <TextBlock Text="CRF (düşük = kaliteli)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <TextBox Style="{StaticResource InputBox}" Width="76" HorizontalAlignment="Left" Text="{Binding Crf, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitQp}">
+                                            <TextBlock Text="QP" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <TextBox Style="{StaticResource InputBox}" Width="76" HorizontalAlignment="Left" Text="{Binding Qp, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}"
+                                                   Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=OrtalamaBitHizi|IkiGecis|UcGecis|Cbr}">
+                                            <TextBlock Text="Bit hızı (kb/s)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Text="{Binding BitHizi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}">
+                                            <TextBlock Text="Hız ayarı (preset)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <ComboBox ItemsSource="{x:Static a:Secenekler.X264OnAyarlar}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding OnAyar}"/>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}">
+                                            <TextBlock Text="Ayar (tune)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <ComboBox ItemsSource="{x:Static a:Secenekler.X264Ayarlar}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Ayar}"/>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}">
+                                            <TextBlock Text="Profil · seviye" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="6"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <ComboBox ItemsSource="{x:Static a:Secenekler.X264Profiller}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Profil}"/>
+                                                <ComboBox Grid.Column="2" ItemsSource="{x:Static a:Secenekler.Seviyeler}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Seviye}"/>
+                                            </Grid>
+                                        </DockPanel>
+                                        <Button Content="Tüm x264 ayarları…" Style="{StaticResource SecondaryButton}" Height="28" Padding="12,0" HorizontalAlignment="Left"
+                                                Margin="130,2,0,10" Click="OnX264Ayrintili"/>
+                                    </StackPanel>
+
+                                    <!-- NVENC -->
+                                    <StackPanel DataContext="{Binding Video.Nvenc}"
+                                                Visibility="{Binding DataContext.Video.Kodlayici, ElementName=AyarPaneli, Converter={StaticResource Gorunur}, ConverterParameter=Nvenc}">
+                                        <DockPanel Style="{StaticResource FormSatiri}">
+                                            <TextBlock Text="Kodlama modu" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <ComboBox ItemsSource="{x:Static a:Secenekler.NvencModlari}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Mod}"/>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitKalite}">
+                                            <TextBlock Text="CQ (düşük = kaliteli)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <TextBox Style="{StaticResource InputBox}" Width="76" HorizontalAlignment="Left" Text="{Binding Cq, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitQp}">
+                                            <TextBlock Text="QP" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <TextBox Style="{StaticResource InputBox}" Width="76" HorizontalAlignment="Left" Text="{Binding Qp, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=DegiskenBitHizi|Cbr}">
+                                            <TextBlock Text="Bit hızı (kb/s)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Text="{Binding BitHizi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}">
+                                            <TextBlock Text="Hız ayarı (preset)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <ComboBox ItemsSource="{x:Static a:Secenekler.NvencOnAyarlar}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding OnAyar}"/>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}">
+                                            <TextBlock Text="Ayar (tune)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <ComboBox ItemsSource="{x:Static a:Secenekler.NvencAyarlar}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Ayar}"/>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}">
+                                            <TextBlock Text="Profil · seviye" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="6"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <ComboBox ItemsSource="{x:Static a:Secenekler.NvencProfiller}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Profil}"/>
+                                                <ComboBox Grid.Column="2" ItemsSource="{x:Static a:Secenekler.Seviyeler}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Seviye}"/>
+                                            </Grid>
+                                        </DockPanel>
+                                        <Button Content="Tüm NVENC ayarları…" Style="{StaticResource SecondaryButton}" Height="28" Padding="12,0" HorizontalAlignment="Left"
+                                                Margin="130,2,0,6" Click="OnNvencAyrintili"/>
+                                        <TextBlock Style="{StaticResource Ipucu}" Margin="130,0,0,8" Text="RTX 5060 Ti ile çalışır; NVIDIA sürücüsü 610 veya üstü olmalı."/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Expander>
+
+                            <!-- ============ SES ============ -->
+                            <TextBlock Text="SES" Style="{StaticResource BolumBasligi}"/>
+
+                            <Expander Header="Kaynak" Tag="{Binding Ses.KaynakOzeti}" Style="{StaticResource AyarSatiri}">
+                                <StackPanel>
+                                    <DockPanel Style="{StaticResource FormSatiri}">
+                                        <TextBlock Text="Ses kaynağı" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <ComboBox ItemsSource="{x:Static a:Secenekler.SesKaynaklari}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Ses.Kaynak}"/>
+                                    </DockPanel>
+                                    <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8"
+                                               Text="Aynı adlı dosya: videoyla aynı klasörde, aynı adda .wav (ya da .flac, .m4a, .mp3…). Bulunursa videonun kendi sesi kullanılmaz; ses videodan uzunsa sonu kesilir, kısaysa kalanı sessiz olur."/>
+                                </StackPanel>
+                            </Expander>
+
+                            <Expander Header="Gecikme" Tag="{Binding Ses.GecikmeOzeti}" Style="{StaticResource AyarSatiri}">
+                                <StackPanel>
+                                    <DockPanel Style="{StaticResource FormSatiri}">
+                                        <TextBlock Text="Gecikme (ms)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Text="{Binding Ses.Gecikme, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                    </DockPanel>
+                                    <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8" Text="Artı değer sesi geciktirir, eksi değer öne alır."/>
+                                </StackPanel>
+                            </Expander>
+
+                            <Expander Header="Ses seviyesi" Tag="{Binding Ses.SeviyeOzeti}" Style="{StaticResource AyarSatiri}">
+                                <DockPanel Style="{StaticResource FormSatiri}">
+                                    <TextBlock Text="Değişim (dB)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                    <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Text="{Binding Ses.Seviye, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                </DockPanel>
+                            </Expander>
+
+                            <Expander Header="Örnekleme hızı" Tag="{Binding Ses.OrnekHiziOzeti}" Style="{StaticResource AyarSatiri}">
+                                <StackPanel>
+                                    <DockPanel Style="{StaticResource FormSatiri}">
+                                        <TextBlock Text="Örnekleme hızı" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <ComboBox ItemsSource="{x:Static a:Secenekler.OrnekHizlari}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                                  SelectedValue="{Binding Ses.OrnekHizi, Converter={StaticResource Bos}}"/>
+                                    </DockPanel>
+                                    <DockPanel Style="{StaticResource FormSatiri}">
+                                        <TextBlock Text="Dönüşüm kalitesi" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <ComboBox ItemsSource="{x:Static a:Secenekler.Kaliteler}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Ses.Kalite}"/>
+                                    </DockPanel>
+                                    <DockPanel Style="{StaticResource FormSatiri}">
+                                        <TextBlock Text="Titreşim (dither)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <ComboBox ItemsSource="{x:Static a:Secenekler.Titresimler}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Ses.Titresim}"/>
+                                    </DockPanel>
+                                    <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8"
+                                               Text="FDK AAC sesi 16 bit alır; 24/32 bit kaynak kodlamadan önce 16 bite iner. Titreşim bu inişi daha temiz yapar."/>
+                                </StackPanel>
+                            </Expander>
+
+                            <Expander Header="Kanal" Tag="{Binding Ses.KanalOzeti}" Style="{StaticResource AyarSatiri}">
+                                <DockPanel Style="{StaticResource FormSatiri}">
+                                    <TextBlock Text="Kanal" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                    <ComboBox ItemsSource="{x:Static a:Secenekler.Kanallar}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Ses.Kanal}"/>
+                                </DockPanel>
+                            </Expander>
+
+                            <Expander Header="Kodlayıcı" Tag="{Binding Ses.KodlayiciOzeti}" Style="{StaticResource AyarSatiri}">
+                                <StackPanel>
+                                    <DockPanel Style="{StaticResource FormSatiri}">
+                                        <TextBlock Text="Kodlayıcı" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <ComboBox ItemsSource="{x:Static a:Secenekler.SesKodlayicilar}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Ses.Kodlayici}"/>
+                                    </DockPanel>
+
+                                    <!-- FDK AAC -->
+                                    <StackPanel DataContext="{Binding Ses.Fdk}"
+                                                Visibility="{Binding DataContext.Ses.Kodlayici, ElementName=AyarPaneli, Converter={StaticResource Gorunur}, ConverterParameter=FdkAac}">
+                                        <DockPanel Style="{StaticResource FormSatiri}">
+                                            <TextBlock Text="Profil" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <ComboBox ItemsSource="{x:Static a:Secenekler.FdkProfiller}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Profil}"/>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}">
+                                            <TextBlock Text="Kodlama modu" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <ComboBox ItemsSource="{x:Static a:Secenekler.FdkModlari}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Mod}"/>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=Cbr}">
+                                            <TextBlock Text="Bit hızı (kb/s)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Text="{Binding BitHizi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                        </DockPanel>
+                                        <Button Content="Tüm FDK AAC ayarları…" Style="{StaticResource SecondaryButton}" Height="28" Padding="12,0" HorizontalAlignment="Left"
+                                                Margin="130,2,0,10" Click="OnFdkAyrintili"/>
+                                    </StackPanel>
+
+                                    <!-- WAV -->
+                                    <StackPanel Visibility="{Binding Ses.Kodlayici, Converter={StaticResource Gorunur}, ConverterParameter=Wav}">
+                                        <DockPanel Style="{StaticResource FormSatiri}">
+                                            <TextBlock Text="Bit derinliği" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <ComboBox ItemsSource="{x:Static a:Secenekler.WavBitleri}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Ses.WavBit}"/>
+                                        </DockPanel>
+                                        <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8" Text="WAV sesi MP4'e konamaz; çıktı .mov olur."/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Expander>
+
+                            <!-- ============ ANAHTAR KARE ============ -->
+                            <TextBlock Text="ANAHTAR KARE" Style="{StaticResource BolumBasligi}"/>
+
+                            <Expander Header="Aralık" Tag="{Binding AnahtarKare.AralikOzeti}" Style="{StaticResource AyarSatiri}">
+                                <StackPanel>
+                                    <DockPanel Style="{StaticResource FormSatiri}">
+                                        <TextBlock Text="Birim" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <ComboBox ItemsSource="{x:Static a:Secenekler.AralikBirimleri}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
+                                                  SelectedValue="{Binding AnahtarKare.Birim}" Width="120" HorizontalAlignment="Left"/>
+                                    </DockPanel>
+                                    <DockPanel Style="{StaticResource FormSatiri}">
+                                        <TextBlock Text="En fazla (keyint)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Tag="varsayılan"
+                                                 Text="{Binding AnahtarKare.EnBuyuk, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                    </DockPanel>
+                                    <DockPanel Style="{StaticResource FormSatiri}">
+                                        <TextBlock Text="En az (min-keyint)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Tag="otomatik"
+                                                 Text="{Binding AnahtarKare.EnKucuk, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                    </DockPanel>
+                                    <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8"
+                                               Text="XviD4PSP hedefi: en fazla 50, en az 26 kare. Saniye seçilirse çıktının kare hızına göre kareye çevrilir. NVENC'te yalnızca 'en fazla' kullanılır."/>
+                                </StackPanel>
+                            </Expander>
+
+                            <Expander Header="Sahne değişimi" Tag="{Binding AnahtarKare.SahneOzeti}" Style="{StaticResource AyarSatiri}">
+                                <StackPanel>
+                                    <DockPanel Style="{StaticResource FormSatiri}">
+                                        <TextBlock Text="Eşik (scenecut)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Tag="varsayılan (40)"
+                                                 Text="{Binding AnahtarKare.SahneDegisimi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                    </DockPanel>
+                                    <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8"
+                                               Text="0: kapalı; anahtar kareler yalnızca aralığa göre konur (hedef videodaki gibi). Boş: x264 varsayılanı."/>
+                                </StackPanel>
+                            </Expander>
+
+                            <Expander Header="GOP" Tag="{Binding AnahtarKare.DigerOzeti}" Style="{StaticResource AyarSatiri}">
+                                <StackPanel Margin="0,0,0,6">
+                                    <CheckBox Content="Açık GOP (open-gop)" IsChecked="{Binding AnahtarKare.AcikGop}" Margin="0,0,0,8"/>
+                                    <CheckBox Content="İntra yenileme (anahtar kare yerine kademeli yenileme)" IsChecked="{Binding AnahtarKare.IntraYenileme}" Margin="0,0,0,8"/>
+                                </StackPanel>
+                            </Expander>
                         </StackPanel>
-                    </Grid>
-
-                    <!-- Doluyken: video satırları -->
-                    <ScrollViewer x:Name="ListScroller" Grid.Row="1" Visibility="Collapsed" Margin="0,0,0,7"
-                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
-                        <ItemsControl x:Name="FileList" AlternationCount="2" Focusable="False">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="{x:Type local:FileItem}">
-                                    <Border x:Name="RowBd" Background="{StaticResource RowA}" Padding="14,9,8,9">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="Auto"/>
-                                            </Grid.RowDefinitions>
-
-                                            <Ellipse x:Name="Dot" Width="8" Height="8" Fill="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="0,0,12,0"/>
-
-                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding FileName}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}"/>
-                                                <TextBlock x:Name="StatusLine" Text="{Binding Status}" FontSize="12" Foreground="{StaticResource TextSecondary}"
-                                                           TextTrimming="CharacterEllipsis" Margin="0,2,0,0" ToolTip="{Binding Detail}"
-                                                           ToolTipService.ShowDuration="60000"/>
-                                            </StackPanel>
-
-                                            <TextBlock x:Name="Percent" Grid.Column="2" Text="{Binding PercentText}" FontSize="12" FontWeight="SemiBold"
-                                                       Foreground="{StaticResource Accent}" VerticalAlignment="Center" Margin="12,0,6,0" Visibility="Collapsed"/>
-
-                                            <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-                                                <Button x:Name="BtnShow" Style="{StaticResource IconButton}" Visibility="Collapsed" ToolTip="Klasörde göster" Click="OnShowItem">
-                                                    <Path Data="M1.5,4 Q1.5,2.5 3,2.5 L5.6,2.5 L7.1,4 L11,4 Q12.5,4 12.5,5.5 L12.5,10 Q12.5,11.5 11,11.5 L3,11.5 Q1.5,11.5 1.5,10 Z"
-                                                          Width="14" Height="14" StrokeThickness="1.3" StrokeLineJoin="Round"
-                                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-                                                </Button>
-                                                <Button x:Name="BtnRemove" Style="{StaticResource IconButton}" ToolTip="Listeden çıkar" Click="OnRemoveItem">
-                                                    <Path Data="M2,2 L10,10 M10,2 L2,10" Width="12" Height="12" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
-                                                </Button>
-                                            </StackPanel>
-
-                                            <ProgressBar x:Name="Bar" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Style="{StaticResource ThinProgress}"
-                                                         Value="{Binding Progress, Mode=OneWay}" Margin="0,8,8,0"/>
-                                        </Grid>
-                                    </Border>
-                                    <DataTemplate.Triggers>
-                                        <DataTrigger Binding="{Binding (ItemsControl.AlternationIndex), RelativeSource={RelativeSource TemplatedParent}}" Value="1">
-                                            <Setter TargetName="RowBd" Property="Background" Value="{StaticResource RowB}"/>
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding State}" Value="Running">
-                                            <Setter TargetName="Dot" Property="Fill" Value="{StaticResource Accent}"/>
-                                            <Setter TargetName="Percent" Property="Visibility" Value="Visible"/>
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding State}" Value="Done">
-                                            <Setter TargetName="Dot" Property="Fill" Value="{StaticResource Success}"/>
-                                            <Setter TargetName="StatusLine" Property="Foreground" Value="{StaticResource Success}"/>
-                                            <Setter TargetName="Bar" Property="Foreground" Value="{StaticResource Success}"/>
-                                            <Setter TargetName="BtnShow" Property="Visibility" Value="Visible"/>
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding State}" Value="Failed">
-                                            <Setter TargetName="Dot" Property="Fill" Value="{StaticResource Danger}"/>
-                                            <Setter TargetName="StatusLine" Property="Foreground" Value="{StaticResource Danger}"/>
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding State}" Value="Canceled">
-                                            <Setter TargetName="Dot" Property="Fill" Value="{StaticResource Warning}"/>
-                                            <Setter TargetName="StatusLine" Property="Foreground" Value="{StaticResource Warning}"/>
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding IsBusy, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
-                                            <Setter TargetName="BtnRemove" Property="Visibility" Value="Collapsed"/>
-                                        </DataTrigger>
-                                    </DataTemplate.Triggers>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
                     </ScrollViewer>
                 </Grid>
             </Border>
-
-            <!-- Kayıt yeri -->
-            <Grid Grid.Row="2" Margin="0,12,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Kayıt yeri" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                <TextBox x:Name="OutputFolderBox" Grid.Column="1" Style="{StaticResource PathBox}"/>
-                <Button x:Name="BtnFolder" Grid.Column="2" Content="Değiştir" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0" Click="OnChooseFolder"/>
-                <Button Grid.Column="3" Content="Aç" Style="{StaticResource GhostButton}" Margin="4,0,0,0" Click="OnOpenFolder" ToolTip="Kayıt klasörünü aç"/>
-            </Grid>
         </Grid>
 
         <!-- ===== Alt çubuk ===== -->

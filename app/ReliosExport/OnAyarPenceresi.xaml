@@ -1,0 +1,82 @@
+<Window x:Class="ReliosExport.OnAyarPenceresi"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:core="clr-namespace:ReliosExport.Core"
+        Title="Ön ayarlar"
+        Width="560" Height="520" MinWidth="480" MinHeight="360"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BgSurface}"
+        Foreground="{StaticResource TextPrimary}"
+        FontFamily="{StaticResource UiFont}"
+        FontSize="13"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+
+    <DockPanel Margin="18,16,18,14">
+
+        <!-- Üst: açıklama -->
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+            <TextBlock Text="Kayıtlı ayarlar" FontSize="14" FontWeight="SemiBold"/>
+            <TextBlock x:Name="Aciklama" Style="{StaticResource Ipucu}" FontSize="12" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <!-- Alt: yeni kayıt + kapat -->
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+            <TextBlock Text="ŞU ANKİ AYARLARI KAYDET" Style="{StaticResource AltBaslik}" Margin="0,0,0,8"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="AdKutusu" Style="{StaticResource InputBox}" Tag="Ön ayarın adı (ör. TikTok dans)" MaxLength="60"
+                         KeyDown="OnAdKutusuKeyDown"/>
+                <Button Grid.Column="1" Content="Kaydet" Style="{StaticResource PrimaryButton}" MinWidth="96" Margin="8,0,0,0" Click="OnKaydet"/>
+            </Grid>
+            <Grid Margin="0,14,0,0">
+                <TextBlock x:Name="Bilgi" Style="{StaticResource Ipucu}" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                <Button Content="Kapat" Style="{StaticResource SecondaryButton}" MinWidth="96" HorizontalAlignment="Right" IsCancel="True"/>
+            </Grid>
+        </StackPanel>
+
+        <!-- Liste -->
+        <Border Background="{StaticResource BgInput}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8">
+            <Grid>
+                <TextBlock x:Name="BosListe" Text="Henüz kayıtlı ön ayar yok." Foreground="{StaticResource TextMuted}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                    <ItemsControl x:Name="Liste" Focusable="False" Margin="0,4">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type core:KayitliOnAyar}">
+                                <Border BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1" Padding="12,8,8,8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Ad}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="260"/>
+                                                <Border Style="{StaticResource Chip}" Margin="8,0,0,0" Padding="7,0,7,1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Profil}" FontSize="11" Foreground="{StaticResource TextSecondary}"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Ayarlar.Video.KodlayiciOzeti}" FontSize="11" Foreground="{StaticResource TextSecondary}"
+                                                       TextTrimming="CharacterEllipsis" Margin="0,3,0,0"/>
+                                            <TextBlock Text="{Binding Ayarlar.Ses.KodlayiciOzeti}" FontSize="11" Foreground="{StaticResource TextMuted}"
+                                                       TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Button Content="Yükle" Style="{StaticResource SecondaryButton}" Height="28" Padding="12,0" Click="OnYukle"/>
+                                            <Button Content="Sil" Style="{StaticResource GhostButton}" Height="28" Margin="4,0,0,0" Click="OnSil"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </DockPanel>
+</Window>

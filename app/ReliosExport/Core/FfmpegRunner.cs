@@ -2,6 +2,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using ReliosExport.Core.Ayarlar;
 
 namespace ReliosExport.Core;
 
@@ -141,17 +142,17 @@ public sealed class FfmpegRunner
     }
 }
 
-/// <summary>Tek bir videoyu seçilen profile göre dışa aktarır.</summary>
+/// <summary>Tek bir videoyu seçilen profilin ayarlarına göre dışa aktarır.</summary>
 public static class Exporter
 {
-    public static string OutputPathFor(string input, string outputFolder, ExportProfile profile)
+    public static string OutputPathFor(string input, string outputFolder, ExportProfile profile, string extension = ".mp4")
     {
         var name = Path.GetFileNameWithoutExtension(input) + profile.FileSuffix;
-        var path = Path.Combine(outputFolder, name + ".mp4");
+        var path = Path.Combine(outputFolder, name + extension);
         var i = 2;
         while (File.Exists(path))
         {
-            path = Path.Combine(outputFolder, $"{name}_{i}.mp4");
+            path = Path.Combine(outputFolder, $"{name}_{i}{extension}");
             i++;
         }
 
@@ -163,29 +164,46 @@ public static class Exporter
         string input,
         string outputFolder,
         ExportProfile profile,
+        ProfilAyarlari ayarlar,
         IProgress<double>? progress,
         Action<string>? onInfo,
         CancellationToken ct)
     {
-        if (!profile.IsReady)
-        {
-            throw new NotSupportedException($"{profile.DisplayName} ayarları henüz belirlenmedi.");
-        }
-
+        // Kodlama sürerken arayüzde ayar değişse bile bu video başladığı ayarlarla biter.
+        var a = ayarlar.Kopya();
         var media = await MediaProbe.ProbeAsync(Tools.Ffprobe, input, ct);
-        onInfo?.Invoke(Describe(media));
+        var ses = ArgsBuilder.SesSec(a.Ses, media, input);
+        onInfo?.Invoke(Describe(media, a, ses));
         Directory.CreateDirectory(outputFolder);
-        var output = OutputPathFor(input, outputFolder, profile);
-        var temp = output + ".part.mp4";
-        var args = ArgsBuilder.Build(profile, media, input, temp);
+        var output = OutputPathFor(input, outputFolder, profile, ArgsBuilder.Uzanti(a));
+        var temp = output + ".part" + ArgsBuilder.Uzanti(a);
+        var gecisKlasoru = Path.Combine(Path.GetTempPath(), "Relios Export", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(gecisKlasoru);
+        var plan = ArgsBuilder.Olustur(a, media, input, ses, temp, Path.Combine(gecisKlasoru, "gecis"));
         try
         {
-            await FfmpegRunner.RunAsync(args, media.DurationSeconds, progress, ct);
+            var n = plan.Gecisler.Count;
+            for (var i = 0; i < n; i++)
+            {
+                var basla = (double)i / n;
+                var ilerleme = progress is null ? null : new Progress<double>(p => progress.Report(basla + (p / n)));
+                await FfmpegRunner.RunAsync(plan.Gecisler[i], media.DurationSeconds, ilerleme, ct);
+            }
+
             File.Move(temp, output, overwrite: false);
+            progress?.Report(1);
         }
         finally
         {
             DeleteQuietly(temp);
+            try
+            {
+                Directory.Delete(gecisKlasoru, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Geçici klasör sonra silinir.
+            }
         }
 
         return output;
@@ -211,8 +229,8 @@ public static class Exporter
         }
     }
 
-    /// <summary>Kaynağın kısa Türkçe özeti: çözünürlük, kare hızı ve 9:16 kırpma gerekip gerekmediği.</summary>
-    public static string Describe(MediaInfo media)
+    /// <summary>Kaynağın kısa Türkçe özeti: çözünürlük, kare hızı, kırpma ve hangi sesin kullanılacağı.</summary>
+    public static string Describe(MediaInfo media, ProfilAyarlari a, SesSecimi ses)
     {
         var tr = CultureInfo.GetCultureInfo("tr-TR");
         var text = $"{media.DisplayWidth}×{media.DisplayHeight}";
@@ -221,9 +239,9 @@ public static class Exporter
             text += " · " + media.FrameRate.ToString("0.##", tr) + " fps";
         }
 
-        if (ArgsBuilder.PlanCrop916(media).IsNeeded)
+        if (ArgsBuilder.KirpilacakMi(a, media))
         {
-            text += " · 9:16 kırpılıyor";
+            text += " · kırpılıyor";
         }
 
         if (media.IsHdr)
@@ -232,6 +250,7 @@ public static class Exporter
             text += " · HDR kaynak";
         }
 
+        text += " · Ses: " + ses.Aciklama;
         return text;
     }
 }
