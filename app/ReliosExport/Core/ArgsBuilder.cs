@@ -81,6 +81,10 @@ public static class ArgsBuilder
             $"scale={TikTokWidth}:{TikTokHeight}:flags=lanczos:in_color_matrix={InputMatrix(media)}:out_range=tv:out_color_matrix=bt709"));
         filters.Add("setsar=1");
         filters.Add("format=yuv420p");
+        // Renk primeri ve aktarım her zaman BT.709 etiketlenir (hedef video gibi).
+        // FFmpeg 7.1 ve sonrası bu ikisini kareden alıyor; -color_primaries / -color_trc
+        // tek başına etiketsiz kaynakta işe yaramıyor (doğrulamada "None" çıktı).
+        filters.Add("setparams=color_primaries=bt709:color_trc=bt709");
 
         // x264: hedef meta verideki "Encoding settings" satırının birebir karşılığı.
         // threads=7 kullanıcının seçimi (işlemcinin tamamı kullanılmasın).

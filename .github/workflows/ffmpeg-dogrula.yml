@@ -66,7 +66,7 @@ jobs:
       - name: x264 surumu
         shell: cmd
         run: |
-          ffmpeg -hide_banner -f lavfi -i testsrc2=size=64x64:rate=1 -frames:v 1 -c:v libx264 -f null - 2>&1 | findstr /C:"core"
+          ffmpeg -hide_banner -f lavfi -i testsrc2=size=64x64:rate=1 -frames:v 1 -c:v libx264 -flags +global_header -f null - 2>&1 | findstr /C:"core"
           exit /b 0
 
       - name: Deneme kaynagi (1920x1080 60 fps, 44.1 kHz)
