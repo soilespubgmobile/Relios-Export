@@ -282,7 +282,7 @@
                             <Button x:Name="BtnOnAyarlar" Grid.Column="2" Content="Ön ayarlar" Style="{StaticResource SecondaryButton}" Height="28" Padding="12,0" Click="OnOnAyarlar"
                                     ToolTip="Ayarları adıyla kaydet, kayıtlı ayarı yükle ya da sil"/>
                             <Button x:Name="BtnVarsayilan" Grid.Column="3" Content="Varsayılan" Style="{StaticResource GhostButton}" Height="28" Margin="4,0,0,0" Click="OnVarsayilan"
-                                    ToolTip="Bu profilin ayarlarını fabrika ayarına döndür (TikTok: XviD4PSP ile aynı)"/>
+                                    ToolTip="Bu profilin ayarlarını fabrika ayarına döndür"/>
                         </Grid>
                     </Border>
 
@@ -428,7 +428,7 @@
                                         </DockPanel>
                                         <Button Content="Tüm NVENC ayarları…" Style="{StaticResource SecondaryButton}" Height="28" Padding="12,0" HorizontalAlignment="Left"
                                                 Margin="130,2,0,6" Click="OnNvencAyrintili"/>
-                                        <TextBlock Style="{StaticResource Ipucu}" Margin="130,0,0,8" Text="RTX 5060 Ti ile çalışır; NVIDIA sürücüsü 610 veya üstü olmalı."/>
+                                        <TextBlock Style="{StaticResource Ipucu}" Margin="130,0,0,8" Text="NVIDIA ekran kartı ve güncel sürücü gerekir."/>
                                     </StackPanel>
                                 </StackPanel>
                             </Expander>
@@ -549,7 +549,7 @@
                                                  Text="{Binding AnahtarKare.EnKucuk, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                                     </DockPanel>
                                     <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8"
-                                               Text="XviD4PSP hedefi: en fazla 50, en az 26 kare. Saniye seçilirse çıktının kare hızına göre kareye çevrilir. NVENC'te yalnızca 'en fazla' kullanılır."/>
+                                               Text="Varsayılan: en fazla 50, en az 26 kare. Saniye seçilirse çıktının kare hızına göre kareye çevrilir. NVENC'te yalnızca 'en fazla' kullanılır."/>
                                 </StackPanel>
                             </Expander>
 

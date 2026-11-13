@@ -415,8 +415,8 @@ public partial class MainWindow : Window
     {
         var p = SelectedProfile;
         var not = p.Id == ExportProfileId.TikTok
-            ? " TikTok'un fabrika ayarı XviD4PSP'deki hedefle aynıdır (1216×2160, 29,97 fps, CRF 18)."
-            : " YouTube'un fabrika ayarı XviD4PSP ayarlarının aynısıdır; yalnızca çözünürlük ve kare hızı kaynakla aynı kalır.";
+            ? " TikTok: 1216×2160, 29,97 fps, x264 Main@L5.0 CRF 18, FDK AAC 128 kb/s 48 kHz."
+            : " YouTube: TikTok'la aynı kodlama ayarları; çözünürlük ve kare hızı kaynakla aynı kalır.";
         if (!ConfirmDialog.Ask(
                 this,
                 $"{p.DisplayName} ayarları varsayılana dönsün mü?",
@@ -678,7 +678,7 @@ public partial class MainWindow : Window
         switch ((sender as FrameworkElement)?.DataContext)
         {
             case FileItem { State: ItemState.Failed, GunlukYolu: { } gunluk } when File.Exists(gunluk):
-                // Günlük, .txt dosyalarını açan programla (Not Defteri) açılır.
+                // Günlük, .txt dosyalarını açan programla açılır.
                 OpenExplorer($"\"{gunluk}\"");
                 break;
             case FileItem { OutputPath: { } output } when File.Exists(output):

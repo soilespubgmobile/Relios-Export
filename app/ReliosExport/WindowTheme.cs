@@ -5,7 +5,7 @@ using System.Windows.Interop;
 namespace ReliosExport;
 
 /// <summary>
-/// Windows başlık çubuğunu koyu yapar (Relios Audio ile aynı yöntem: DwmSetWindowAttribute).
+/// Windows başlık çubuğunu koyu yapar (DwmSetWindowAttribute).
 /// Windows 11'de başlık çubuğu rengi üst çubukla aynı laciverte boyanır; Windows 10'da yalnızca koyu mod uygulanır.
 /// </summary>
 internal static class WindowTheme

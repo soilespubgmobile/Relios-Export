@@ -6,7 +6,7 @@ using ReliosExport.Core.Ayarlar;
 namespace ReliosExport;
 
 /// <summary>
-/// x264'ün bütün ayarları (XviD4PSP'deki x264 penceresi gibi sekmeli).
+/// x264'ün bütün ayarları, sekmeli.
 /// Pencere ayarların bir kopyası üzerinde çalışır: "Vazgeç" hiçbir şeyi değiştirmez.
 /// </summary>
 public partial class X264Penceresi : Window

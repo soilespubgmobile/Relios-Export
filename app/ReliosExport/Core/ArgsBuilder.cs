@@ -67,7 +67,7 @@ public static class ArgsBuilder
 
     /// <summary>
     /// Hedef boyutun en-boy oranı. Yaygın bir orana çok yakınsa (%0,5) o oran kullanılır:
-    /// 1216×2160 tam 9:16 değildir (0,563); XviD4PSP'deki gibi önce 9:16'ya kırpılıp sonra ölçeklenir.
+    /// 1216×2160 tam 9:16 değildir (0,563); hedefteki gibi önce 9:16'ya kırpılıp sonra ölçeklenir.
     /// </summary>
     public static double HedefOran(int w, int h)
     {
@@ -388,7 +388,7 @@ public static class ArgsBuilder
 
         static string Iki(double d) => d.ToString("0.00", Inv);
 
-        // Sıra, XviD4PSP hedefindeki "Encoding settings" satırıyla doğrulanan komutla aynıdır.
+        // Sıra, hedef videodaki "Encoding settings" satırıyla doğrulanan komutla aynıdır.
         Ekle("threads", x.IsParcacigi);
         Ekle("ref", x.Ref);
         if (!x.Deblock)

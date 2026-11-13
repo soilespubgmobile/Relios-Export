@@ -24,7 +24,7 @@ public static class HataAciklamasi
         (["Driver does not support the required nvenc API version", "minimum required Nvidia driver"],
             "NVENC kullanılamadı: NVIDIA sürücüsü bu FFmpeg için çok eski. Sürücüyü güncelleyin ya da kodlayıcıyı x264 yapın."),
         (["OpenEncodeSessionEx failed", "out of memory (10)", "incompatible client key"],
-            "NVENC oturumu açılamadı: ekran kartı başka bir kodlamayla (OBS vb.) meşgul olabilir. Onu kapatıp yeniden deneyin."),
+            "NVENC oturumu açılamadı: ekran kartı aynı anda başka bir kodlamayla meşgul olabilir. Onu bitirip yeniden deneyin."),
         (["InitializeEncoder failed", "Provided device doesn't support required NVENC features", "Lossless encoding not supported",
           "B frames as references are not supported", "Weighted prediction"],
             "NVENC bu ayarları kabul etmedi (profil, seviye, B-kare ya da ağırlıklı tahmin kartta desteklenmiyor). NVENC ayarlarını değiştirin."),

@@ -1,5 +1,5 @@
 <!--
-    Relios teması: Relios Vision / Relios Color / Relios Audio ile aynı tasarım dili.
+    Relios teması.
     Gece laciverti zemin, kehribar (amber) ana eylem rengi, camgöbeği başarı rengi,
     yumuşak beyaz yazı, 6/8 px köşe, 32 px kontrol yüksekliği.
 -->
@@ -669,7 +669,7 @@
         </Setter>
     </Style>
 
-    <!-- ===================== Ayar satırı (XviD4PSP'deki gibi açılıp kapanan satır) ===================== -->
+    <!-- ===================== Ayar satırı (açılıp kapanan satır) ===================== -->
     <!-- Header: satır adı, Tag: o anki değerin özeti, içerik: ayrıntılı ayarlar -->
     <Style x:Key="AyarSatiri" TargetType="Expander">
         <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>

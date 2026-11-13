@@ -12,7 +12,7 @@ public static class Secenekler
     // ------------------------------------------------------------------ Video
     public static Secenek[] Boyutlar { get; } = L(
         ("kaynak", "Kaynakla aynı"),
-        ("1216x2160", "1216×2160 · 9:16 · TikTok (XviD4PSP)"),
+        ("1216x2160", "1216×2160 · 9:16 · TikTok"),
         ("1080x1920", "1080×1920 · 9:16 · Full HD"),
         ("1440x2560", "1440×2560 · 9:16 · 2K"),
         ("2160x3840", "2160×3840 · 9:16 · 4K"),
@@ -29,7 +29,7 @@ public static class Secenekler
         (OranUyumu.Esnet, "Esnet (oran bozulur)"));
 
     public static Secenek[] Olceklemeler { get; } = L(
-        ("lanczos", "Lanczos (keskin, XviD4PSP)"),
+        ("lanczos", "Lanczos (keskin)"),
         ("spline", "Spline"),
         ("bicubic", "Bicubic"),
         ("bilinear", "Bilinear"),

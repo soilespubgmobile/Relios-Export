@@ -11,7 +11,7 @@ public sealed record ExportProfile(ExportProfileId Id, string DisplayName, strin
 
 public static class Profiles
 {
-    /// <summary>TikTok: varsayılanı XviD4PSP'de doğrulanan "Relios 9x16" (1216×2160, 29,97 fps, CRF 18).</summary>
+    /// <summary>TikTok: varsayılanı doğrulanmış hedef (1216×2160, 29,97 fps, CRF 18).</summary>
     public static readonly ExportProfile TikTok = new(ExportProfileId.TikTok, "TikTok", "_TikTok");
 
     /// <summary>YouTube: varsayılanı kaynakla aynı çözünürlük ve kare hızı, yüksek kalite.</summary>

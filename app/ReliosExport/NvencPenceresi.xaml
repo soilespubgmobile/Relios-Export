@@ -132,7 +132,7 @@
                         <TextBox Style="{StaticResource InputArea}" Tag="ör. -surfaces 32 (ffmpeg seçenekleri, boşlukla ayrılır)"
                                  Text="{Binding EkParametreler, UpdateSourceTrigger=LostFocus}"/>
                         <TextBlock Style="{StaticResource Ipucu}" Margin="0,10,0,4"
-                                   Text="NVENC, NVIDIA ekran kartı (RTX 5060 Ti) ve 610 ya da daha yeni sürücü ister. Kart yoksa kodlama hata verir; x264 her bilgisayarda çalışır."/>
+                                   Text="NVENC, NVIDIA ekran kartı ve güncel sürücü ister. Kart yoksa kodlama hata verir; x264 her bilgisayarda çalışır."/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

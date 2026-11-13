@@ -8,7 +8,7 @@ namespace ReliosExport.Core.Ayarlar;
 public static class Varsayilanlar
 {
     /// <summary>
-    /// TikTok: XviD4PSP 8.2.14 "Relios 9x16" ile doğrulanan hedef (79 kontrolde fark yok).
+    /// TikTok: doğrulanmış hedef (79 kontrolde fark yok).
     /// 1216x2160 9:16, 29.97 fps, x264 Main@L5.0 CRF 18, FDK AAC LC 48 kHz 128 kb/s.
     /// </summary>
     public static ProfilAyarlari TikTok()
@@ -103,7 +103,7 @@ public static class Varsayilanlar
     /// High profil, 2 ardışık B-kare, kapalı GOP (kare hızının yarısı), AAC-LC 48 kHz 384 kb/s.
     /// </summary>
     /// <summary>
-    /// YouTube: TikTok'la (XviD4PSP "Relios 9x16") aynı kodlama ayarları — x264, anahtar kare, FDK AAC —
+    /// YouTube: TikTok'la aynı kodlama ayarları — x264, anahtar kare, FDK AAC —
     /// tek farkla: çözünürlük, en-boy oranı ve kare hızı kaynakla aynı (kırpma, ölçekleme, fps çevirme yok).
     /// </summary>
     public static ProfilAyarlari YouTube()

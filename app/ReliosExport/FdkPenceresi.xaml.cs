@@ -5,7 +5,7 @@ using ReliosExport.Core.Ayarlar;
 
 namespace ReliosExport;
 
-/// <summary>FDK AAC ayarları (XviD4PSP'deki FDK penceresi gibi). Pencere kopya üzerinde çalışır.</summary>
+/// <summary>FDK AAC ayarları. Pencere kopya üzerinde çalışır.</summary>
 public partial class FdkPenceresi : Window
 {
     private readonly SesAyarlari _onizleme;

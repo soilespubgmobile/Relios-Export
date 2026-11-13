@@ -3,7 +3,7 @@ using System.IO;
 namespace ReliosExport.Core;
 
 /// <summary>
-/// Videonun yanındaki aynı adlı ses dosyası (XviD4PSP'deki "External" ses gibi):
+/// Videonun yanındaki aynı adlı ses dosyası:
 /// "edit1.mp4" için aynı klasörde "edit1.wav" (ya da başka bir ses biçimi).
 /// </summary>
 public static class HariciSes
