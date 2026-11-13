@@ -16,6 +16,9 @@ internal static class BirimKontrol
         Seviyeler();
         NvencKomutlari();
         AnahtarKareler();
+        SesKanallari();
+        Kaplar();
+        AyarGecisi();
         Klasorler();
         Console.WriteLine();
         Console.WriteLine($"Birim kontrol: {_ok + _fark} kontrol, {_fark} fark.");
@@ -198,6 +201,80 @@ internal static class BirimKontrol
         Iceriyor("YouTube x264 30 fps", x, ":keyint=50:min-keyint=26:");
         x = KomutMetni(Kaynak(1920, 1080, 60, "h264", "High", 42), Varsayilanlar.TikTok());
         Iceriyor("TikTok NVENC 60 fps (30 kare, değişmez)", x, " -g 30 ");
+    }
+
+    private static void SesKanallari()
+    {
+        Console.WriteLine();
+        Console.WriteLine("--- Ses kanalları: mono kaynak stereoya tam seviyede (pan), stereo kaynak olduğu gibi");
+        static MediaInfo SesliKaynak(int kanal) => new(1920, 1080, 1, 1, 0, 10, true, 30, "bt709", "bt709", "tv")
+        {
+            VideoCodec = "h264",
+            VideoProfil = "High",
+            VideoSeviye = 40,
+            SesAkislari = [new SesAkisi(1, "pcm_s24le", 44100, kanal, 24, null)],
+        };
+
+        string Komut(int kanal, ProfilAyarlari a)
+        {
+            var m = SesliKaynak(kanal);
+            var ses = ArgsBuilder.SesSec(a.Ses, m, "KAYNAK.mp4");
+            var plan = ArgsBuilder.Olustur(a, m, "KAYNAK.mp4", ses, "CIKTI.mov", "GECIS");
+            return " " + string.Join(' ', plan.Gecisler[0]) + " ";
+        }
+
+        var k = Komut(1, Varsayilanlar.YouTube());
+        Iceriyor("Mono kaynak (YouTube)", k, " -af pan=stereo|c0=c0|c1=c0,aresample=48000:resampler=soxr ");
+        Iceriyor("Mono kaynak (YouTube)", k, " -ar 48000 -ac 2 ");
+        k = Komut(1, Varsayilanlar.TikTok());
+        Iceriyor("Mono kaynak (TikTok)", k, " -af pan=stereo|c0=c0|c1=c0,aresample=48000:resampler=soxr ");
+        k = Komut(2, Varsayilanlar.YouTube());
+        Icermiyor("Stereo kaynak", k, "pan=");
+        Iceriyor("Stereo kaynak", k, " -af aresample=48000:resampler=soxr ");
+        var kaynakKanal = Varsayilanlar.YouTube();
+        kaynakKanal.Ses.Kanal = KanalModu.Kaynak;
+        k = Komut(1, kaynakKanal);
+        Icermiyor("Kanal 'kaynakla aynı' (mono kalır)", k, "pan=");
+        Icermiyor("Kanal 'kaynakla aynı' (mono kalır)", k, " -ac ");
+    }
+
+    private static void Kaplar()
+    {
+        Console.WriteLine();
+        Console.WriteLine("--- Dosya biçimi: TikTok ve YouTube MOV, dikey 9:16 MP4, WAV ses her zaman MOV");
+        Kontrol("TikTok varsayılanı", ".mov", Varsayilanlar.TikTok().Uzanti);
+        Kontrol("YouTube varsayılanı", ".mov", Varsayilanlar.YouTube().Uzanti);
+        Kontrol("Dikey 9:16 ön ayarı", ".mp4", Varsayilanlar.Dikey916().Uzanti);
+        var wav = Varsayilanlar.Dikey916();
+        wav.Ses.Kodlayici = SesKodlayici.Wav;
+        Kontrol("MP4 + WAV ses", ".mov", wav.Uzanti);
+        Kontrol("MP4 + WAV ses özeti", "MOV (WAV ses MP4'e girmez)", wav.KapOzeti);
+    }
+
+    private static void AyarGecisi()
+    {
+        Console.WriteLine();
+        Console.WriteLine("--- Kayıtlı ayarların yeni sürüme geçişi (eski ayar dosyası)");
+        var eskiYt = Varsayilanlar.YouTube();
+        eskiYt.Surum = 4;
+        eskiYt.Video.Kap = KapBicimi.Mp4;
+        eskiYt.AnahtarKare.Birim = AralikBirimi.Kare;
+        eskiYt.Video.X264.Crf = 20; // kullanıcının kendi değişikliği korunmalı
+        var eskiTt = Varsayilanlar.TikTok();
+        eskiTt.Surum = 5;
+        eskiTt.Video.Kap = KapBicimi.Mp4;
+        var ayarlar = new AppSettings();
+        ayarlar.Profiller[ExportProfileId.YouTube] = eskiYt;
+        ayarlar.Profiller[ExportProfileId.TikTok] = eskiTt;
+
+        var yt = ayarlar.ProfilAyari(ExportProfileId.YouTube);
+        Kontrol("YouTube 4 → 6: dosya biçimi", "Mov", yt.Video.Kap.ToString());
+        Kontrol("YouTube 4 → 6: anahtar kare birimi", "Kare30", yt.AnahtarKare.Birim.ToString());
+        Kontrol("YouTube 4 → 6: kendi CRF değeri korunur", "20", yt.Video.X264.Crf.ToString());
+        Kontrol("YouTube sürüm", ProfilAyarlari.GuncelSurum.ToString(), yt.Surum.ToString());
+        var tt = ayarlar.ProfilAyari(ExportProfileId.TikTok);
+        Kontrol("TikTok 5 → 6: dosya biçimi", "Mov", tt.Video.Kap.ToString());
+        Kontrol("TikTok 5 → 6: NVENC kalır", "Nvenc", tt.Video.Kodlayici.ToString());
     }
 
     private static string KomutMetni(MediaInfo m, ProfilAyarlari a)

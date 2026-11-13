@@ -20,8 +20,10 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
   - YouTube varsayılanı: dikey 9:16 ayarıyla aynı x264 / FDK AAC ayarları; çözünürlük, en-boy oranı, kare hızı,
     H.264 profili ve seviyesi kaynakla aynı. Anahtar kare aralığı 30 fps'e göre 50 / 26 ve kare hızıyla orantılı
     (aynı süre): 25 fps'te 42 / 22, 50 fps'te 83 / 42, 60 fps'te 100 / 51 (en az, en fazlanın yarısı + 1'i geçemez).
+  - TikTok ve YouTube varsayılan dosya biçimi MOV (dikey 9:16 ön ayarı MP4); ses WAV ise dosya her zaman MOV.
   - Videonun yanında aynı adlı ses dosyası (ör. `edit1.mp4` için `edit1.wav`) varsa videonun kendi
-    sesi yerine o kullanılır.
+    sesi yerine o kullanılır. Ses (videonun içindeki PCM / WAV dahil) 48 kHz'e yüksek kaliteyle (soxr) çevrilir;
+    seviye değişmez. Mono ses stereoya iki kanala tam seviyede açılır (ffmpeg'in `-ac 2` açılışı -3 dB kısardı).
   - Ayarlar program klasöründeki `ayarlar.json` dosyasında, hata günlükleri `Günlük` klasöründe durur
     (kurulum yok). Program bir arşivin içinden (WinRAR, 7-Zip, zip) açılırsa arşiv programı exe'yi geçici bir
     klasöre açar ve kapanınca siler; o durumda ayarlar ve günlükler `%LOCALAPPDATA%\Relios Export` klasörüne yazılır.

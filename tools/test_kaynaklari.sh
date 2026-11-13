@@ -142,6 +142,31 @@ f="15_harici_ses_uzun.mp4"
 add "$f" bt709 tv true "Yaninda ayni adli 16 bit 44.1 kHz WAV (videodan uzun: kesilir)" "" \
     '"ek": "ses_seviye=-36.5±2.5", "eski_komut": false'
 
+# 16-18) Ses donusumu: 1 kHz, tepe 0.5 (-6 dBFS) sinus; ortalama seviye -9.0 dB. Cikti (FDK AAC 128 kb/s,
+#     48 kHz, stereo) ayni seviyede olmali: bit derinligi, ornekleme hizi ya da mono -> stereo seviyeyi degistirmez.
+# 16) Videonun icinde mono 24 bit 44.1 kHz PCM (stereoya iki kanala tam seviyede acilmali; eskiden -3 dB idi).
+f="16_ses_mono_pcm24_44k.mov"
+"${FF[@]}" $(video 1280x720 30 3) -f lavfi -i "aevalsrc=0.5*sin(2*PI*1000*t):s=44100:d=3" \
+    -vf "$(vf bt709 tv yuv420p "$T709")" -c:v libx264 -preset veryfast -crf 14 -c:a pcm_s24le "$f"
+add "$f" bt709 tv true "Videonun icinde mono 24 bit 44.1 kHz PCM (stereo cikti tam seviye)" "" \
+    '"ek": "ses_seviye=-9.0±0.6", "eski_komut": false'
+
+# 17) Videonun icinde stereo 32 bit float 96 kHz PCM.
+f="17_ses_stereo_f32_96k.mov"
+"${FF[@]}" $(video 1280x720 30 3) -f lavfi -i "aevalsrc=0.5*sin(2*PI*1000*t)|0.5*sin(2*PI*1000*t):s=96000:d=3" \
+    -vf "$(vf bt709 tv yuv420p "$T709")" -c:v libx264 -preset veryfast -crf 14 -c:a pcm_f32le "$f"
+add "$f" bt709 tv true "Videonun icinde stereo 32 bit float 96 kHz PCM" "" \
+    '"ek": "ses_seviye=-9.0±0.6", "eski_komut": false'
+
+# 18) Yaninda ayni adli mono 24 bit 48 kHz WAV; videonun kendi (yuksek) sesi kullanilmamali.
+f="18_harici_ses_mono.mp4"
+"${FF[@]}" $(video 1280x720 30 3) -f lavfi -i sine=frequency=440:sample_rate=48000:duration=3 \
+    -vf "$(vf bt709 tv yuv420p "$T709")" -af volume=4 -c:v libx264 -preset veryfast -crf 14 \
+    -ac 2 -c:a aac -b:a 192k "$f"
+"${FF[@]}" -f lavfi -i "aevalsrc=0.5*sin(2*PI*1000*t):s=48000:d=3" -c:a pcm_s24le "${f%.mp4}.wav"
+add "$f" bt709 tv true "Yaninda ayni adli mono 24 bit WAV (stereo cikti tam seviye)" "" \
+    '"ek": "ses_seviye=-9.0±0.6", "eski_komut": false'
+
 {
     echo "["
     for i in "${!MANIFEST[@]}"; do

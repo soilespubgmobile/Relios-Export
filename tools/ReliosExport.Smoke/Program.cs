@@ -72,7 +72,7 @@ if (!Tools.Available)
 }
 
 var media = await MediaProbe.ProbeAsync(Tools.Ffprobe, input, CancellationToken.None);
-var ses = ArgsBuilder.SesSec(ayarlar.Ses, media, input);
+var ses = await ArgsBuilder.SesSecAsync(Tools.Ffprobe, ayarlar.Ses, media, input, CancellationToken.None);
 Console.WriteLine($"Profil: {profil.DisplayName}");
 Console.WriteLine($"Kaynak: {Exporter.Describe(media, ayarlar, ses)}");
 Console.WriteLine($"Video: {ayarlar.Video.Ozet} · {ayarlar.Video.KodlayiciOzeti}");

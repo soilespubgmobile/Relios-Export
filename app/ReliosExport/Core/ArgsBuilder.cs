@@ -9,8 +9,11 @@ public sealed record CropPlan(int Width, int Height, int X, int Y, bool IsNeeded
 
 public enum SesSecimTuru { Yok, Video, HariciDosya }
 
-/// <summary>Çıktıya hangi sesin gireceği: videonun kendi sesi, aynı adlı harici dosya ya da hiç.</summary>
-public sealed record SesSecimi(SesSecimTuru Tur, string? Dosya = null)
+/// <summary>
+/// Çıktıya hangi sesin gireceği: videonun kendi sesi, aynı adlı harici dosya ya da hiç.
+/// <paramref name="Kanal"/>: seçilen sesin kanal sayısı (bilinmiyorsa null); mono ses stereoya tam seviyede açılsın diye.
+/// </summary>
+public sealed record SesSecimi(SesSecimTuru Tur, string? Dosya = null, int? Kanal = null)
 {
     public static readonly SesSecimi Yok = new(SesSecimTuru.Yok);
     public static readonly SesSecimi Video = new(SesSecimTuru.Video);
@@ -99,8 +102,35 @@ public static class ArgsBuilder
             case SesKaynagi.AyniAdliDosyaOncelikli when HariciSes.Bul(input) is { } dosya:
                 return new SesSecimi(SesSecimTuru.HariciDosya, dosya);
             default:
-                return media.HasAudio ? SesSecimi.Video : SesSecimi.Yok;
+                return media.HasAudio
+                    ? new SesSecimi(SesSecimTuru.Video, null, media.SesAkislari.Count > 0 ? media.SesAkislari[0].Kanal : null)
+                    : SesSecimi.Yok;
         }
+    }
+
+    /// <summary>
+    /// <see cref="SesSec"/> + aynı adlı harici dosyanın kanal sayısı (ffprobe ile). Kanal sayısı bilinmezse
+    /// ses yine çalışır, yalnızca mono → stereo açılışı ffmpeg'in varsayılanıyla (-3 dB) olur.
+    /// </summary>
+    public static async Task<SesSecimi> SesSecAsync(string ffprobe, SesAyarlari s, MediaInfo media, string input, CancellationToken ct)
+    {
+        var ses = SesSec(s, media, input);
+        if (ses is { Tur: SesSecimTuru.HariciDosya, Dosya: { } dosya })
+        {
+            try
+            {
+                if (await MediaProbe.ProbeAudioAsync(ffprobe, dosya, ct) is { Kanal: > 0 } akis)
+                {
+                    ses = ses with { Kanal = akis.Kanal };
+                }
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
+            {
+                // Okunamazsa ffmpeg kodlarken asıl hatayı söyler.
+            }
+        }
+
+        return ses;
     }
 
     public static KomutPlani Olustur(
@@ -137,8 +167,8 @@ public static class ArgsBuilder
         return new KomutPlani(gecisler, Uzanti(a));
     }
 
-    /// <summary>Ses WAV olarak yazılacaksa MP4 olmaz: MOV kabı kullanılır.</summary>
-    public static string Uzanti(ProfilAyarlari a) => a.Ses.Kodlayici == SesKodlayici.Wav ? ".mov" : ".mp4";
+    /// <summary>Çıktı uzantısı: MOV seçiliyse ya da ses WAV ise .mov (MP4'e PCM ses girmez), değilse .mp4.</summary>
+    public static string Uzanti(ProfilAyarlari a) => a.Uzanti;
 
     private static List<string> Komut(
         ProfilAyarlari a,
@@ -216,7 +246,7 @@ public static class ArgsBuilder
 
         if (sesVar)
         {
-            Ses(args, a.Ses, harici);
+            Ses(args, a.Ses, harici, ses.Kanal);
         }
 
         args.AddRange(
@@ -819,7 +849,7 @@ public static class ArgsBuilder
 
     // --------------------------------------------------------------------------- Ses
 
-    private static void Ses(List<string> args, SesAyarlari s, bool harici)
+    private static void Ses(List<string> args, SesAyarlari s, bool harici, int? kaynakKanal = null)
     {
         var af = new List<string>();
         if (s.Gecikme > 0)
@@ -834,6 +864,13 @@ public static class ArgsBuilder
         if (s.Seviye != 0)
         {
             af.Add(string.Create(Inv, $"volume={s.Seviye:0.#}dB"));
+        }
+
+        if (s.Kanal == KanalModu.Stereo && kaynakKanal == 1)
+        {
+            // Mono ses iki kanala aynen (tam seviyede) yazılır: ffmpeg'in "-ac 2" açılışı her kanalı -3 dB kısar,
+            // video stereo çalınınca kaynaktan sessiz kalırdı. Oynatıcılar da mono sesi iki hoparlöre aynen verir.
+            af.Add("pan=stereo|c0=c0|c1=c0");
         }
 
         var kaliteVar = s.Kalite != DonusumKalitesi.Yuksek || s.Titresim != Titresim.Yok;

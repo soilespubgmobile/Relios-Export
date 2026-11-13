@@ -35,6 +35,9 @@ public enum FdkModu { Cbr, Vbr1, Vbr2, Vbr3, Vbr4, Vbr5 }
 
 public enum WavBitDerinligi { Bit16, Bit24, Bit32, Float32 }
 
+/// <summary>Çıktı dosyasının kabı. Görüntü ve ses ikisinde de aynıdır; WAV ses her zaman MOV'a yazılır.</summary>
+public enum KapBicimi { Mp4, Mov }
+
 /// <summary>
 /// Anahtar kare aralığının birimi. <see cref="Kare30"/>: değerler 29,97 fps için yazılır ve çıktının kare hızıyla
 /// orantılı uygulanır (aynı süre): 30 fps'te 50 / 26, 60 fps'te 100 / 51.
@@ -63,14 +66,26 @@ public sealed class ProfilAyarlari : Gozlenebilir
     /// 4: TikTok varsayılanı NVENC CBR 34375 kb/s, kaynakla aynı boyut / fps / profil / seviye
     ///    (eski 9:16 ayarı "hazır ön ayar" olarak durur).
     /// 5: YouTube'da anahtar kare aralığı 30 fps'e göre (50 / 26, 60 fps'te 100 / 51).
+    /// 6: TikTok ve YouTube varsayılan dosya biçimi MOV.
     /// </summary>
-    public const int GuncelSurum = 5;
+    public const int GuncelSurum = 6;
 
     public VideoAyarlari Video { get => _video; set => Bagla(ref _video, value); }
 
     public SesAyarlari Ses { get => _ses; set => Bagla(ref _ses, value); }
 
     public AnahtarKareAyarlari AnahtarKare { get => _anahtarKare; set => Bagla(ref _anahtarKare, value); }
+
+    /// <summary>Çıktı uzantısı: MOV seçiliyse ya da ses WAV ise (MP4'e PCM ses girmez) .mov, değilse .mp4.</summary>
+    [JsonIgnore]
+    public string Uzanti => Video.Kap == KapBicimi.Mov || Ses.Kodlayici == SesKodlayici.Wav ? ".mov" : ".mp4";
+
+    [JsonIgnore]
+    public string KapOzeti => Uzanti == ".mov"
+        ? Video.Kap == KapBicimi.Mov ? "MOV" : "MOV (WAV ses MP4'e girmez)"
+        : "MP4";
+
+    protected override IEnumerable<string> EkBildirimler(string? name) => [nameof(Uzanti), nameof(KapOzeti)];
 
     public ProfilAyarlari Kopya() => AyarDosyasi.Kopyala(this);
 }
@@ -88,6 +103,7 @@ public sealed class VideoAyarlari : Gozlenebilir
     private KareHiziModu _kareHiziModu = KareHiziModu.Sabit;
     private string _kareHizi = "30000/1001";
     private VideoKodlayici _kodlayici = VideoKodlayici.X264;
+    private KapBicimi _kap = KapBicimi.Mp4;
     private X264Ayarlari _x264 = new();
     private NvencAyarlari _nvenc = new();
 
@@ -117,6 +133,9 @@ public sealed class VideoAyarlari : Gozlenebilir
     public string KareHizi { get => _kareHizi; set => Set(ref _kareHizi, value); }
 
     public VideoKodlayici Kodlayici { get => _kodlayici; set => Set(ref _kodlayici, value); }
+
+    /// <summary>Dosya biçimi (kap): MP4 ya da MOV.</summary>
+    public KapBicimi Kap { get => _kap; set => Set(ref _kap, value); }
 
     public X264Ayarlari X264 { get => _x264; set => Bagla(ref _x264, value); }
 

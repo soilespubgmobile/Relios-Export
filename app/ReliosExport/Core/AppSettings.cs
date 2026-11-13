@@ -69,6 +69,12 @@ public sealed class AppSettings
                 // Eski YouTube varsayılanı (her kare hızında 50 / 26): artık 30 fps'e göre (60 fps'te 100 / 51).
                 a.AnahtarKare.Birim = AralikBirimi.Kare30;
             }
+
+            if (a.Surum < 6)
+            {
+                // Dosya biçimi ayarı yoktu (hep MP4); TikTok ve YouTube'da varsayılan artık MOV.
+                a.Video.Kap = KapBicimi.Mov;
+            }
         }
 
         a.Surum = ProfilAyarlari.GuncelSurum;

@@ -289,6 +289,10 @@ public static class Secenekler
         (4, "Müzik · hafif"),
         (5, "Konuşma"));
 
+    public static Secenek[] Kaplar { get; } = L(
+        (KapBicimi.Mov, "MOV"),
+        (KapBicimi.Mp4, "MP4"));
+
     // ------------------------------------------------------------------ Anahtar kare
     public static Secenek[] AralikBirimleri { get; } = L(
         (AralikBirimi.Kare, "kare"),

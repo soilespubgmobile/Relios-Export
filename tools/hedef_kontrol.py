@@ -2,7 +2,7 @@
 """Bir MP4 çıktısını kullanıcının hedef meta verisiyle karşılaştırır.
 
 Kullanım: python3 -I hedef_kontrol.py <dosya.mp4> [iş parçacığı] [--boyut GxY] [--fps N/D]
-          [--gop N/M] [--profil kaynak --kaynak <kaynak video>]
+          [--gop N/M] [--kap mp4|mov] [--profil kaynak --kaynak <kaynak video>]
 
 --boyut / --fps: YouTube gibi "kaynakla aynı" profillerde beklenen çözünürlük ve kare hızı
 (varsayılan TikTok hedefi: 1216x2160, 30000/1001). --gop: beklenen keyint / min-keyint (varsayılan 50/26;
@@ -34,6 +34,7 @@ THREADS = _ek.pop(0) if _ek and not _ek[0].startswith("--") else "7"
 _SECENEK = dict(zip(_ek[0::2], _ek[1::2]))
 BOYUT = _SECENEK.get("--boyut", "1216x2160")
 GOP_N, GOP_MIN = _SECENEK.get("--gop", "50/26").split("/")
+KAP = _SECENEK.get("--kap", "mp4")
 TARGET_X264 = TARGET_X264.replace("keyint=50 / keyint_min=26", f"keyint={GOP_N} / keyint_min={GOP_MIN}")
 FPS = _SECENEK.get("--fps", "30000/1001")
 BW, BH = (int(x) for x in BOYUT.split("x"))
@@ -79,7 +80,7 @@ a = next((s for s in streams if s["codec_type"] == "audio"), None)  # sessiz vid
 fmt = d["format"]
 
 # ---- Kap
-chk("Kap", "mp4", "mp4" if "mp4" in fmt.get("format_name", "") and path.lower().endswith(".mp4")
+chk("Kap", KAP, KAP if KAP in fmt.get("format_name", "") and path.lower().endswith("." + KAP)
     else fmt.get("format_name"))
 
 # ---- Video

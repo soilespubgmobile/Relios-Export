@@ -9,7 +9,7 @@ public static class Varsayilanlar
 {
     /// <summary>
     /// TikTok: ekran kartıyla (NVENC H.264) sabit bit hızı CBR 34375 kb/s; çözünürlük, kare hızı, H.264 profili
-    /// ve seviyesi kaynakla aynı; B-kare yok, 3 referans kare, 30 karede bir anahtar kare.
+    /// ve seviyesi kaynakla aynı; B-kare yok, 3 referans kare, 30 karede bir anahtar kare; MOV.
     /// Ses: FDK AAC LC 128 kb/s 48 kHz (9:16 ayarıyla aynı).
     /// </summary>
     public static ProfilAyarlari TikTok()
@@ -21,6 +21,7 @@ public static class Varsayilanlar
         v.Genislik = 1920;
         v.Yukseklik = 1080;
         v.Kodlayici = VideoKodlayici.Nvenc;
+        v.Kap = KapBicimi.Mov;
 
         var n = v.Nvenc;
         n.Mod = NvencModu.Cbr;
@@ -61,6 +62,7 @@ public static class Varsayilanlar
         v.KareHiziModu = KareHiziModu.Sabit;
         v.KareHizi = "30000/1001";
         v.Kodlayici = VideoKodlayici.X264;
+        v.Kap = KapBicimi.Mp4; // hedef videoyla doğrulanan dosya MP4
 
         var x = v.X264;
         x.OnAyar = "medium";
@@ -155,6 +157,7 @@ public static class Varsayilanlar
 
         // Anahtar kare aralığı aynı süre kalsın: 30 fps'te 50 / 26, 60 fps'te 100 / 51 (kare hızı kaynakla aynı).
         a.AnahtarKare.Birim = AralikBirimi.Kare30;
+        a.Video.Kap = KapBicimi.Mov;
         return a;
     }
 

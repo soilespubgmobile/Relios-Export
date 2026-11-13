@@ -362,66 +362,56 @@ public partial class MainWindow : Window
         AyarProfilAdi.ToolTip = IsBusy ? "Kodlanan videolar başlatıldıkları ayarlarla biter." : null;
     }
 
-    /// <summary>Üst çubuktaki kısa özet: seçili profilin ayarlarından.</summary>
+    /// <summary>Üst çubuktaki kısa özet: seçili profilin ayarlarından (ayrıntısı ipucunda).</summary>
     private void EtiketleriYaz() => ProfileTags.ItemsSource = Etiketler(_ayarlar);
 
-    private static List<string> Etiketler(ProfilAyarlari a)
+    /// <summary>Üst çubuktaki bir özet: başlık, kısa değer ve üstüne gelince görünen ayrıntı.</summary>
+    public sealed record OzetParcasi(string Baslik, string Deger, string Ayrinti);
+
+    private static List<OzetParcasi> Etiketler(ProfilAyarlari a)
     {
         var v = a.Video;
-        var list = new List<string>
-        {
-            v.Cozunurluk == CozunurlukModu.Kaynak ? "Kaynak çözünürlük" : $"{v.Genislik}×{v.Yukseklik}",
-            v.KareHiziModu == KareHiziModu.Kaynak ? "Kaynak kare hızı" : Bicim.KareHiziMetni(v.KareHizi) + " fps",
-        };
+        var boyut = v.Cozunurluk == CozunurlukModu.Kaynak ? "Kaynak boyut" : $"{v.Genislik}×{v.Yukseklik}";
+        var fps = v.KareHiziModu == KareHiziModu.Kaynak ? "kaynak fps" : Bicim.KareHiziMetni(v.KareHizi) + " fps";
+        var video = v.Cozunurluk == CozunurlukModu.Kaynak && v.KareHiziModu == KareHiziModu.Kaynak
+            ? "Kaynakla aynı"
+            : $"{boyut} · {fps}";
 
-        if (v.Kodlayici == VideoKodlayici.X264)
-        {
-            list.Add("x264 · " + v.X264.ModOzeti);
-            list.Add(Bicim.ProfilSeviye(v.X264.Profil, v.X264.Seviye));
-        }
-        else
-        {
-            list.Add("NVENC · " + v.Nvenc.ModOzeti);
-            list.Add(Bicim.ProfilSeviye(v.Nvenc.Profil, v.Nvenc.Seviye));
-        }
-
-        var k = a.AnahtarKare;
-        if (k.EnBuyuk is { } enBuyuk)
-        {
-            var birim = k.Birim switch
-            {
-                AralikBirimi.Saniye => " sn",
-                AralikBirimi.Kare30 => " (30 fps'e göre)",
-                _ => string.Empty,
-            };
-            list.Add("GOP " + Bicim.Sayi(enBuyuk) + (k.EnKucuk is { } enKucuk ? " / " + Bicim.Sayi(enKucuk) : string.Empty) + birim);
-        }
+        var kodlayici = v.Kodlayici == VideoKodlayici.X264 ? "x264 · " + v.X264.ModOzeti : "NVENC · " + v.Nvenc.ModOzeti;
 
         var s = a.Ses;
+        string ses;
+        string sesAyrinti;
         if (s.Kaynak == SesKaynagi.Sessiz)
         {
-            list.Add("Sessiz");
+            ses = "Sessiz";
+            sesAyrinti = "Çıktıda ses yok.";
         }
         else
         {
-            list.Add(s.Kodlayici == SesKodlayici.FdkAac ? s.Fdk.Ozet : "WAV · " + SesAyarlari.WavMetni(s.WavBit));
-            list.Add(s.OrnekHizi is { } hz ? Bicim.Khz(hz) : "Kaynak örnekleme");
-            if (s.Kaynak == SesKaynagi.AyniAdliDosyaOncelikli)
-            {
-                list.Add("Aynı adlı WAV");
-            }
+            var hz = s.OrnekHizi is { } h ? Bicim.Khz(h) : "kaynak kHz";
+            ses = s.Kodlayici == SesKodlayici.FdkAac
+                ? (s.Fdk.Profil == "aac_low" ? "AAC" : FdkAyarlari.ProfilAdi(s.Fdk.Profil)) + " · "
+                  + (s.Fdk.Mod == FdkModu.Cbr ? s.Fdk.BitHizi + " kb/s" : "VBR " + (int)s.Fdk.Mod) + " · " + hz
+                : "WAV " + SesAyarlari.WavMetni(s.WavBit) + " · " + hz;
+            sesAyrinti = $"{s.KaynakOzeti}\n{s.KodlayiciOzeti}\n{s.OrnekHiziOzeti}";
         }
 
-        list.Add(ArgsBuilder.Uzanti(a) == ".mov" ? "MOV" : "MP4");
-        return list;
+        return
+        [
+            new("VİDEO", video, $"Boyut: {v.CozunurlukOzeti}\nKare hızı: {v.KareHiziOzeti}"),
+            new("KODLAYICI", kodlayici, $"{v.KodlayiciOzeti}\nAnahtar kare: {a.AnahtarKare.AralikOzeti}"),
+            new("SES", ses, sesAyrinti),
+            new("DOSYA", a.Uzanti == ".mov" ? "MOV" : "MP4", a.KapOzeti),
+        ];
     }
 
     private void OnVarsayilan(object sender, RoutedEventArgs e)
     {
         var p = SelectedProfile;
         var not = p.Id == ExportProfileId.TikTok
-            ? " TikTok: ekran kartıyla (NVENC) CBR 34375 kb/s; boyut, kare hızı, profil ve seviye kaynakla aynı; FDK AAC 128 kb/s 48 kHz. Dikey 9:16 ayarı ön ayarlarda hazır durur."
-            : " YouTube: TikTok'la aynı kodlama ayarları; çözünürlük ve kare hızı kaynakla aynı kalır.";
+            ? " TikTok: ekran kartıyla (NVENC) CBR 34375 kb/s; boyut, kare hızı, profil ve seviye kaynakla aynı; FDK AAC 128 kb/s 48 kHz; MOV. Dikey 9:16 ayarı ön ayarlarda hazır durur."
+            : " YouTube: x264 CRF 18; çözünürlük, kare hızı, profil ve seviye kaynakla aynı; anahtar kare 30 fps'e göre 50 / 26; FDK AAC 128 kb/s 48 kHz; MOV.";
         if (!ConfirmDialog.Ask(
                 this,
                 $"{p.DisplayName} ayarları varsayılana dönsün mü?",

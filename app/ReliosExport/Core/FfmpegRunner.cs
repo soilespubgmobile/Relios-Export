@@ -193,7 +193,7 @@ public static class Exporter
         // Kodlama sürerken arayüzde ayar değişse bile bu video başladığı ayarlarla biter.
         var a = ayarlar.Kopya();
         var media = await MediaProbe.ProbeAsync(Tools.Ffprobe, input, ct);
-        var ses = ArgsBuilder.SesSec(a.Ses, media, input);
+        var ses = await ArgsBuilder.SesSecAsync(Tools.Ffprobe, a.Ses, media, input, ct);
         onInfo?.Invoke(Describe(media, a, ses));
         Directory.CreateDirectory(outputFolder);
         var output = OutputPathFor(input, outputFolder, profile, ArgsBuilder.Uzanti(a));

@@ -217,6 +217,30 @@
         </Style.Triggers>
     </Style>
 
+    <!-- Üst çubuktaki kısa özet: başlık (VİDEO, SES...) + değer -->
+    <Style x:Key="OzetHap" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource BgInput}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="15"/>
+        <Setter Property="Padding" Value="12,6"/>
+        <Setter Property="Margin" Value="0,2,8,2"/>
+    </Style>
+
+    <Style x:Key="OzetBaslik" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10.5"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Margin" Value="0,0,8,0"/>
+    </Style>
+
+    <Style x:Key="OzetDeger" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12.5"/>
+        <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
     <!-- Profil özetindeki etiketler -->
     <Style x:Key="Chip" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource BgInput}"/>
