@@ -1,0 +1,86 @@
+name: FFmpeg dogrulama (Windows)
+
+# FFmpeg derlemesi bitince kendiliginden calisir (ya da elle, run numarasiyla):
+# derlenen ffmpeg.exe'yi gercek Windows'ta acar, icerigini listeler, programin kendi
+# TikTok kodlama kodunu calistirir ve ciktiyi hedef meta veriyle karsilastirir.
+on:
+  workflow_run:
+    workflows: ["Relios FFmpeg (win64, nonfree, en son kararli surumler)"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Dogrulanacak FFmpeg derlemesinin run numarasi"
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  dogrula:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: .NET 11 SDK (en son kararli)
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'ga'
+
+      - name: FFmpeg derlemesini indir
+        uses: actions/download-artifact@v8
+        with:
+          run-id: ${{ inputs.run_id || github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: art
+
+      - name: Ac
+        run: |
+          $zip = Get-ChildItem -Recurse art -Filter *.zip | Select-Object -First 1
+          "Arsiv: $($zip.Name) ($([math]::Round($zip.Length / 1MB, 1)) MB)"
+          Expand-Archive $zip.FullName -DestinationPath ff
+          $bin = (Get-ChildItem -Recurse ff -Filter ffmpeg.exe | Select-Object -First 1).DirectoryName
+          Get-ChildItem $bin | ForEach-Object { "{0,-14} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+          "FFBIN=$bin" >> $env:GITHUB_ENV
+          "$bin" >> $env:GITHUB_PATH
+
+      - name: Surum ve icerik
+        run: |
+          ffmpeg -hide_banner -version
+          "--- yapilandirma"
+          ffmpeg -hide_banner -buildconf
+          "--- kodlayicilar (beklenen: libx264, h264_nvenc, libfdk_aac, pcm_s16le/s24le/s32le/f32le)"
+          ffmpeg -hide_banner -encoders | Select-String -Pattern ' (libx264|h264_nvenc|libfdk_aac|pcm_s16le|pcm_s24le|pcm_s32le|pcm_f32le|libx265|libsvtav1|libvpx-vp9|libmp3lame|libopus) '
+          "--- cozuculer"
+          ffmpeg -hide_banner -decoders | Select-String -Pattern ' (h264|hevc|av1|libdav1d|vp9|vp8|prores|vvc|dnxhd|mpeg2video|aac|mp3float|opus|flac|ac3|eac3|vorbis|alac|pcm_s16le|pcm_s24le|pcm_f32le) '
+          "--- protokoller (ag protokolu olmamali)"
+          ffmpeg -hide_banner -protocols
+
+      - name: x264 surumu
+        shell: cmd
+        run: |
+          ffmpeg -hide_banner -f lavfi -i testsrc2=size=64x64:rate=1 -frames:v 1 -c:v libx264 -f null - 2>&1 | findstr /C:"core"
+          exit /b 0
+
+      - name: Deneme kaynagi (1920x1080 60 fps, 44.1 kHz)
+        run: ffmpeg -hide_banner -loglevel error -y -f lavfi -i "testsrc2=size=1920x1080:rate=60:duration=8" -f lavfi -i "sine=frequency=440:sample_rate=44100:duration=8" -ac 2 -c:v libx264 -preset ultrafast -qp 0 -c:a pcm_s16le kaynak.mkv
+
+      - name: Relios Export TikTok kodlamasi (programin kendi kodu)
+        run: |
+          dotnet build tools/ReliosExport.Smoke -c Release -o smoke --nologo -v q
+          New-Item -ItemType Directory smoke/ffmpeg -Force | Out-Null
+          Copy-Item "$env:FFBIN/ffmpeg.exe","$env:FFBIN/ffprobe.exe" smoke/ffmpeg/
+          ./smoke/ReliosExport.Smoke.exe kaynak.mkv cikti
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Hedef meta veri karsilastirmasi
+        run: |
+          $f = (Get-ChildItem cikti -Filter *.mp4 | Select-Object -First 1).FullName
+          python -X utf8 -I tools/hedef_kontrol.py $f 7
