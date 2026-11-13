@@ -192,6 +192,12 @@ public static class Exporter
             text += " · 9:16 kırpılıyor";
         }
 
+        if (media.IsHdr)
+        {
+            // Ton eşleme yapılmaz; HDR kaynak SDR çıktıda soluk görünebilir.
+            text += " · HDR kaynak";
+        }
+
         return text;
     }
 }

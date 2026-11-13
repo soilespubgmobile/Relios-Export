@@ -74,7 +74,11 @@ public static class ArgsBuilder
         }
 
         // Ölçekleme + renk: Limited (TV) aralık, BT.709 matris. Kare piksel, 8-bit 4:2:0.
-        filters.Add($"scale={TikTokWidth}:{TikTokHeight}:flags=lanczos:out_range=tv:out_color_matrix=bt709");
+        // Etiketsiz kaynakta ffmpeg BT.601 varsayar; HD görüntüde bu renkleri kaydırır.
+        // Bu yüzden etiketsiz HD kaynak BT.709 kabul edilir (renk olduğu gibi kalır).
+        filters.Add(string.Create(
+            CultureInfo.InvariantCulture,
+            $"scale={TikTokWidth}:{TikTokHeight}:flags=lanczos:in_color_matrix={InputMatrix(media)}:out_range=tv:out_color_matrix=bt709"));
         filters.Add("setsar=1");
         filters.Add("format=yuv420p");
 
@@ -174,6 +178,19 @@ public static class ArgsBuilder
         ]);
 
         return args;
+    }
+
+    /// <summary>Kaynak renk matrisi: etiket varsa ffmpeg okur (auto), yoksa çözünürlüğe göre BT.709 / BT.601.</summary>
+    public static string InputMatrix(MediaInfo m)
+    {
+        if (!m.ColorSpaceUnknown)
+        {
+            return "auto";
+        }
+
+        var w = m.DisplayWidth;
+        var h = m.DisplayHeight;
+        return Math.Min(w, h) >= 720 || Math.Max(w, h) >= 1280 ? "bt709" : "bt601";
     }
 
     private static int Even(double v)

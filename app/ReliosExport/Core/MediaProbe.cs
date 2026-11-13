@@ -13,8 +13,17 @@ public sealed record MediaInfo(
     int Rotation,
     double DurationSeconds,
     bool HasAudio,
-    double FrameRate)
+    double FrameRate,
+    string? ColorSpace,
+    string? ColorTransfer,
+    string? ColorRange)
 {
+    /// <summary>Kaynakta renk matrisi etiketi yoksa true (ffprobe "unknown" ya da hiç yazmaz).</summary>
+    public bool ColorSpaceUnknown => ColorSpace is null or "" or "unknown" or "unspecified" or "reserved";
+
+    /// <summary>HDR (PQ / HLG) kaynak mı.</summary>
+    public bool IsHdr => ColorTransfer is "smpte2084" or "arib-std-b67";
+
     /// <summary>Döndürme uygulandıktan sonraki görüntü genişliği (piksel).</summary>
     public int DisplayWidth => Rotation is 90 or 270 ? Height : Width;
 
@@ -88,7 +97,11 @@ public static class MediaProbe
         var rotation = ReadRotation(v);
         var duration = ReadDuration(root, v);
         var fps = ReadFrameRate(v);
-        return new MediaInfo(w, h, sn, sd, rotation, duration, hasAudio, fps);
+        return new MediaInfo(
+            w, h, sn, sd, rotation, duration, hasAudio, fps,
+            ReadString(v, "color_space"),
+            ReadString(v, "color_transfer"),
+            ReadString(v, "color_range"));
     }
 
     private static bool IsAttachedPicture(JsonElement s) =>
@@ -145,6 +158,9 @@ public static class MediaProbe
 
         return deg;
     }
+
+    private static string? ReadString(JsonElement v, string key) =>
+        v.TryGetProperty(key, out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
 
     /// <summary>Ortalama kare hızı (ör. 60, 29.97); okunamazsa 0. Yalnızca bilgi için gösterilir.</summary>
     private static double ReadFrameRate(JsonElement v)
