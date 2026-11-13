@@ -24,12 +24,14 @@ jobs:
           dotnet-version: '11.0.x'
           dotnet-quality: 'ga'
 
+      # WPF'in DirectWriteForwarder.dll'i C++/CLI: paketin icinden yuklenemez, diske acilmasi gerekir.
       - name: Derle (tek exe, self-contained)
         run: >
           dotnet publish app/ReliosExport/ReliosExport.csproj
           -c Release -r win-x64 --self-contained true
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:IncludeAllContentForSelfExtract=true
           -p:EnableCompressionInSingleFile=true
           -o out
 

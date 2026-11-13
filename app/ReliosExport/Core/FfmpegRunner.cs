@@ -8,7 +8,7 @@ namespace ReliosExport.Core;
 public static class Tools
 {
     /// <summary>ffmpeg.exe ve ffprobe.exe programın yanındaki "ffmpeg" klasöründe aranır.</summary>
-    public static string Folder => Path.Combine(AppContext.BaseDirectory, "ffmpeg");
+    public static string Folder => Path.Combine(AppPaths.AppFolder, "ffmpeg");
 
     public static string Ffmpeg => Path.Combine(Folder, "ffmpeg.exe");
 

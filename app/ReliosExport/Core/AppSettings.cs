@@ -23,7 +23,7 @@ public sealed class AppSettings
     [JsonPropertyName("platform")]
     public string? Platform { get; set; }
 
-    private static string FilePath => Path.Combine(AppContext.BaseDirectory, "ayarlar.json");
+    private static string FilePath => Path.Combine(AppPaths.AppFolder, "ayarlar.json");
 
     public static AppSettings Load()
     {
