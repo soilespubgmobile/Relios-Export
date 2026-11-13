@@ -12,16 +12,17 @@ public enum SesSecimTuru { Yok, Video, HariciDosya }
 /// <summary>
 /// Çıktıya hangi sesin gireceği: videonun kendi sesi, aynı adlı harici dosya ya da hiç.
 /// <paramref name="Kanal"/>: seçilen sesin kanal sayısı (bilinmiyorsa null); mono ses stereoya tam seviyede açılsın diye.
+/// <paramref name="Iz"/>: videonun kaçıncı ses izi (0'dan; ffmpeg -map 0:a:N). <paramref name="IzOzeti"/>: videoda
+/// birden fazla ses izi varsa hangisinin seçildiği (ör. "2. iz · PCM 24 bit · 48 kHz · stereo").
 /// </summary>
-public sealed record SesSecimi(SesSecimTuru Tur, string? Dosya = null, int? Kanal = null)
+public sealed record SesSecimi(SesSecimTuru Tur, string? Dosya = null, int? Kanal = null, int Iz = 0, string? IzOzeti = null)
 {
     public static readonly SesSecimi Yok = new(SesSecimTuru.Yok);
-    public static readonly SesSecimi Video = new(SesSecimTuru.Video);
 
     public string Aciklama => Tur switch
     {
         SesSecimTuru.HariciDosya => Path.GetFileName(Dosya) ?? "harici ses",
-        SesSecimTuru.Video => "videonun sesi",
+        SesSecimTuru.Video => IzOzeti is null ? "videonun sesi" : $"videonun sesi ({IzOzeti})",
         _ => "ses yok",
     };
 }
@@ -102,11 +103,45 @@ public static class ArgsBuilder
             case SesKaynagi.AyniAdliDosyaOncelikli when HariciSes.Bul(input) is { } dosya:
                 return new SesSecimi(SesSecimTuru.HariciDosya, dosya);
             default:
-                return media.HasAudio
-                    ? new SesSecimi(SesSecimTuru.Video, null, media.SesAkislari.Count > 0 ? media.SesAkislari[0].Kanal : null)
-                    : SesSecimi.Yok;
+                if (!media.HasAudio)
+                {
+                    return SesSecimi.Yok;
+                }
+
+                var izler = media.SesAkislari;
+                var iz = VideoSesIzi(izler);
+                var akis = iz < izler.Count ? izler[iz] : null;
+                return new SesSecimi(
+                    SesSecimTuru.Video,
+                    null,
+                    akis is { Kanal: > 0 } ? akis.Kanal : null,
+                    iz,
+                    izler.Count > 1 && akis is not null ? $"{iz + 1}. iz · {akis.Ozet}" : null);
         }
     }
+
+    /// <summary>
+    /// Videonun hangi ses izi kullanılır: kayıpsız ses (WAV / PCM, FLAC, ALAC...) varsa o, yoksa ilk iz.
+    /// Aynı videoda hem WAV hem AAC varsa FDK AAC'ye WAV'dan çevrilir (AAC'yi yeniden sıkıştırmak kalite kaybettirir).
+    /// </summary>
+    public static int VideoSesIzi(IReadOnlyList<SesAkisi> izler)
+    {
+        for (var i = 0; i < izler.Count; i++)
+        {
+            if (KayipsizMi(izler[i].Codec))
+            {
+                return i;
+            }
+        }
+
+        return 0;
+    }
+
+    /// <summary>Ses codec'i kayıpsız mı (ffprobe adı).</summary>
+    public static bool KayipsizMi(string? codec) =>
+        codec is not null
+        && (codec.StartsWith("pcm_", StringComparison.Ordinal)
+            || codec is "flac" or "alac" or "wavpack" or "tta" or "truehd" or "mlp" or "ape" or "s302m");
 
     /// <summary>
     /// <see cref="SesSec"/> + aynı adlı harici dosyanın kanal sayısı (ffprobe ile). Kanal sayısı bilinmezse
@@ -200,7 +235,7 @@ public static class ArgsBuilder
         args.AddRange(["-map", "0:v:0"]);
         if (sesVar)
         {
-            args.AddRange(["-map", harici ? "1:a:0" : "0:a:0"]);
+            args.AddRange(["-map", harici ? "1:a:0" : "0:a:" + ses.Iz.ToString(Inv)]);
         }
 
         args.AddRange(

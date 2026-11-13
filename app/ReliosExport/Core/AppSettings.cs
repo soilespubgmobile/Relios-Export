@@ -16,10 +16,6 @@ public sealed class KayitliOnAyar
 
     [JsonPropertyName("ayarlar")]
     public ProfilAyarlari Ayarlar { get; set; } = new();
-
-    /// <summary>Programla gelen hazır ayar (silinemez, dosyaya yazılmaz).</summary>
-    [JsonIgnore]
-    public bool Hazir { get; init; }
 }
 
 /// <summary>

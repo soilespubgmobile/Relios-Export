@@ -64,7 +64,7 @@ public sealed class ProfilAyarlari : Gozlenebilir
     /// 2: YouTube varsayılanı TikTok'un kodlama ayarları + kaynakla aynı boyut / fps oldu.
     /// 3: x264 iş parçacığı 7 → 8; YouTube'da H.264 profili ve seviyesi de kaynakla aynı.
     /// 4: TikTok varsayılanı NVENC CBR 34375 kb/s, kaynakla aynı boyut / fps / profil / seviye
-    ///    (eski 9:16 ayarı "hazır ön ayar" olarak durur).
+    ///    (eski 9:16 ayarı 0.8.4'e kadar "hazır ön ayar" olarak duruyordu; artık ön ayar listesine program bir şey koymaz).
     /// 5: YouTube'da anahtar kare aralığı 30 fps'e göre (50 / 26, 60 fps'te 100 / 51).
     /// 6: TikTok ve YouTube varsayılan dosya biçimi MOV.
     /// </summary>

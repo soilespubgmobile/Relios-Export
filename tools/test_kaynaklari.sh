@@ -167,6 +167,16 @@ f="18_harici_ses_mono.mp4"
 add "$f" bt709 tv true "Yaninda ayni adli mono 24 bit WAV (stereo cikti tam seviye)" "" \
     '"ek": "ses_seviye=-9.0±0.6", "eski_komut": false'
 
+# 19) Ayni videoda iki ses izi: once AAC (yuksek sesli, ~-12 dB), sonra 24 bit PCM (WAV, -9.0 dB).
+#     FDK AAC'ye WAV izinden cevrilmeli (AAC'yi yeniden sikistirmak kalite kaybettirir).
+f="19_iki_ses_izi_aac_pcm.mov"
+"${FF[@]}" $(video 1280x720 30 3) -f lavfi -i sine=frequency=440:sample_rate=48000:duration=3 \
+    -f lavfi -i "aevalsrc=0.5*sin(2*PI*1000*t)|0.5*sin(2*PI*1000*t):s=48000:d=3" \
+    -map 0:v -map 1:a -map 2:a -vf "$(vf bt709 tv yuv420p "$T709")" -c:v libx264 -preset veryfast -crf 14 \
+    -filter:a:0 volume=4 -c:a:0 aac -b:a:0 192k -ac:a:0 2 -c:a:1 pcm_s24le "$f"
+add "$f" bt709 tv true "Ayni videoda AAC + WAV (PCM) iki ses izi: WAV izi kullanilir" "" \
+    '"ek": "ses_seviye=-9.0±0.6", "eski_komut": false'
+
 {
     echo "["
     for i in "${!MANIFEST[@]}"; do

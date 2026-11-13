@@ -22,7 +22,7 @@ public partial class OnAyarPenceresi : Window
         _profil = profil;
         _simdiki = simdiki;
         Aciklama.Text = $"Yüklenen ön ayar şu anki profile ({profil.DisplayName}) uygulanır. "
-                        + "Ön ayarlar program klasöründeki ayarlar.json dosyasında durur.";
+                        + "Listede yalnızca buradan kaydedilen ön ayarlar durur.";
         Yenile();
         Loaded += (_, _) => AdKutusu.Focus();
     }
@@ -39,12 +39,13 @@ public partial class OnAyarPenceresi : Window
     private void Yenile()
     {
         Liste.ItemsSource = null;
-        Liste.ItemsSource = Varsayilanlar.Hazirlar()
-            .Concat(_settings.OnAyarlar
-                .OrderBy(o => o.Profil != _profil.Id)
-                .ThenBy(o => o.Ad, StringComparer.CurrentCultureIgnoreCase))
+        // Listede yalnızca kullanıcının kaydettikleri durur; program kendiliğinden ön ayar eklemez.
+        var liste = _settings.OnAyarlar
+            .OrderBy(o => o.Profil != _profil.Id)
+            .ThenBy(o => o.Ad, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
-        BosListe.Visibility = Visibility.Collapsed;
+        Liste.ItemsSource = liste;
+        BosListe.Visibility = liste.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnAdKutusuKeyDown(object sender, KeyEventArgs e)

@@ -45,7 +45,8 @@ public static class Varsayilanlar
     }
 
     /// <summary>
-    /// Dikey 9:16 (hazır ön ayar; 0.7'ye kadar TikTok varsayılanıydı, 79 kontrolde hedefle fark yok):
+    /// Dikey 9:16 (0.7'ye kadar TikTok varsayılanıydı, 79 kontrolde hedefle fark yok; ön ayar listesinde yok,
+    /// YouTube varsayılanının temeli ve GitHub doğrulamasının hedef ayarı):
     /// 1216x2160 9:16, 29.97 fps, x264 Main@L5.0 CRF 18, FDK AAC LC 48 kHz 128 kb/s.
     /// </summary>
     public static ProfilAyarlari Dikey916()
@@ -162,14 +163,6 @@ public static class Varsayilanlar
     }
 
     public static ProfilAyarlari For(ExportProfileId id) => id == ExportProfileId.TikTok ? TikTok() : YouTube();
-
-    /// <summary>Ön ayarlar penceresinde silinemeyen hazır ayarlar.</summary>
-    public static IReadOnlyList<KayitliOnAyar> Hazirlar() =>
-    [
-        new() { Ad = "TikTok varsayılanı · NVENC CBR 34375 kb/s · kaynak boyut", Profil = ExportProfileId.TikTok, Ayarlar = TikTok(), Hazir = true },
-        new() { Ad = "Dikey 9:16 · 1216×2160 · 29,97 fps · x264 CRF 18", Profil = ExportProfileId.TikTok, Ayarlar = Dikey916(), Hazir = true },
-        new() { Ad = "YouTube varsayılanı · x264 CRF 18 · kaynak boyut", Profil = ExportProfileId.YouTube, Ayarlar = YouTube(), Hazir = true },
-    ];
 }
 
 /// <summary>Ayarların JSON biçimi (ayarlar.json ve kayıtlı ön ayarlar).</summary>

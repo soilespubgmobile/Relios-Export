@@ -17,6 +17,7 @@ internal static class BirimKontrol
         NvencKomutlari();
         AnahtarKareler();
         SesKanallari();
+        SesIzleri();
         Kaplar();
         AyarGecisi();
         Klasorler();
@@ -236,6 +237,40 @@ internal static class BirimKontrol
         k = Komut(1, kaynakKanal);
         Icermiyor("Kanal 'kaynakla aynı' (mono kalır)", k, "pan=");
         Icermiyor("Kanal 'kaynakla aynı' (mono kalır)", k, " -ac ");
+    }
+
+    private static void SesIzleri()
+    {
+        Console.WriteLine();
+        Console.WriteLine("--- Videoda birden fazla ses izi: WAV (PCM) / kayıpsız iz varsa o, yoksa ilki");
+        static MediaInfo Izli(params string[] codecler) => new(1920, 1080, 1, 1, 0, 10, true, 30, "bt709", "bt709", "tv")
+        {
+            VideoCodec = "h264",
+            VideoProfil = "High",
+            VideoSeviye = 40,
+            SesAkislari = codecler.Select((c, i) => new SesAkisi(i + 1, c, 48000, 2, c.StartsWith("pcm_") ? 24 : null, null)).ToList(),
+        };
+
+        void Dene(string ad, MediaInfo m, string map, string? aciklamaParca)
+        {
+            var a = Varsayilanlar.YouTube();
+            var ses = ArgsBuilder.SesSec(a.Ses, m, "KAYNAK.mp4");
+            var plan = ArgsBuilder.Olustur(a, m, "KAYNAK.mp4", ses, "CIKTI.mov", "GECIS");
+            var k = " " + string.Join(' ', plan.Gecisler[0]) + " ";
+            Iceriyor(ad, k, $" -map {map} ");
+            if (aciklamaParca is not null)
+            {
+                Kontrol(ad + ": bilgi satırı", "var", ses.Aciklama.Contains(aciklamaParca, StringComparison.Ordinal) ? "var" : ses.Aciklama);
+            }
+        }
+
+        Dene("AAC + WAV (PCM)", Izli("aac", "pcm_s24le"), "0:a:1", "2. iz · PCM · 24 bit");
+        Dene("WAV (PCM) + AAC", Izli("pcm_s16le", "aac"), "0:a:0", "1. iz · PCM");
+        Dene("AAC + FLAC", Izli("aac", "flac"), "0:a:1", "2. iz");
+        Dene("AAC + AAC (ilki)", Izli("aac", "aac"), "0:a:0", null);
+        Dene("Tek AAC", Izli("aac"), "0:a:0", null);
+        var tek = ArgsBuilder.SesSec(Varsayilanlar.YouTube().Ses, Izli("aac"), "KAYNAK.mp4");
+        Kontrol("Tek iz: bilgi satırı", "videonun sesi", tek.Aciklama);
     }
 
     private static void Kaplar()
