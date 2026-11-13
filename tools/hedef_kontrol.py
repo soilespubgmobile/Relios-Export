@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Bir MP4 çıktısını kullanıcının hedef meta verisiyle karşılaştırır.
 
-Kullanım: python3 -I hedef_kontrol.py <dosya.mp4>
+Kullanım: python3 -I hedef_kontrol.py <dosya.mp4> [iş parçacığı] [--boyut GxY] [--fps N/D]
+
+--boyut / --fps: YouTube gibi "kaynakla aynı" profillerde beklenen çözünürlük ve kare hızı
+(varsayılan TikTok hedefi: 1216x2160, 30000/1001). Diğer her şey XviD4PSP hedefiyle aynı beklenir.
 """
 import json
 import re
@@ -23,8 +26,13 @@ TARGET_X264 = (
 TARGET_CORE = "165 r3223 0480cb0"
 
 path = sys.argv[1]
+_ek = sys.argv[2:]
 # Kullanıcı 7 iş parçacığı seçti (orijinal hedef 67/11). İkinci argümanla değiştirilebilir.
-THREADS = sys.argv[2] if len(sys.argv) > 2 else "7"
+THREADS = _ek.pop(0) if _ek and not _ek[0].startswith("--") else "7"
+_SECENEK = dict(zip(_ek[0::2], _ek[1::2]))
+BOYUT = _SECENEK.get("--boyut", "1216x2160")
+FPS = _SECENEK.get("--fps", "30000/1001")
+BW, BH = (int(x) for x in BOYUT.split("x"))
 LOOKAHEAD = {"7": "1", "67": "11"}.get(THREADS, "?")
 TARGET_X264 = TARGET_X264.replace("THREADS", THREADS).replace("LOOKAHEAD", LOOKAHEAD)
 rows = []
@@ -60,16 +68,16 @@ chk("Kap", "mp4", "mp4" if "mp4" in fmt.get("format_name", "") and path.lower().
 chk("Video codec", "h264", v.get("codec_name"))
 chk("Video profil", "Main", v.get("profile"))
 chk("Video level", "5.0", f"{v.get('level', 0) / 10:.1f}")
-chk("Çözünürlük", "1216x2160", f"{v.get('width')}x{v.get('height')}")
+chk("Çözünürlük", BOYUT, f"{v.get('width')}x{v.get('height')}")
 sar = v.get("sample_aspect_ratio")
 if sar in (None, "0:1", "N/A"):
     sar = "1:1"
 chk("Piksel oranı (SAR)", "1:1", sar)
 sn, sd = (int(x) for x in sar.split(":"))
 dar = v["width"] * sn / (v["height"] * sd)
-chk("Görüntü oranı (DAR)", "9:16 (0.563)", f"{dar:.3f}", ok=abs(dar - 0.5625) < 0.003)
-chk("Kare hızı", "30000/1001", v.get("r_frame_rate"))
-chk("Ortalama kare hızı", "30000/1001", v.get("avg_frame_rate"))
+chk("Görüntü oranı (DAR)", f"{BW / BH:.3f}", f"{dar:.3f}", ok=abs(dar - BW / BH) < 0.003)
+chk("Kare hızı", FPS, v.get("r_frame_rate"))
+chk("Ortalama kare hızı", FPS, v.get("avg_frame_rate"))
 
 pk = probe("-select_streams", "v:0", "-show_entries", "packet=duration,flags").get("packets", [])
 durs = sorted({int(p.get("duration", 0)) for p in pk})

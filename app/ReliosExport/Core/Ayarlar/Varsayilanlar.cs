@@ -102,47 +102,19 @@ public static class Varsayilanlar
     /// YouTube: kaynakla aynı çözünürlük ve kare hızı, yüksek kalite. YouTube'un yükleme önerileri:
     /// High profil, 2 ardışık B-kare, kapalı GOP (kare hızının yarısı), AAC-LC 48 kHz 384 kb/s.
     /// </summary>
+    /// <summary>
+    /// YouTube: TikTok'la (XviD4PSP "Relios 9x16") aynı kodlama ayarları — x264, anahtar kare, FDK AAC —
+    /// tek farkla: çözünürlük, en-boy oranı ve kare hızı kaynakla aynı (kırpma, ölçekleme, fps çevirme yok).
+    /// </summary>
     public static ProfilAyarlari YouTube()
     {
-        var a = new ProfilAyarlari();
+        var a = TikTok();
+        a.Video.Cozunurluk = CozunurlukModu.Kaynak;
+        a.Video.KareHiziModu = KareHiziModu.Kaynak;
 
-        var v = a.Video;
-        v.Cozunurluk = CozunurlukModu.Kaynak;
-        v.Genislik = 1920;
-        v.Yukseklik = 1080;
-        v.Oran = OranUyumu.OrtadanKirp;
-        v.Olcekleme = "lanczos";
-        v.KareHiziModu = KareHiziModu.Kaynak;
-        v.KareHizi = "60";
-        v.Kodlayici = VideoKodlayici.X264;
-
-        var x = v.X264;
-        x.OnAyar = "slow";
-        x.Ayar = string.Empty;
-        x.Profil = "high";
-        x.Seviye = string.Empty;
-        x.Mod = X264Modu.Crf;
-        x.Crf = 16;
-        x.BKare = 2;
-
-        var k = a.AnahtarKare;
-        k.Birim = AralikBirimi.Saniye;
-        k.EnBuyuk = 0.5;
-        k.EnKucuk = null;
-        k.SahneDegisimi = null;
-        k.AcikGop = false;
-        k.IntraYenileme = false;
-
-        var s = a.Ses;
-        s.Kaynak = SesKaynagi.AyniAdliDosyaOncelikli;
-        s.OrnekHizi = 48000;
-        s.Kalite = DonusumKalitesi.CokYuksek;
-        s.Titresim = Titresim.Ucgen;
-        s.Kanal = KanalModu.Stereo;
-        s.Kodlayici = SesKodlayici.FdkAac;
-        s.Fdk.Profil = "aac_low";
-        s.Fdk.Mod = FdkModu.Cbr;
-        s.Fdk.BitHizi = 384;
+        // Kullanıcı sonradan "hedef boyut"a geçerse başlangıç değerleri
+        a.Video.Genislik = 1920;
+        a.Video.Yukseklik = 1080;
         return a;
     }
 

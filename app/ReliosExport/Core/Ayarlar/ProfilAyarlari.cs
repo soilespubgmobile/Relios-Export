@@ -51,7 +51,10 @@ public sealed class ProfilAyarlari : Gozlenebilir
     }
 
     /// <summary>Ayar dosyasının biçim sürümü (ileride değişirse eski kayıtlar okunabilsin).</summary>
-    public int Surum { get; set; } = 1;
+    public int Surum { get; set; } = GuncelSurum;
+
+    /// <summary>2: YouTube varsayılanı XviD4PSP ayarları + kaynakla aynı boyut / fps oldu.</summary>
+    public const int GuncelSurum = 2;
 
     public VideoAyarlari Video { get => _video; set => Bagla(ref _video, value); }
 

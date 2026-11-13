@@ -416,7 +416,7 @@ public partial class MainWindow : Window
         var p = SelectedProfile;
         var not = p.Id == ExportProfileId.TikTok
             ? " TikTok'un fabrika ayarı XviD4PSP'deki hedefle aynıdır (1216×2160, 29,97 fps, CRF 18)."
-            : " YouTube'un fabrika ayarı kaynakla aynı çözünürlük ve kare hızıdır.";
+            : " YouTube'un fabrika ayarı XviD4PSP ayarlarının aynısıdır; yalnızca çözünürlük ve kare hızı kaynakla aynı kalır.";
         if (!ConfirmDialog.Ask(
                 this,
                 $"{p.DisplayName} ayarları varsayılana dönsün mü?",

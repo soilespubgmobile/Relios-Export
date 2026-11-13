@@ -10,8 +10,8 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
     sekmeli pencerelerde. Ayarlar adıyla ön ayar olarak kaydedilebilir.
   - TikTok varsayılanı: XviD4PSP "Relios 9x16" ile birebir aynı
     (1216×2160 9:16, 29,97 fps, H.264 Main@L5.0 CRF 18, FDK AAC 128 kb/s 48 kHz).
-  - YouTube varsayılanı: kaynakla aynı çözünürlük ve kare hızı, H.264 High CRF 16,
-    FDK AAC 384 kb/s 48 kHz.
+  - YouTube varsayılanı: TikTok'la (XviD4PSP) aynı kodlama ayarları; çözünürlük, en-boy oranı ve
+    kare hızı kaynakla aynı (kırpma ve fps çevirme yok).
   - Videonun yanında aynı adlı ses dosyası (ör. `edit1.mp4` için `edit1.wav`) varsa videonun kendi
     sesi yerine o kullanılır.
   - Ayarlar program klasöründeki `ayarlar.json` dosyasında durur (kurulum yok).
