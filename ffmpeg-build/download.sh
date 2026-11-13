@@ -16,6 +16,8 @@ trap "rm -rf -- '$DL_SCRIPT_DIR'" EXIT
 
 mkdir -p "${PWD}"/.cache/downloads
 
+# Relios: alt klasor kalmadiginda desen bos donsun
+shopt -s nullglob
 for STAGE in scripts.d/*.sh scripts.d/*/*.sh; do
 	STAGENAME="$(basename "$STAGE" | sed 's/.sh$//')"
 
@@ -58,6 +60,7 @@ for STAGE in scripts.d/*.sh scripts.d/*/*.sh; do
 		ln -s "\${DLNAME}_\${DLHASH}.tar.xz" "/dldir/\${DLNAME}.tar.xz"
 	EOF
 done
+shopt -u nullglob  # Relios
 
 docker run -i $TTY_ARG --rm "${UIDARGS[@]}" -v "${DL_SCRIPT_DIR}":/stages -v "${PWD}/.cache/downloads":/dldir -v "${PWD}/scripts.d":/scripts.d -v "${PWD}/util/dl_functions.sh":/dl_functions.sh "${REGISTRY}/${REPO}/base:latest${DOCKER_TAG_SUFFIX:-}" \
 	bash -c 'set -xe && for STAGE in /stages/*.sh; do bash $STAGE; done'
