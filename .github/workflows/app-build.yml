@@ -44,7 +44,8 @@ jobs:
           $bin = (Get-ChildItem -Recurse ffx -Filter ffmpeg.exe | Select-Object -First 1).DirectoryName
           New-Item -ItemType Directory app/ReliosExport/ffmpeg -Force | Out-Null
           Copy-Item "$bin/ffmpeg.exe","$bin/ffprobe.exe" app/ReliosExport/ffmpeg/
-          & app/ReliosExport/ffmpeg/ffmpeg.exe -hide_banner -version | Select-Object -First 1
+          $v = & app/ReliosExport/ffmpeg/ffmpeg.exe -hide_banner -version
+          $v | Select-Object -First 1
           Get-ChildItem app/ReliosExport/ffmpeg | ForEach-Object { "{0,-14} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB) }
 
       # WPF'in DirectWriteForwarder.dll'i C++/CLI: paketin icinden yuklenemez, diske acilmasi gerekir.
@@ -85,8 +86,9 @@ jobs:
           $rc = Kontrol '--ffmpeg-kontrol' $f
           if ($rc -ne 0) { "HATA: program icindeki FFmpeg bulunamadi (kod $rc)"; exit 1 }
           $ff = ((Get-Content $f) | Where-Object { $_ -like 'ffmpeg=*' }) -replace '^ffmpeg=', ''
-          & $ff -hide_banner -version | Select-Object -First 1
+          $v = & $ff -hide_banner -version
           if ($LASTEXITCODE -ne 0) { "HATA: acilan ffmpeg.exe calismadi"; exit 1 }
+          $v | Select-Object -First 1
           $rc = Kontrol '--pencere-kontrol' (Join-Path $PWD "pencere-kontrol.txt")
           if ($rc -ne 0) { "HATA: ana pencere acilamadi (kod $rc)"; exit 1 }
           "Tek exe calisiyor: FFmpeg icinde, pencere hatasiz aciliyor."
