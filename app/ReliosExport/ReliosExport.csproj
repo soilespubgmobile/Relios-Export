@@ -9,7 +9,7 @@
     <AssemblyName>Relios Export</AssemblyName>
     <RootNamespace>ReliosExport</RootNamespace>
     <Product>Relios Export</Product>
-    <Version>0.2.4</Version>
+    <Version>0.3.0</Version>
     <Company>Relios</Company>
     <Description>TikTok ve YouTube için video dışa aktarma</Description>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -18,5 +18,15 @@
     <ApplicationIcon>Assets\ReliosExport.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
+
+  <!-- Tek exe: GitHub'daki derleme onaylı FFmpeg'i (ffmpeg.exe + ffprobe.exe) bu klasöre koyar ve
+       programın içine gömer. Program ilk açılışta onları kendi geçici klasörüne açar. -->
+  <ItemGroup Condition="Exists('ffmpeg\ffmpeg.exe') And Exists('ffmpeg\ffprobe.exe')">
+    <Content Include="ffmpeg\ffmpeg.exe;ffmpeg\ffprobe.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromSingleFile>false</ExcludeFromSingleFile>
+    </Content>
+  </ItemGroup>
 
 </Project>

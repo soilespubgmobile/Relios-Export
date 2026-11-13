@@ -8,3 +8,4 @@ ffmpeg-build/ffbuild/
 ffmpeg-build/.cache/
 __pycache__/
 *.pyc
+app/ReliosExport/ffmpeg/

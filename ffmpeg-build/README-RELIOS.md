@@ -15,3 +15,11 @@ BtbN/FFmpeg-Builds tabanli, kisisel kullanim icin sadelestirilmis derleme.
   VP9, ProRes, AAC, Opus, MP3, FLAC, PCM...) her kaynak icin icinde.
 
 Lisans notu: libfdk_aac iceren bu derleme yeniden DAGITILAMAZ; yalnizca kisisel kullanim icindir.
+
+## Programa gomulen FFmpeg (ONAYLI_DERLEME)
+
+`ONAYLI_DERLEME` dosyasinda, 13 videoluk Windows testinden ("FFmpeg dogrulama (Windows)")
+gecmis FFmpeg derlemesinin run numarasi yazar. "Relios Export (uygulama)" is akisi bu
+derlemenin ffmpeg.exe ve ffprobe.exe'sini tek exe'nin icine gomer; dosya degisince program
+yeniden derlenir. GitHub derleme ciktilarini 30 gun saklar; daha eski bir derleme kullanilacaksa
+FFmpeg yeniden derlenip yeni run numarasi yazilmalidir.

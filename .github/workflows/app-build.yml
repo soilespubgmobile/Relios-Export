@@ -6,14 +6,19 @@ on:
     branches: [main]
     paths:
       - 'app/**'
+      - 'ffmpeg-build/ONAYLI_DERLEME'
       - '.github/workflows/app-build.yml'
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   build:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -24,8 +29,27 @@ jobs:
           dotnet-version: '11.0.x'
           dotnet-quality: 'ga'
 
+      # Tek exe: 13 videoluk Windows testinden gecmis FFmpeg derlemesi (ffmpeg-build/ONAYLI_DERLEME)
+      # programin icine gomulur.
+      - name: Onayli FFmpeg derlemesini indir
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $id = (Get-Content ffmpeg-build/ONAYLI_DERLEME -Raw).Trim()
+          "Onayli FFmpeg derlemesi: run $id"
+          gh run download $id -R $env:GITHUB_REPOSITORY -D ffart
+          if ($LASTEXITCODE -ne 0) { "HATA: FFmpeg derlemesi indirilemedi (run $id)"; exit 1 }
+          $zip = Get-ChildItem -Recurse ffart -Filter *.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath ffx
+          $bin = (Get-ChildItem -Recurse ffx -Filter ffmpeg.exe | Select-Object -First 1).DirectoryName
+          New-Item -ItemType Directory app/ReliosExport/ffmpeg -Force | Out-Null
+          Copy-Item "$bin/ffmpeg.exe","$bin/ffprobe.exe" app/ReliosExport/ffmpeg/
+          & app/ReliosExport/ffmpeg/ffmpeg.exe -hide_banner -version | Select-Object -First 1
+          Get-ChildItem app/ReliosExport/ffmpeg | ForEach-Object { "{0,-14} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+
       # WPF'in DirectWriteForwarder.dll'i C++/CLI: paketin icinden yuklenemez, diske acilmasi gerekir.
-      - name: Derle (tek exe, self-contained)
+      # IncludeAllContentForSelfExtract ffmpeg.exe ve ffprobe.exe'yi de ilk acilista ayni yere acar.
+      - name: Derle (tek exe, self-contained, FFmpeg icinde)
         run: >
           dotnet publish app/ReliosExport/ReliosExport.csproj
           -c Release -r win-x64 --self-contained true
@@ -34,6 +58,15 @@ jobs:
           -p:IncludeAllContentForSelfExtract=true
           -p:EnableCompressionInSingleFile=true
           -o out
+
+      - name: Tek exe kontrolu
+        run: |
+          Get-ChildItem out | ForEach-Object { "{0,-24} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+          $diger = Get-ChildItem out | Where-Object { $_.Name -notin @('Relios Export.exe', 'Relios Export.pdb') }
+          if ($diger) { "HATA: exe disinda dosya kaldi: $($diger.Name -join ', ')"; exit 1 }
+          $exe = Get-Item "out/Relios Export.exe"
+          if ($exe.Length -lt 70MB) { "HATA: exe cok kucuk, FFmpeg gomulmemis olabilir"; exit 1 }
+          "Tek exe hazir: $([math]::Round($exe.Length / 1MB, 1)) MB"
 
       - name: Ciktiyi yukle
         uses: actions/upload-artifact@v7
