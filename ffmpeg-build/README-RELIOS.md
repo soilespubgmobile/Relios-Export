@@ -6,7 +6,8 @@ BtbN/FFmpeg-Builds tabanli, kisisel kullanim icin sadelestirilmis derleme.
 - Tum bilesenler derleme aninda `relios/pin_stable.sh` ile en son KARARLI
   surum etiketine sabitlenir (rc/beta/gelistirme dallari kullanilmaz).
   x264: XviD4PSP 8.2.14'teki surumun aynisi (core 165 r3223 0480cb0), sabit commit;
-  videoya XviD4PSP gibi "x264 core 165 r3223 0480cb0" yazar (sig klonda bos kalan surum satiri sabitlenir).
+  videoya XviD4PSP gibi "x264 core 165 r3223 0480cb0" yazar: kaynak resmi depodan tam gecmisiyle
+  indirilir ve bu etiketi x264'un kendi version.sh'i hesaplar (elle yazilan bir deger yok).
 - Icerik (yalnizca kullanilanlar): x264 (core 165 r3223) + NVENC ile H.264 kodlama
   (HEVC ve AV1 NVENC kodlayicilari derlenmez; NVDEC ile ekran karti cozme tum bicimlerde var),
   FDK AAC ve PCM/WAV (16/24/32 bit) ses, soxr ile 44.1/48 kHz ornekleme,

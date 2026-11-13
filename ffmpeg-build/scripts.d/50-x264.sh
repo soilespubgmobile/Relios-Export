@@ -8,17 +8,28 @@ ffbuild_enabled() {
     return 0
 }
 
+ffbuild_dockerdl() {
+    # Relios: kaynak resmi depodan (code.videolan.org) tam gecmisiyle indirilir; boylece
+    # surum etiketini ("r3223 0480cb0") x264'un kendi version.sh'i hesaplar. Sig klonda
+    # bu etiket bos kalir ve videoya yalnizca "x264 core 165" yazilir.
+    echo "git init ."
+    echo "git remote add origin \"$SCRIPT_REPO\""
+    echo "retry-tool git fetch origin +refs/heads/master:refs/remotes/origin/master"
+    echo "git -c advice.detachedHead=false checkout --detach \"$SCRIPT_COMMIT\""
+    echo "./version.sh > relios-x264-version.h"
+    echo "cat relios-x264-version.h"
+}
+
 ffbuild_dockerbuild() {
-    # Relios: kaynak sig klonlandigi icin (depth=1) x264'un version.sh'i surum satirini
-    # bos birakiyor ve videoya yalnizca "x264 core 165" yaziliyor. Resmi tam klonla
-    # derlenen ayni commit (XviD4PSP 8.2.14'teki x264) "core 165 r3223 0480cb0" yazar.
-    # Kod ayni; yalnizca bu satirin birebir ayni olmasi icin degerler sabitleniyor.
-    if [[ "$SCRIPT_COMMIT" == "0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee" ]]; then
-        printf '%s\n' '#!/bin/sh' \
-            'echo "#define X264_REV 3223"' \
-            'echo "#define X264_REV_DIFF 0"' \
-            'echo "#define X264_VERSION \" r3223 0480cb0\""' \
-            'echo "#define X264_POINTVER \"0.165.3223 0480cb0\""' > version.sh
+    # Indirme asamasinda x264'un kendi version.sh'inin urettigi etiket aynen kullanilir
+    # (derleme asamasinda git gecmisine erisilemeyebilir). Etiket commit ile uyusmuyorsa dur.
+    if [[ -s relios-x264-version.h ]]; then
+        grep -q "X264_VERSION \" r[0-9]* ${SCRIPT_COMMIT:0:7}\"" relios-x264-version.h || {
+            echo "HATA: x264 surum etiketi commit ${SCRIPT_COMMIT:0:7} ile uyusmuyor:"
+            cat relios-x264-version.h
+            return 1
+        }
+        printf '%s\n' '#!/bin/sh' 'cat "$(dirname "$0")/relios-x264-version.h"' > version.sh
         chmod +x version.sh
     fi
 
