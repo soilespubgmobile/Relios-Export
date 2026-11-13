@@ -68,6 +68,18 @@ jobs:
           if ($exe.Length -lt 70MB) { "HATA: exe cok kucuk, FFmpeg gomulmemis olabilir"; exit 1 }
           "Tek exe hazir: $([math]::Round($exe.Length / 1MB, 1)) MB"
 
+      - name: Tek exe icindeki FFmpeg aciliyor mu
+        run: |
+          $out = Join-Path $PWD "kontrol.txt"
+          $p = Start-Process -FilePath "out/Relios Export.exe" -ArgumentList '--ffmpeg-kontrol', $out -PassThru
+          if (-not $p.WaitForExit(120000)) { $p.Kill(); "HATA: program 2 dakikada kapanmadi"; exit 1 }
+          Get-Content $out
+          if ($p.ExitCode -ne 0) { "HATA: program icindeki FFmpeg'i bulamadi (kod $($p.ExitCode))"; exit 1 }
+          $ff = ((Get-Content $out) | Where-Object { $_ -like 'ffmpeg=*' }) -replace '^ffmpeg=', ''
+          & $ff -hide_banner -version | Select-Object -First 1
+          if ($LASTEXITCODE -ne 0) { "HATA: acilan ffmpeg.exe calismadi"; exit 1 }
+          "Program icindeki FFmpeg calisiyor."
+
       - name: Ciktiyi yukle
         uses: actions/upload-artifact@v7
         with:
