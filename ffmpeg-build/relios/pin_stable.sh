@@ -6,14 +6,27 @@ cd "$(dirname "$0")/.."
 SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 OUT="${GITHUB_OUTPUT:-/dev/null}"
 
+# Sunucuya baglanti anlik koparsa (or. code.videolan.org) birkac kez tekrar dener.
+lsr() { # git ls-remote argumanlari
+    local i out
+    for i in 1 2 3 4 5 6; do
+        if out="$(git ls-remote "$@")"; then
+            printf '%s\n' "$out"
+            return 0
+        fi
+        echo "uyari: git ls-remote basarisiz ($i/6): $*; 30 sn sonra tekrar" >&2
+        sleep 30
+    done
+    return 1
+}
 latest_tag() { # repo regex
-    git ls-remote --tags --refs "$1" | awk '{print $2}' | sed 's#^refs/tags/##' \
+    lsr --tags --refs "$1" | awk '{print $2}' | sed 's#^refs/tags/##' \
         | grep -E "$2" | sort -V | tail -n1
 }
 tag_commit() { # repo tag
     local sha
-    sha="$(git ls-remote "$1" "refs/tags/$2^{}" | cut -f1)"
-    [[ -n "$sha" ]] || sha="$(git ls-remote "$1" "refs/tags/$2" | cut -f1)"
+    sha="$(lsr "$1" "refs/tags/$2^{}" | cut -f1)"
+    [[ -n "$sha" ]] || sha="$(lsr "$1" "refs/tags/$2" | cut -f1)"
     echo "$sha"
 }
 set_commit() { # script sha
