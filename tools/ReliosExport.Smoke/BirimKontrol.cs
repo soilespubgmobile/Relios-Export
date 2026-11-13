@@ -112,13 +112,13 @@ internal static class BirimKontrol
         Console.WriteLine("--- TikTok varsayılanı (NVENC CBR 34375 kb/s) komutları");
 
         var k = NvencKomutu(Kaynak(1080, 1920, 60, "h264", "Main", 42));
-        Iceriyor("Main@4.2 1080×1920@60", k, " -profile:v main -level:v 4.2 -rc cbr -b:v 34375k -bufsize 34375k ");
+        Iceriyor("Main@4.2 1080×1920@60", k, " -profile:v main -level:v 4.2 -rc cbr -b:v 34375k -bufsize 55000k ");
         // ffmpeg'de -refs yalnızca kare başına referans; DPB ayrıca verilmezse kart 6 kare seçer ve 4.2'yi reddeder
         // (kullanıcının kartında denendi: -dpb_size 3 ile High@4.2, max_num_ref_frames 3).
         Iceriyor("Main@4.2 1080×1920@60", k, " -bf 0 -refs 3 -dpb_size 3 ");
 
         k = NvencKomutu(Kaynak(1920, 1080, 60, "h264", "High", 42));
-        Iceriyor("High@4.2 1920×1080@60", k, " -profile:v high -level:v 4.2 -rc cbr -b:v 34375k -bufsize 34375k ");
+        Iceriyor("High@4.2 1920×1080@60", k, " -profile:v high -level:v 4.2 -rc cbr -b:v 34375k -bufsize 55000k ");
 
         k = NvencKomutu(Kaynak(1920, 1080, 30, "h264", "High", 40));
         Iceriyor("High@4.0 1080p30 (bit hızı 4.0'ı aşar)", k, " -profile:v high -level:v 4.1 ");
@@ -148,8 +148,15 @@ internal static class BirimKontrol
         k = NvencKomutu(Kaynak(1920, 1080, 30, "h264", "High", 40), a => a.Video.Nvenc.Seviye = "4.0");
         Iceriyor("Elle seçilen seviye değişmez", k, " -level:v 4.0 ");
 
-        k = NvencKomutu(Kaynak(1920, 1080, 30, "h264", "High", 40), a => a.Video.Nvenc.Mod = NvencModu.DegiskenBitHizi);
-        Icermiyor("VBR'de tampon ffmpeg'e bırakılır", k, " -bufsize ");
+        k = NvencKomutu(Kaynak(1920, 1080, 30, "h264", "High", 40), a =>
+        {
+            a.Video.Nvenc.Mod = NvencModu.DegiskenBitHizi;
+            a.Video.Nvenc.Tampon = null;
+        });
+        Icermiyor("VBR'de tampon boşsa ffmpeg'e bırakılır", k, " -bufsize ");
+
+        k = NvencKomutu(Kaynak(1920, 1080, 30, "h264", "High", 40), a => a.Video.Nvenc.Tampon = null);
+        Iceriyor("CBR'de tampon boşsa bit hızı kadar", k, " -b:v 34375k -bufsize 34375k ");
 
         k = NvencKomutu(Kaynak(1920, 1080, 30, "h264", "High", 40), a => a.Video.Nvenc.Tampon = 20000);
         Iceriyor("Elle girilen tampon", k, " -bufsize 20000k ");
@@ -298,6 +305,7 @@ internal static class BirimKontrol
         var eskiTt = Varsayilanlar.TikTok();
         eskiTt.Surum = 5;
         eskiTt.Video.Kap = KapBicimi.Mp4;
+        eskiTt.Video.Nvenc.Tampon = null; // 0.8.5'e kadar tampon boştu
         var ayarlar = new AppSettings();
         ayarlar.Profiller[ExportProfileId.YouTube] = eskiYt;
         ayarlar.Profiller[ExportProfileId.TikTok] = eskiTt;
@@ -308,8 +316,9 @@ internal static class BirimKontrol
         Kontrol("YouTube 4 → 6: kendi CRF değeri korunur", "20", yt.Video.X264.Crf.ToString());
         Kontrol("YouTube sürüm", ProfilAyarlari.GuncelSurum.ToString(), yt.Surum.ToString());
         var tt = ayarlar.ProfilAyari(ExportProfileId.TikTok);
-        Kontrol("TikTok 5 → 6: dosya biçimi", "Mov", tt.Video.Kap.ToString());
-        Kontrol("TikTok 5 → 6: NVENC kalır", "Nvenc", tt.Video.Kodlayici.ToString());
+        Kontrol("TikTok 5 → 7: dosya biçimi", "Mov", tt.Video.Kap.ToString());
+        Kontrol("TikTok 5 → 7: NVENC kalır", "Nvenc", tt.Video.Kodlayici.ToString());
+        Kontrol("TikTok 5 → 7: tampon 55000 kb", "55000", tt.Video.Nvenc.Tampon?.ToString() ?? "boş");
     }
 
     private static string KomutMetni(MediaInfo m, ProfilAyarlari a)

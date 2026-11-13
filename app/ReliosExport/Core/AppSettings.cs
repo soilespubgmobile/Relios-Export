@@ -71,6 +71,13 @@ public sealed class AppSettings
                 // Dosya biçimi ayarı yoktu (hep MP4); TikTok ve YouTube'da varsayılan artık MOV.
                 a.Video.Kap = KapBicimi.Mov;
             }
+
+            if (id == ExportProfileId.TikTok && a.Surum < 7
+                && a.Video.Nvenc is { Mod: NvencModu.Cbr, BitHizi: 34375, Tampon: null })
+            {
+                // TikTok varsayılanının tamponu boştu (bit hızı kadar); artık 55000 kb.
+                a.Video.Nvenc.Tampon = 55000;
+            }
         }
 
         a.Surum = ProfilAyarlari.GuncelSurum;

@@ -8,7 +8,7 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
     Video (çözünürlük, kare hızı, x264 / NVENC), Ses (kaynak, gecikme, seviye, örnekleme, kanal,
     FDK AAC / WAV) ve Anahtar kare. x264, NVENC ve FDK AAC'nin bütün ayarları XviD4PSP'deki gibi
     sekmeli pencerelerde. Ayarlar adıyla ön ayar olarak kaydedilebilir.
-  - TikTok varsayılanı: ekran kartıyla (NVENC H.264) CBR 34375 kb/s, tampon 1 saniye; çözünürlük, kare hızı,
+  - TikTok varsayılanı: ekran kartıyla (NVENC H.264) CBR 34375 kb/s, tampon 55000 kb; çözünürlük, kare hızı,
     H.264 profili ve seviyesi kaynakla aynı; B-kare yok, 3 referans kare, 30 karede bir anahtar kare;
     FDK AAC 128 kb/s 48 kHz. NVENC seviyeyi katı denetler: kaynağın seviyesi çıktının boyutuna, kare hızına,
     bit hızına ya da tamponuna yetmiyorsa (ör. 34375 kb/s, 4.0 ve altının sınırını aşar) seviye yeten en düşük
@@ -16,6 +16,7 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
     verilir (`-dpb_size`): ffmpeg'de `-refs` yalnızca kare başına referanstır, DPB boş kalınca kart 6 kare seçer
     ve 1080p'de 4.x seviyelerini (en fazla 4 kare) aşar.
   - Ön ayar listesine program kendiliğinden bir şey koymaz; yalnızca kullanıcının kaydettikleri durur.
+  - Varsayılan kayıt yeri: İndirilenler klasörü.
   - Dikey 9:16 ayarı (1216×2160, 29,97 fps, x264 Main@L5.0 CRF 18, FDK AAC 128 kb/s 48 kHz; önceki TikTok
     varsayılanı) yalnızca kodda durur: YouTube varsayılanının temeli ve GitHub doğrulamasının hedef ayarı.
   - YouTube varsayılanı: dikey 9:16 ayarıyla aynı x264 / FDK AAC ayarları; çözünürlük, en-boy oranı, kare hızı,

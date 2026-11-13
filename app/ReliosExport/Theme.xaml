@@ -523,11 +523,11 @@
         </Setter>
     </Style>
 
-    <!-- Sayı kutusu (boşken yer tutucu: "ön ayar") -->
+    <!-- Sayı kutusu (boşken yer tutucu: değerini hız ayarı / preset belirler) -->
     <Style x:Key="SayiKutusu" TargetType="TextBox" BasedOn="{StaticResource InputBox}">
-        <Setter Property="Width" Value="96"/>
+        <Setter Property="Width" Value="110"/>
         <Setter Property="HorizontalAlignment" Value="Left"/>
-        <Setter Property="Tag" Value="ön ayar"/>
+        <Setter Property="Tag" Value="hız ayarından"/>
     </Style>
 
     <!-- Çok satırlı giriş (serbest parametreler, komut önizleme) -->

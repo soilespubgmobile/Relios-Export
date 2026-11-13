@@ -98,7 +98,7 @@ public static class Secenekler
         (X264Modu.Cbr, "Sabit bit hızı (CBR)"));
 
     public static Secenek[] HareketArama { get; } = L(
-        (O, "Ön ayar"),
+        (O, "Hız ayarına göre"),
         ("dia", "Elmas (dia)"),
         ("hex", "Altıgen (hex)"),
         ("umh", "Düzensiz çoklu altıgen (umh)"),
@@ -106,7 +106,7 @@ public static class Secenekler
         ("tesa", "Dönüşümlü tam arama (tesa)"));
 
     public static Secenek[] AltPikseller { get; } = L(
-        (O, "Ön ayar"),
+        (O, "Hız ayarına göre"),
         (0, "0: Yalnızca tam piksel"),
         (1, "1: SAD, 1 yineleme"),
         (2, "2: SATD, 2 yineleme"),
@@ -121,57 +121,57 @@ public static class Secenekler
         (11, "11: Tam RD"));
 
     public static Secenek[] DogrudanMvler { get; } = L(
-        (O, "Ön ayar"),
+        (O, "Hız ayarına göre"),
         ("none", "Yok"),
         ("spatial", "Uzamsal"),
         ("temporal", "Zamansal"),
         ("auto", "Otomatik"));
 
     public static Secenek[] AgirlikliPler { get; } = L(
-        (O, "Ön ayar"),
+        (O, "Hız ayarına göre"),
         (0, "Kapalı"),
         (1, "Basit (ağırlıklı referans)"),
         (2, "Akıllı (ağırlıklı referans + kopya)"));
 
     public static Secenek[] BUyarlamalilar { get; } = L(
-        (O, "Ön ayar"),
+        (O, "Hız ayarına göre"),
         (0, "Kapalı"),
         (1, "Hızlı"),
         (2, "En iyi (Optimal)"));
 
     public static Secenek[] BPiramitler { get; } = L(
-        (O, "Ön ayar"),
+        (O, "Hız ayarına göre"),
         ("none", "Yok"),
         ("strict", "Katı (Strict)"),
         ("normal", "Normal"));
 
     public static Secenek[] Bolumler { get; } = L(
-        (O, "Ön ayar"),
+        (O, "Hız ayarına göre"),
         ("none", "Yok"),
         ("i4x4,i8x8", "Yalnızca intra"),
         ("p8x8,b8x8,i8x8,i4x4", "Standart"),
         ("all", "Hepsi"));
 
     public static Secenek[] Trellisler { get; } = L(
-        (O, "Ön ayar"),
+        (O, "Hız ayarına göre"),
         (0, "Kapalı"),
         (1, "Yalnızca son MB"),
         (2, "Tüm kararlarda"));
 
     public static Secenek[] Cqmler { get; } = L(
-        (O, "Ön ayar"),
+        (O, "Hız ayarına göre"),
         ("flat", "Düz (flat)"),
         ("jvt", "JVT"));
 
     public static Secenek[] AqModlari { get; } = L(
-        (O, "Ön ayar"),
+        (O, "Hız ayarına göre"),
         (0, "Kapalı"),
         (1, "Varyans AQ"),
         (2, "Otomatik varyans AQ"),
         (3, "Otomatik varyans AQ (koyu sahnelere ağırlık)"));
 
     public static Secenek[] NalHrdler { get; } = L(
-        (O, "Ön ayar"),
+        (O, "Hız ayarına göre"),
         ("none", "Yok"),
         ("vbr", "VBR"),
         ("cbr", "CBR"));

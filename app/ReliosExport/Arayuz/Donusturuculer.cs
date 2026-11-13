@@ -20,7 +20,7 @@ public sealed class EsitseGorunur : IValueConverter
         Binding.DoNothing;
 }
 
-/// <summary>Seçim listesinde "ön ayar" (null) satırı için yer tutucu nesne.</summary>
+/// <summary>Seçim listesinde "hız ayarına göre" (null: değeri hız ayarı / preset belirler) satırı için yer tutucu nesne.</summary>
 public sealed class OnAyarDegeri
 {
     public static readonly OnAyarDegeri Ornek = new();
@@ -29,10 +29,10 @@ public sealed class OnAyarDegeri
     {
     }
 
-    public override string ToString() => "Ön ayar";
+    public override string ToString() => "Hız ayarına göre";
 }
 
-/// <summary>null ⇄ "ön ayar" yer tutucusu (ComboBox.SelectedValue için).</summary>
+/// <summary>null ⇄ "hız ayarına göre" yer tutucusu (ComboBox.SelectedValue için).</summary>
 public sealed class BosSecenek : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>

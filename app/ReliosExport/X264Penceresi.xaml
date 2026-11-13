@@ -17,7 +17,7 @@
 
         <!-- Alt düğmeler -->
         <Grid DockPanel.Dock="Bottom" Margin="0,14,0,0">
-            <Button Content="Tümünü ön ayara bırak" Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Click="OnOnAyaraBirak"
+            <Button Content="Tümünü hız ayarına bırak" Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Click="OnOnAyaraBirak"
                     ToolTip="Ana sekme dışındaki bütün değerler boşaltılır; hız ayarı (preset) belirler."/>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="Vazgeç" Style="{StaticResource SecondaryButton}" MinWidth="96" IsCancel="True"/>
@@ -79,7 +79,7 @@
                         </DockPanel>
 
                         <TextBlock Style="{StaticResource Ipucu}" Margin="0,6,0,4"
-                                   Text="Boş bırakılan kutular ve 'Ön ayar' seçilen listeler komuta yazılmaz; değerlerini hız ayarı (preset) belirler. Üç durumlu kutularda çizgi de 'ön ayar' demektir."/>
+                                   Text="'Hız ayarına göre' seçilen listeler ve boş bırakılan kutular komuta yazılmaz; değerlerini seçili hız ayarı (preset, ör. medium) belirler. Üç durumlu kutularda çizgi de 'hız ayarına göre' demektir."/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -148,6 +148,8 @@
                             <ComboBox ItemsSource="{x:Static a:Secenekler.BPiramitler}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
                                       SelectedValue="{Binding BPiramit, Converter={StaticResource Bos}}"/>
                         </DockPanel>
+                        <TextBlock Style="{StaticResource Ipucu}" Margin="220,-2,0,10"
+                                   Text="B-kare sapması, uyarlamalı B-kare ve B-piramit yalnızca B-kare 1 ve üstündeyken etkilidir; B-kare 0 iken hiçbiri kullanılmaz."/>
 
                         <TextBlock Text="ÖNDEN BAKIŞ VE DİLİMLER" Style="{StaticResource AltBaslik}"/>
                         <DockPanel Style="{StaticResource FormSatiri}">

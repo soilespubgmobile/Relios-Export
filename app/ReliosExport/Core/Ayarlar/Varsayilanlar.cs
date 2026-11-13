@@ -8,7 +8,7 @@ namespace ReliosExport.Core.Ayarlar;
 public static class Varsayilanlar
 {
     /// <summary>
-    /// TikTok: ekran kartıyla (NVENC H.264) sabit bit hızı CBR 34375 kb/s; çözünürlük, kare hızı, H.264 profili
+    /// TikTok: ekran kartıyla (NVENC H.264) sabit bit hızı CBR 34375 kb/s, tampon 55000 kb; çözünürlük, kare hızı, H.264 profili
     /// ve seviyesi kaynakla aynı; B-kare yok, 3 referans kare, 30 karede bir anahtar kare; MOV.
     /// Ses: FDK AAC LC 128 kb/s 48 kHz (9:16 ayarıyla aynı).
     /// </summary>
@@ -26,6 +26,7 @@ public static class Varsayilanlar
         var n = v.Nvenc;
         n.Mod = NvencModu.Cbr;
         n.BitHizi = 34375;
+        n.Tampon = 55000; // VBV tamponu en fazla 55000 kbit (Main@4.1 / 4.2 sınırı 62500)
         n.Profil = "kaynak";
         n.Seviye = "kaynak";
         n.BKare = 0;
