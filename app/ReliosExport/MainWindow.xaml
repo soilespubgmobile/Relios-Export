@@ -495,7 +495,7 @@
                                         <ComboBox ItemsSource="{x:Static a:Secenekler.Titresimler}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Ses.Titresim}"/>
                                     </DockPanel>
                                     <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8"
-                                               Text="FDK AAC sesi 16 bit alır; 24/32 bit kaynak kodlamadan önce 16 bite iner. Titreşim bu inişi daha temiz yapar."/>
+                                               Text="FDK AAC ve 16 bit WAV, 24/32 bit kaynağı 16 bite indirir; titreşim bu inişi daha temiz yapar."/>
                                 </StackPanel>
                             </Expander>
 
