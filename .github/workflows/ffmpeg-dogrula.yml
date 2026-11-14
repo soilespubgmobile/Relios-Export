@@ -204,13 +204,17 @@ jobs:
           $yt = @('--profil', 'youtube')
           $testler = @(
             @{ ad = 'YouTube varsayilani: 1080p60 yatay H.264 (XviD4PSP ayarlari; boyut, fps, profil, seviye kaynak)'; k = '01_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               hedef = @('--boyut', '1920x1080', '--fps', '60/1', '--gop', '100/51', '--kap', 'mov'); ayar = @('kap=mov') },
+               hedef = @('--boyut', '1920x1080', '--fps', '60/1', '--gop', '100/51', '--vbv', '34375/55000', '--kap', 'mov'); ayar = @('kap=mov') },
             @{ ad = 'YouTube varsayilani: telefon (dondurulmus HEVC 10 bit)'; k = '03_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               hedef = @('--boyut', '1080x1920', '--fps', '30/1', '--gop', '50/26', '--kap', 'mov'); ayar = @('kap=mov') },
+               hedef = @('--boyut', '1080x1920', '--fps', '30/1', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov'); ayar = @('kap=mov') },
             @{ ad = 'YouTube varsayilani: 1080x2400 uzun dikey'; k = '13_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               hedef = @('--boyut', '1080x2400', '--fps', '30/1', '--gop', '50/26', '--kap', 'mov'); ayar = @('kap=mov') },
+               hedef = @('--boyut', '1080x2400', '--fps', '30/1', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov'); ayar = @('kap=mov') },
             @{ ad = 'YouTube varsayilani: 32 bit float WAV sesli 4K50 ProRes'; k = '06_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               hedef = @('--boyut', '3840x2160', '--fps', '50/1', '--gop', '83/42', '--kap', 'mov'); ayar = @('kap=mov') },
+               hedef = @('--boyut', '3840x2160', '--fps', '50/1', '--gop', '83/42', '--vbv', '34375/55000', '--kap', 'mov'); ayar = @('kap=mov') },
+            @{ ad = 'YouTube varsayilani: 1080x1920 29.97 fps H.264 High@4.0 (34375 kb/s 4.0 sinirini asar: seviye 4.1)'; k = '02_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
+               hedef = @('--boyut', '1080x1920', '--fps', '30000/1001', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov'); ayar = @('kap=mov') },
+            @{ ad = 'YouTube varsayilani: 1080x1080 sessiz H.264 High@3.2 (seviye 4.1)'; k = '07_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
+               hedef = @('--boyut', '1080x1080', '--fps', '30/1', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov'); ayar = @('kap=mov') },
             @{ ad = 'x264 2 gecis 4000 kb/s'; k = '12_'; arg = @('--profil', 'tiktok-916', '--ayarla', 'Video.X264.Mod=IkiGecis', '--ayarla', 'Video.X264.BitHizi=4000'); sag = @()
                ayar = @('x264:rc=2pass', 'x264:bitrate=4000', 'vbit=4000000±30%') },
             @{ ad = 'x264 3 gecis 4000 kb/s'; k = '12_'; arg = @('--profil', 'tiktok-916', '--ayarla', 'Video.X264.Mod=UcGecis', '--ayarla', 'Video.X264.BitHizi=4000'); sag = @()
@@ -228,12 +232,12 @@ jobs:
             @{ ad = 'FDK HE-AAC 48 kb/s (Turkce adli kaynak)'; k = '08_'; arg = @('--profil', 'tiktok-916', '--ayarla', 'Ses.Fdk.Profil=aac_he', '--ayarla', 'Ses.Fdk.BitHizi=48'); sag = @()
                ayar = @('acodec=aac', 'aprofil=HE-AAC', 'abit=48000±10%') },
             @{ ad = 'TikTok varsayilani komutu: H.264 High@4.2 60 fps kaynak (NVENC CBR 34375, kart yok: yalnizca komut)'; k = '01_'; arg = @('--sadece-komut'); komut = @(
-                 '-vf scale=trunc(iw*sar/2)*2:trunc(ih/2)*2:flags=lanczos', '-c:v h264_nvenc -preset p7 -tune hq -profile:v high -level:v 4.2 -rc cbr -b:v 34375k -bufsize 55000k',
+                 '-vf scale=trunc(iw*sar/2)*2:trunc(ih/2)*2:flags=lanczos', '-c:v h264_nvenc -preset p7 -tune hq -profile:v high -level:v 4.2 -rc cbr -b:v 34375k -bufsize 34375k',
                  '-bf 0 -refs 3 -dpb_size 3', '-coder cabac -g 30 -no-scenecut 1', '-c:a libfdk_aac -profile:a aac_low -b:a 128k -ar 48000 -ac 2'); yok = @('crop=', 'fps=', '-b_ref_mode') },
             @{ ad = 'TikTok varsayilani komutu: HEVC 10 bit telefon kaynak (Main, seviye otomatik)'; k = '03_'; arg = @('--sadece-komut'); komut = @(
-                 '-c:v h264_nvenc -preset p7 -tune hq -profile:v main -rc cbr -b:v 34375k -bufsize 55000k', '-bf 0 -refs 3 -dpb_size 3', '-g 30'); yok = @('-level:v', 'crop=', 'fps=') },
+                 '-c:v h264_nvenc -preset p7 -tune hq -profile:v main -rc cbr -b:v 34375k -bufsize 34375k', '-bf 0 -refs 3 -dpb_size 3', '-g 30'); yok = @('-level:v', 'crop=', 'fps=') },
             @{ ad = 'TikTok varsayilani komutu: High@3.2 kare kaynak (34375 kb/s 3.2 sinirini asar, NVENC reddederdi: seviye 4.1)'; k = '07_'; arg = @('--sadece-komut'); komut = @(
-                 '-c:v h264_nvenc -preset p7 -tune hq -profile:v high -level:v 4.1 -rc cbr -b:v 34375k -bufsize 55000k'); yok = @('-level:v 3.2') },
+                 '-c:v h264_nvenc -preset p7 -tune hq -profile:v high -level:v 4.1 -rc cbr -b:v 34375k -bufsize 34375k'); yok = @('-level:v 3.2') },
             @{ ad = 'Hata mesaji: TikTok varsayilani (NVENC) kart yokken (Turkce aciklama + gunluk dosyasi)'; k = '07_'; arg = @(); hata = 'NVENC kullanılamadı' }
           )
           $satirlar = @(); $hatali = 0; $i = 0
@@ -297,3 +301,99 @@ jobs:
           if ($hatali) { "`n$hatali ayar denemesinde sorun var."; exit 1 }
           "`nTum ayar denemeleri temiz."
           exit 0  # son deneme bilerek hata koduyla biter; adimin sonucunu o belirlemesin
+
+      - name: x264 seviye denemesi (programin sectigi seviyede x264 uyarmamali, bir alt seviyede uyarmali)
+        if: always()
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          $kok = (Resolve-Path kaynaklar).Path
+          $man = Get-Content (Join-Path $kok manifest.json) -Raw -Encoding utf8 | ConvertFrom-Json
+          function Kaynak($ad) { Join-Path $kok ($man | Where-Object { $_.dosya -like "$ad*" } | Select-Object -First 1).dosya }
+          # 352x288 7,5 fps High@1.1: seviye en cok 2 referans kare tasir (B-kare / B-piramit denemeleri icin)
+          $cif = Join-Path $PWD 'cif_11.mp4'
+          ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=352x288:rate=15/2 -t 2 -pix_fmt yuv420p -c:v libx264 -preset ultrafast -profile:v high -level:v 1.1 -x264-params 8x8dct=1 -y $cif
+          "CIF kaynak (profil, seviye): " + (ffprobe -v error -select_streams v:0 -show_entries stream=profile,level -of csv=p=0 $cif)
+          $sira = @('1.0', '1b', '1.1', '1.2', '1.3', '2.0', '2.1', '2.2', '3.0', '3.1', '3.2', '4.0', '4.1', '4.2', '5.0', '5.1', '5.2', '6.0', '6.1', '6.2')
+          function A([string[]]$ayarlar) { $ayarlar | ForEach-Object { '--ayarla'; $_ } }
+          $vbvYok = A 'Video.X264.VbvMaks=null', 'Video.X264.VbvTampon=null'
+          $durumlar = @(
+            @{ ad = 'YouTube varsayilani, 1080p30 High@4.0'; k = '10_'; arg = @(); bek = '4.1'; alt = $true },
+            @{ ad = 'YouTube varsayilani, 1080x1920 29.97 High@4.0'; k = '02_'; arg = @(); bek = '4.1'; alt = $true },
+            @{ ad = 'YouTube varsayilani, 1080x1080 High@3.2'; k = '07_'; arg = @(); bek = '4.1'; alt = $true },
+            @{ ad = 'YouTube varsayilani, 1080p60 High@4.2 (ayni kalir)'; k = '01_'; arg = @(); bek = '4.2' },
+            @{ ad = 'YouTube varsayilani, 1080x2400 High@5.0 (ayni kalir)'; k = '13_'; arg = @(); bek = '5.0' },
+            @{ ad = 'VBV bos: kaynagin 4.0 seviyesi yeter'; k = '10_'; arg = $vbvYok; bek = '4.0' },
+            @{ ad = 'Referans 5 (1080p 4.x en cok 4 kare)'; k = '10_'; arg = (A 'Video.X264.Ref=5'); bek = '5.0'; alt = $true },
+            @{ ad = 'slow, referans bos (ffmpeg seviyeye kisar)'; k = '10_'; arg = (A 'Video.X264.OnAyar=slow', 'Video.X264.Ref=null'); bek = '4.1'; alt = $true },
+            @{ ad = 'veryslow, referans ve B-kare bos'; k = '10_'; arg = (A 'Video.X264.OnAyar=veryslow', 'Video.X264.Ref=null', 'Video.X264.BKare=null'); bek = '4.1'; alt = $true },
+            @{ ad = 'animation, referans ve B-kare bos'; k = '10_'; arg = (A 'Video.X264.Ayar=animation', 'Video.X264.Ref=null', 'Video.X264.BKare=null'); bek = '4.1'; alt = $true },
+            @{ ad = 'Blu-ray uyumlu, referans 8 (x264 en cok 6 kullanir)'; k = '10_'; arg = (A 'Video.X264.Ref=8', 'Video.X264.BlurayUyumlu=true'); bek = '5.0'; alt = $true },
+            @{ ad = 'CBR 40000, tampon bos (2 kati: 80000)'; k = '10_'; arg = (A 'Video.X264.Mod=Cbr', 'Video.X264.BitHizi=40000', 'Video.X264.VbvTampon=null'); bek = '5.0'; alt = $true },
+            @{ ad = 'Profil high, 8x8 DCT kapali, VBV 55000 / 70000 (dosya Main olur)'; k = '10_'; arg = (A 'Video.X264.Profil=high', 'Video.X264.Dct8x8=false', 'Video.X264.VbvMaks=55000', 'Video.X264.VbvTampon=70000'); bek = '5.0'; alt = $true },
+            @{ ad = 'Profil kaynak (High), VBV 55000 / 70000'; k = '10_'; arg = (A 'Video.X264.VbvMaks=55000', 'Video.X264.VbvTampon=70000'); bek = '4.1'; alt = $true },
+            @{ ad = 'CIF 1.1: 3 referans'; k = 'cif'; arg = $vbvYok; bek = '1.2'; alt = $true },
+            @{ ad = 'CIF 1.1: 2 referans'; k = 'cif'; arg = $vbvYok + (A 'Video.X264.Ref=2'); bek = '1.1' },
+            @{ ad = 'CIF 1.1: 2 referans, 1 B-kare (piramit olmaz)'; k = 'cif'; arg = $vbvYok + (A 'Video.X264.Ref=2', 'Video.X264.BKare=1'); bek = '1.1' },
+            @{ ad = 'CIF 1.1: 2 referans, 2 B-kare (piramit: 4 kare)'; k = 'cif'; arg = $vbvYok + (A 'Video.X264.Ref=2', 'Video.X264.BKare=2'); bek = '1.2'; alt = $true },
+            @{ ad = 'CIF 1.1: 2 referans, 2 B-kare, piramit yok'; k = 'cif'; arg = $vbvYok + (A 'Video.X264.Ref=2', 'Video.X264.BKare=2', 'Video.X264.BPiramit=none'); bek = '1.1' },
+            @{ ad = 'CIF 1.1: referans ve B-kare bos (medium: 3 B-kare, piramit)'; k = 'cif'; arg = $vbvYok + (A 'Video.X264.Ref=null', 'Video.X264.BKare=null'); bek = '1.2'; alt = $true },
+            @{ ad = 'CIF 1.1: referans ve B-kare bos, ultrafast (B-kare yok)'; k = 'cif'; arg = $vbvYok + (A 'Video.X264.OnAyar=ultrafast', 'Video.X264.Ref=null', 'Video.X264.BKare=null'); bek = '1.1' },
+            @{ ad = 'CIF 1.1: ultrafast + animation (2 B-kare, piramit)'; k = 'cif'; arg = $vbvYok + (A 'Video.X264.OnAyar=ultrafast', 'Video.X264.Ayar=animation', 'Video.X264.Ref=null', 'Video.X264.BKare=null'); bek = '1.2'; alt = $true }
+          )
+          $satirlar = @(); $hatali = 0; $i = 0
+          foreach ($d in $durumlar) {
+            $i++
+            $src = if ($d.k -eq 'cif') { $cif } else { Kaynak $d.k }
+            $log = & ./smoke/ReliosExport.Smoke.exe $src (Join-Path $PWD "seviye/$i") '--profil' 'youtube' '--sadece-komut' @($d.arg) 2>&1 | ForEach-Object { "$_" }
+            $komut = [string]($log | Where-Object { $_ -like 'Komut 1/*' } | Select-Object -First 1)
+            function Al($desen) { if ($komut -match $desen) { $Matches[1] } else { $null } }
+            $sev = Al ' -level:v (\S+)'
+            $ffArg = @('-preset', (Al ' -preset (\S+)'))
+            if ($t = Al ' -tune (\S+)') { $ffArg += @('-tune', $t) }
+            if ($t = Al ' -profile:v (\S+)') { $ffArg += @('-profile:v', $t) }
+            if ($t = Al ' -b:v (\S+)') { $ffArg += @('-b:v', $t) }
+            $xp = Al ' -x264-params (\S+)'
+            # Programin komutundaki x264 ayarlariyla (yalnizca seviye degisir) 2 kare kodlanir; x264 seviyeyi asan her
+            # sinir icin "... > level limit" uyarisi yazar.
+            function Dene($seviye) {
+              $c = & ffmpeg -hide_banner -nostdin -i $src -map 0:v:0 -frames:v 2 -pix_fmt yuv420p -c:v libx264 @ffArg '-level:v' $seviye '-x264-params' $xp -f null - 2>&1 | ForEach-Object { "$_" }
+              @($c | Where-Object { $_ -match 'level limit' } | ForEach-Object { ($_ -split '\] ', 2)[-1] })
+            }
+            $sonuc = 'OK'; $not = ''
+            if (-not $sev -or -not $xp) { $sonuc = 'FARK'; $not = "komutta -level:v / -x264-params yok: $komut" }
+            else {
+              $u = Dene $sev
+              if ($sev -ne $d.bek) { $sonuc = 'FARK'; $not += "beklenen $($d.bek) · " }
+              if ($u.Count) { $sonuc = 'FARK'; $not += "x264 uyardi: $($u -join '; ')" } else { $not += "$sev ile uyari yok" }
+              if ($d.alt) {
+                $j = [array]::IndexOf($sira, $sev)
+                if ($j -gt 0) {
+                  $altSev = $sira[$j - 1]
+                  $u2 = Dene $altSev
+                  if ($u2.Count) { $not += " · $altSev ile: $($u2[0])" } else { $sonuc = 'FARK'; $not += " · $altSev ile de uyari yok (gereksiz yukseltme)" }
+                }
+              }
+            }
+            if ($sonuc -ne 'OK') { $hatali++ }
+            Write-Host "$sonuc  $i. $($d.ad): seviye $sev · $not"
+            $satirlar += "| $i | $($d.ad) | $sev | $not | $sonuc |"
+          }
+          # x264, 2'den az B-karede B-piramidi kapatir (ayar penceresindeki not bunu soyler)
+          foreach ($b in 1, 2) {
+            $i++
+            $o = Join-Path $PWD "piramit_$b.mp4"
+            ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=352x288:rate=30 -frames:v 8 -c:v libx264 -preset medium -x264-params "bframes=$b" -y $o
+            $sei = [regex]::Match([IO.File]::ReadAllText($o, [Text.Encoding]::ASCII), 'bframes=\d+ b_pyramid=\d+').Value
+            $bek = if ($b -eq 1) { 'bframes=1 b_pyramid=0' } else { 'bframes=2 b_pyramid=2' }
+            $sonuc = if ($sei -eq $bek) { 'OK' } else { 'FARK' }
+            if ($sonuc -ne 'OK') { $hatali++ }
+            Write-Host "$sonuc  $i. B-piramit, $b B-kare: $sei (beklenen $bek)"
+            $satirlar += "| $i | B-piramit, $b B-kare (hiz ayari medium) | - | $sei (beklenen $bek) | $sonuc |"
+          }
+          $tablo = @("", "| # | x264 seviye denemesi | Programin seviyesi | x264 | Sonuc |", "|---|---|---|---|---|") + $satirlar
+          "`n===== X264 SEVIYE ====="
+          $tablo | ForEach-Object { $_ }
+          $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          if ($hatali) { "`n$hatali denemede sorun var."; exit 1 }
+          "`nProgramin sectigi her seviyede x264 uyarmadi; yukseltilen her durumda bir alt seviye yetmiyor."
+          exit 0

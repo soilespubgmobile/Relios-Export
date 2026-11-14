@@ -149,7 +149,7 @@
                                       SelectedValue="{Binding BPiramit, Converter={StaticResource Bos}}"/>
                         </DockPanel>
                         <TextBlock Style="{StaticResource Ipucu}" Margin="220,-2,0,10"
-                                   Text="B-kare sapması, uyarlamalı B-kare ve B-piramit yalnızca B-kare 1 ve üstündeyken etkilidir; B-kare 0 iken hiçbiri kullanılmaz."/>
+                                   Text="B-kare sapması ve uyarlamalı B-kare yalnızca B-kare 1 ve üstündeyken, B-piramit 2 ve üstündeyken etkilidir; B-kare 0 iken hiçbiri kullanılmaz."/>
 
                         <TextBlock Text="ÖNDEN BAKIŞ VE DİLİMLER" Style="{StaticResource AltBaslik}"/>
                         <DockPanel Style="{StaticResource FormSatiri}">
@@ -166,9 +166,9 @@
                         <DockPanel Style="{StaticResource FormSatiri}" IsEnabled="{Binding Deblock}">
                             <TextBlock Text="Güç · eşik (alfa, beta)" Style="{StaticResource PencereEtiketi}"/>
                             <StackPanel Orientation="Horizontal">
-                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding DeblockAlfa, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding DeblockAlfa, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                                 <TextBlock Text="," Margin="6,0" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
-                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding DeblockBeta, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding DeblockBeta, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                             </StackPanel>
                         </DockPanel>
                         <TextBlock Style="{StaticResource Ipucu}" Margin="220,-2,0,10" Text="-6 ile 6 arası. İkisi birlikte girilirse yazılır."/>
@@ -200,9 +200,9 @@
                         <DockPanel Style="{StaticResource FormSatiri}" IsEnabled="{Binding Psy}">
                             <TextBlock Text="Psy-RD · Psy-Trellis" Style="{StaticResource PencereEtiketi}"/>
                             <StackPanel Orientation="Horizontal">
-                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding PsyRd, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding PsyRd, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                                 <TextBlock Text="," Margin="6,0" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
-                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding PsyTrellis, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding PsyTrellis, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                             </StackPanel>
                         </DockPanel>
                         <TextBlock Style="{StaticResource Ipucu}" Margin="220,-2,0,10" Text="Ör. 1 ve 0,15. İkisi birlikte girilirse yazılır."/>
@@ -211,9 +211,9 @@
                         <DockPanel Style="{StaticResource FormSatiri}">
                             <TextBlock Text="Ölü bölge · inter, intra" Style="{StaticResource PencereEtiketi}"/>
                             <StackPanel Orientation="Horizontal">
-                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding OluBolgeInter, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding OluBolgeInter, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                                 <TextBlock Text="," Margin="6,0" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
-                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding OluBolgeIntra, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding OluBolgeIntra, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                             </StackPanel>
                         </DockPanel>
                         <DockPanel Style="{StaticResource FormSatiri}">
@@ -237,9 +237,9 @@
                         <DockPanel Style="{StaticResource FormSatiri}">
                             <TextBlock Text="QP en az · en çok" Style="{StaticResource PencereEtiketi}"/>
                             <StackPanel Orientation="Horizontal">
-                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding QpMin, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding QpMin, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                                 <TextBlock Text="," Margin="6,0" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
-                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding QpMax, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding QpMax, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                             </StackPanel>
                         </DockPanel>
                         <DockPanel Style="{StaticResource FormSatiri}">
@@ -249,9 +249,9 @@
                         <DockPanel Style="{StaticResource FormSatiri}">
                             <TextBlock Text="I/P · P/B oranı" Style="{StaticResource PencereEtiketi}"/>
                             <StackPanel Orientation="Horizontal">
-                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding IpOrani, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding IpOrani, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                                 <TextBlock Text="," Margin="6,0" VerticalAlignment="Center" Foreground="{StaticResource TextMuted}"/>
-                                <TextBox Style="{StaticResource SayiKutusu}" Width="72" Text="{Binding PbOrani, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Text="{Binding PbOrani, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                             </StackPanel>
                         </DockPanel>
                         <DockPanel Style="{StaticResource FormSatiri}">

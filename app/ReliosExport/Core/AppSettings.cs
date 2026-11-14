@@ -72,11 +72,19 @@ public sealed class AppSettings
                 a.Video.Kap = KapBicimi.Mov;
             }
 
-            if (id == ExportProfileId.TikTok && a.Surum < 7
-                && a.Video.Nvenc is { Mod: NvencModu.Cbr, BitHizi: 34375, Tampon: null })
+            if (id == ExportProfileId.TikTok && a.Surum == 7
+                && a.Video.Nvenc is { Mod: NvencModu.Cbr, BitHizi: 34375, Tampon: 55000 })
             {
-                // TikTok varsayılanının tamponu boştu (bit hızı kadar); artık 55000 kb.
-                a.Video.Nvenc.Tampon = 55000;
+                // 0.8.6 TikTok tamponunu kendiliğinden 55000 kb yapmıştı; varsayılan yine boş (bit hızı kadar).
+                a.Video.Nvenc.Tampon = null;
+            }
+
+            if (id == ExportProfileId.YouTube && a.Surum < 8
+                && a.Video.X264 is { VbvMaks: 14000, VbvTampon: 28000 })
+            {
+                // Eski YouTube varsayılanı (en yüksek bit hızı 14000 kb/s, tampon 28000 kb): artık 34375 / 55000.
+                a.Video.X264.VbvMaks = 34375;
+                a.Video.X264.VbvTampon = 55000;
             }
         }
 

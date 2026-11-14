@@ -380,9 +380,8 @@ public static class ArgsBuilder
 
     private static void X264(List<string> args, ProfilAyarlari a, MediaInfo media, int gecis, string gecisDosyasi)
     {
-        var x = a.Video.X264;
         var p = X264Parametreleri(a, CiktiKareHizi(a, media), media);
-        X264Bayraklari(args, x, gecis, gecisDosyasi, media);
+        X264Bayraklari(args, a, gecis, gecisDosyasi, media);
         args.AddRange(["-x264-params", string.Join(':', p)]);
     }
 
@@ -395,7 +394,7 @@ public static class ArgsBuilder
     public static string X264KomutMetni(ProfilAyarlari a, double fps)
     {
         var args = new List<string>();
-        X264Bayraklari(args, a.Video.X264, 0, string.Empty, null);
+        X264Bayraklari(args, a, 0, string.Empty, null);
         args.AddRange(["-x264-params", X264ParametreMetni(a, fps)]);
         return KomutMetni(args);
     }
@@ -735,10 +734,177 @@ public static class ArgsBuilder
     /// <summary>Baseline profilde B-kare yoktur.</summary>
     private static int? NvencBKare(NvencAyarlari n, string profil) => profil == "baseline" ? 0 : n.BKare;
 
-    private static void X264Bayraklari(List<string> args, X264Ayarlari x, int gecis, string gecisDosyasi, MediaInfo? media)
+    /// <summary>
+    /// x264'e verilecek seviye. "kaynak" ise kaynağın seviyesi; ama çıktının boyutu, kare hızı, VBV'si (en yüksek
+    /// bit hızı / tampon) ya da referans kareleri (DPB) o seviyenin sınırını aşıyorsa yeten en düşük seviye
+    /// (NVENC'teki gibi). x264 aşan seviyeyle de kodlar, yalnızca uyarır; ama dosya kendi yazdığı seviyeye uymazdı.
+    /// </summary>
+    public static string X264Seviyesi(ProfilAyarlari a, MediaInfo? media)
+    {
+        var x = a.Video.X264;
+        var seviye = SeviyeCoz(x.Seviye, media);
+        if (x.Seviye != Kaynak || media is null || string.IsNullOrEmpty(seviye))
+        {
+            return seviye;
+        }
+
+        var (w, h) = CiktiBoyutu(a, media);
+        var fps = CiktiKareHizi(a, media);
+        var (vbvMaks, vbvTampon) = X264Vbv(x);
+        var gerekli = H264Seviye.EnAz(
+            w, h, fps, vbvMaks, vbvTampon, X264Dpb(x, AnahtarKareHesabi.Aralik(a.AnahtarKare, fps).EnBuyuk),
+            high: X264HighYazilirMi(x, media));
+        return H264Seviye.EnYuksek(seviye, gerekli);
+    }
+
+    /// <summary>
+    /// x264'ün kullanacağı VBV (kb/s, kbit); kullanmayacaksa (null, null). x264 VBV'yi yalnızca tampon verilince
+    /// kullanır: CRF'de en yüksek bit hızı da gerekir (yoksa tamponu yok sayar), ortalama bit hızı ve 2 / 3 geçişte
+    /// en yüksek bit hızı boşsa ortalamaya eşitlenir; sabit QP'de VBV yoktur. Ek parametrelerdeki değer önce gelir.
+    /// </summary>
+    private static (int? Maks, int? Tampon) X264Vbv(X264Ayarlari x)
+    {
+        if (x.Mod == X264Modu.SabitQp)
+        {
+            return (null, null);
+        }
+
+        var cbr = x.Mod == X264Modu.Cbr;
+        var maks = EkSayi(x, "vbv-maxrate") ?? (cbr ? x.BitHizi : x.VbvMaks);
+        var tampon = EkSayi(x, "vbv-bufsize") ?? (cbr ? x.VbvTampon ?? x.BitHizi * 2 : x.VbvTampon);
+        if (tampon is not > 0)
+        {
+            return (null, null);
+        }
+
+        if (maks is > 0)
+        {
+            return (maks, tampon);
+        }
+
+        // En yüksek bit hızı yok: CRF'de x264 tamponu yok sayar; ortalama bit hızında "assuming CBR" der.
+        if (x.Mod == X264Modu.Crf)
+        {
+            return (null, null);
+        }
+
+        return (x.BitHizi, tampon);
+    }
+
+    /// <summary>
+    /// Seviyenin taşıması gereken DPB (çözücünün saklayacağı kare sayısı), x264'ün hesabıyla: B-kare varsa en az 2,
+    /// B-piramitte (x264 piramidi 2'den az B-karede kapatır) en az 4; referans kare sayısı açıkça verildiyse en az o
+    /// kadar. Referans boşsa ffmpeg hız ayarının referansını seviyenin taşıyabileceğine kendisi kısar (seviyeyi
+    /// zorlamaz). Boş bırakılan B-kare hız ayarından (preset / tune); ek parametrelerdeki değer önce gelir.
+    /// </summary>
+    private static int X264Dpb(X264Ayarlari x, int? anahtarKareAraligi)
+    {
+        var refs = EkSayi(x, "ref") ?? x.Ref;
+        var bKare = EkSayi(x, "bframes") ?? x.BKare ?? X264HizAyarininBKaresi(x.OnAyar, x.Ayar);
+        if (x.BlurayUyumlu || EkSayi(x, "bluray-compat") is > 0)
+        {
+            // x264 Blu-ray uyumunda en çok 6 referans, 3 B-kare kullanır.
+            refs = refs is { } r ? Math.Min(r, 6) : (int?)null;
+            bKare = Math.Min(bKare, 3);
+        }
+
+        bKare = Math.Clamp(bKare, 0, anahtarKareAraligi is { } g && g > 1 ? Math.Min(16, g - 1) : 16);
+        var piramit = EkDeger(x, "b-pyramid") ?? x.BPiramit ?? "normal";
+        var bKareIcin = bKare >= 2 && piramit is not ("none" or "0") ? 4 : bKare > 0 ? 2 : 1;
+        return Math.Max(refs is { } n ? Math.Clamp(n, 1, 16) : 1, bKareIcin);
+    }
+
+    /// <summary>x264 hız ayarının (preset) ve ayarının (tune) B-kare sayısı (x264'teki gibi).</summary>
+    private static int X264HizAyarininBKaresi(string? onAyar, string? ayar)
+    {
+        var bKare = onAyar?.Trim().ToLowerInvariant() switch
+        {
+            "ultrafast" => 0,
+            "veryslow" => 8,
+            "placebo" => 16,
+            _ => 3, // x264'ün varsayılanı
+        };
+
+        // x264 tune'ları hız ayarından sonra ve yazıldıkları sırayla uygular.
+        foreach (var t in (ayar ?? string.Empty).Split(new[] { ',', '.', '/', '-', '+' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            switch (t.ToLowerInvariant())
+            {
+                case "animation":
+                    bKare += 2;
+                    break;
+                case "zerolatency":
+                    bKare = 0;
+                    break;
+            }
+        }
+
+        return bKare;
+    }
+
+    /// <summary>
+    /// x264 dosyaya özelliklerin gerektirdiği en düşük profili yazar; High'ın 1,25 kat bit hızı / tampon sınırı
+    /// yalnızca dosya gerçekten High (8x8 DCT ya da düz olmayan niceleme matrisi) olunca geçerli. Profil "kaynakla
+    /// aynı" ve kaynak High ise program 8x8 DCT'yi açar. Emin olunamayan durumda Main sınırı (daha yüksek seviye).
+    /// </summary>
+    private static bool X264HighYazilirMi(X264Ayarlari x, MediaInfo? media)
     {
         var profil = ProfilCoz(x.Profil, media);
-        var seviye = SeviyeCoz(x.Seviye, media);
+        if (!profil.StartsWith("high", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        // Ek parametreler komutun sonunda (x264 son değeri kullanır); sonra programın açtığı 8x8 DCT; sonra ayar /
+        // hız ayarı (yalnızca ultrafast 8x8 DCT'yi kapatır).
+        var ek = EkSayi(x, "8x8dct");
+        var dct = ek is not null
+            ? ek > 0
+            : (x.Profil == Kaynak && profil == "high")
+              || (x.Dct8x8 ?? !string.Equals(x.OnAyar, "ultrafast", StringComparison.OrdinalIgnoreCase));
+        var cqm = x.Cqm is { } c && !string.Equals(c, "flat", StringComparison.OrdinalIgnoreCase);
+        return dct || cqm;
+    }
+
+    /// <summary>
+    /// Ek x264 parametrelerinde (anahtar=değer:anahtar=değer) anahtarın son değeri (x264 sonuncuyu kullanır);
+    /// "no-anahtar=1" 0 sayılır (x264'teki gibi); yoksa null.
+    /// </summary>
+    private static string? EkDeger(X264Ayarlari x, string anahtar)
+    {
+        string? deger = null;
+        foreach (var parca in x.EkParametreler.Split(':', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var esit = parca.IndexOf('=');
+            var ad = (esit < 0 ? parca : parca[..esit]).Trim().Replace('_', '-').ToLowerInvariant();
+            if (ad == anahtar)
+            {
+                deger = esit < 0 ? "1" : parca[(esit + 1)..].Trim();
+            }
+            else if (ad == "no-" + anahtar)
+            {
+                var v = esit < 0 ? "1" : parca[(esit + 1)..].Trim().ToLowerInvariant();
+                deger = v is "0" or "false" or "no" ? "1" : "0";
+            }
+        }
+
+        return deger;
+    }
+
+    /// <summary>Ek parametredeki sayı; açık / kapalı değerleri (true / yes, false / no) 1 / 0 sayılır.</summary>
+    private static int? EkSayi(X264Ayarlari x, string anahtar) => EkDeger(x, anahtar)?.ToLowerInvariant() switch
+    {
+        null => null,
+        "true" or "yes" => 1,
+        "false" or "no" => 0,
+        var d => int.TryParse(d, NumberStyles.Integer, Inv, out var n) ? n : (int?)null,
+    };
+
+    private static void X264Bayraklari(List<string> args, ProfilAyarlari a, int gecis, string gecisDosyasi, MediaInfo? media)
+    {
+        var x = a.Video.X264;
+        var profil = ProfilCoz(x.Profil, media);
+        var seviye = X264Seviyesi(a, media);
         args.AddRange(["-c:v", "libx264", "-preset", x.OnAyar]);
         if (!string.IsNullOrEmpty(x.Ayar))
         {

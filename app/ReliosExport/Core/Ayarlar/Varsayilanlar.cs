@@ -8,9 +8,9 @@ namespace ReliosExport.Core.Ayarlar;
 public static class Varsayilanlar
 {
     /// <summary>
-    /// TikTok: ekran kartıyla (NVENC H.264) sabit bit hızı CBR 34375 kb/s, tampon 55000 kb; çözünürlük, kare hızı, H.264 profili
-    /// ve seviyesi kaynakla aynı; B-kare yok, 3 referans kare, 30 karede bir anahtar kare; MOV.
-    /// Ses: FDK AAC LC 128 kb/s 48 kHz (9:16 ayarıyla aynı).
+    /// TikTok: ekran kartıyla (NVENC H.264) sabit bit hızı CBR 34375 kb/s (tampon boş: bit hızı kadar, 1 saniye);
+    /// çözünürlük, kare hızı, H.264 profili ve seviyesi kaynakla aynı; B-kare yok, 3 referans kare, 30 karede bir
+    /// anahtar kare; MOV. Ses: FDK AAC LC 128 kb/s 48 kHz (9:16 ayarıyla aynı).
     /// </summary>
     public static ProfilAyarlari TikTok()
     {
@@ -26,7 +26,6 @@ public static class Varsayilanlar
         var n = v.Nvenc;
         n.Mod = NvencModu.Cbr;
         n.BitHizi = 34375;
-        n.Tampon = 55000; // VBV tamponu en fazla 55000 kbit (Main@4.1 / 4.2 sınırı 62500)
         n.Profil = "kaynak";
         n.Seviye = "kaynak";
         n.BKare = 0;
@@ -139,9 +138,10 @@ public static class Varsayilanlar
     }
 
     /// <summary>
-    /// YouTube: dikey 9:16 ayarıyla aynı kodlama ayarları — x264, anahtar kare, FDK AAC —
-    /// tek farkla: çözünürlük, en-boy oranı, kare hızı, H.264 profili ve seviyesi kaynakla aynı
-    /// (kırpma, ölçekleme, fps çevirme yok); anahtar kare aralığı 30 fps'e göre, kare hızıyla orantılı.
+    /// YouTube: dikey 9:16 ayarının kodlama ayarları (x264 CRF 18, anahtar kare, FDK AAC). Farkları: çözünürlük,
+    /// en-boy oranı, kare hızı, H.264 profili ve seviyesi kaynakla aynı (kırpma, ölçekleme, fps çevirme yok);
+    /// VBV en yüksek bit hızı 34375 kb/s, tampon 55000 kb; anahtar kare aralığı 30 fps'e göre, kare hızıyla
+    /// orantılı; MOV.
     /// </summary>
     public static ProfilAyarlari YouTube()
     {
@@ -156,6 +156,12 @@ public static class Varsayilanlar
         // Kullanıcı sonradan "hedef boyut"a geçerse başlangıç değerleri
         a.Video.Genislik = 1920;
         a.Video.Yukseklik = 1080;
+
+        // Kalite yine CRF 18'le belirlenir; bit hızı en çok 34375 kb/s'e çıkar (9:16 ayarında 14000 / 28000).
+        // Kaynağın seviyesi buna yetmezse (ör. 1080p30 High@4.0'ın sınırı 25000 / 31250) yeten en düşük seviye
+        // yazılır (4.1); bkz. ArgsBuilder.X264Seviyesi.
+        a.Video.X264.VbvMaks = 34375;
+        a.Video.X264.VbvTampon = 55000;
 
         // Anahtar kare aralığı aynı süre kalsın: 30 fps'te 50 / 26, 60 fps'te 100 / 51 (kare hızı kaynakla aynı).
         a.AnahtarKare.Birim = AralikBirimi.Kare30;

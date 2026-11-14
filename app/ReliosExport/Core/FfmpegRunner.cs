@@ -304,11 +304,13 @@ public static class Exporter
             }
         }
 
-        if (a.Video.Kodlayici == VideoKodlayici.Nvenc && a.Video.Nvenc.Seviye == ArgsBuilder.Kaynak)
+        var nvenc = a.Video.Kodlayici == VideoKodlayici.Nvenc;
+        if ((nvenc ? a.Video.Nvenc.Seviye : a.Video.X264.Seviye) == ArgsBuilder.Kaynak)
         {
-            // Kaynağın seviyesi bit hızına / boyuta yetmiyorsa NVENC için yükseltilir (yoksa kodlama başlamaz).
+            // Kaynağın seviyesi çıktının bit hızına / tamponuna / boyutuna yetmiyorsa yükseltilir (NVENC aşan
+            // seviyeyle kodlamayı hiç başlatmaz; x264 başlatır ama dosya yazdığı seviyeye uymazdı).
             var kaynakSeviye = ArgsBuilder.SeviyeCoz(ArgsBuilder.Kaynak, media);
-            var seviye = ArgsBuilder.NvencSeviyesi(a, media);
+            var seviye = nvenc ? ArgsBuilder.NvencSeviyesi(a, media) : ArgsBuilder.X264Seviyesi(a, media);
             if (kaynakSeviye.Length > 0 && seviye != kaynakSeviye)
             {
                 text += $" · seviye {kaynakSeviye} → {seviye}";

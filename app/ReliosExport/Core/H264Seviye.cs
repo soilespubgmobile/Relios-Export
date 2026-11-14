@@ -4,7 +4,8 @@ namespace ReliosExport.Core;
 /// H.264 seviye sınırları (ITU-T H.264, Tablo A-1) ve bir çıktının en az hangi seviyeyi gerektirdiği.
 /// <para>NVENC seviyeyi katı denetler: istenen seviye çıktının boyutuna, kare hızına, bit hızına, tamponuna ya da
 /// referans kare sayısına yetmezse "InitializeEncoder failed: invalid param (8): Invalid Level." verip hiç
-/// başlamaz. x264 ise yalnızca uyarır.</para>
+/// başlamaz. x264 ise yalnızca uyarır ("... > level limit"), dosya yazdığı seviyeye uymaz; program ikisinde de
+/// "kaynakla aynı" seviyeyi gerekirse yükseltir.</para>
 /// </summary>
 public static class H264Seviye
 {

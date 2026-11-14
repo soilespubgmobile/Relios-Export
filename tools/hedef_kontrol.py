@@ -2,11 +2,13 @@
 """Bir MP4 çıktısını kullanıcının hedef meta verisiyle karşılaştırır.
 
 Kullanım: python3 -I hedef_kontrol.py <dosya.mp4> [iş parçacığı] [--boyut GxY] [--fps N/D]
-          [--gop N/M] [--kap mp4|mov] [--profil kaynak --kaynak <kaynak video>]
+          [--gop N/M] [--vbv MAKS/TAMPON] [--kap mp4|mov] [--profil kaynak --kaynak <kaynak video>]
 
 --boyut / --fps: YouTube gibi "kaynakla aynı" profillerde beklenen çözünürlük ve kare hızı
 (varsayılan TikTok hedefi: 1216x2160, 30000/1001). --gop: beklenen keyint / min-keyint (varsayılan 50/26;
-YouTube'da 30 fps'e göre: 60 fps'te 100/51). Diğer her şey XviD4PSP hedefiyle aynı beklenir.
+YouTube'da 30 fps'e göre: 60 fps'te 100/51). --vbv: beklenen vbv-maxrate / vbv-bufsize (varsayılan 14000/28000;
+YouTube 34375/55000). --profil kaynak: profil ve seviye kaynakla aynı; seviye çıktıya yetmiyorsa (boyut, kare hızı,
+VBV, referans kare) yeten en düşük seviye. Diğer her şey XviD4PSP hedefiyle aynı beklenir.
 """
 import json
 import re
@@ -36,12 +38,18 @@ BOYUT = _SECENEK.get("--boyut", "1216x2160")
 GOP_N, GOP_MIN = _SECENEK.get("--gop", "50/26").split("/")
 KAP = _SECENEK.get("--kap", "mp4")
 TARGET_X264 = TARGET_X264.replace("keyint=50 / keyint_min=26", f"keyint={GOP_N} / keyint_min={GOP_MIN}")
+VBV_MAKS, VBV_TAMPON = (int(x) for x in _SECENEK.get("--vbv", "14000/28000").split("/"))
+TARGET_X264 = TARGET_X264.replace("vbv_maxrate=14000 / vbv_bufsize=28000",
+                                  f"vbv_maxrate={VBV_MAKS} / vbv_bufsize={VBV_TAMPON}")
+# Hedefte ref=3, bframes=0: çözücü 3 kare saklar (DPB).
+DPB_KARE = 3
 FPS = _SECENEK.get("--fps", "30000/1001")
 BW, BH = (int(x) for x in BOYUT.split("x"))
 # Beklenen H.264 profili / seviyesi: varsayılan TikTok hedefi (Main@L5.0). "kaynak": programdaki
 # ArgsBuilder.ProfilCoz / SeviyeCoz'un bağımsız karşılığı (H.264 kaynakta aynısı, değilse Main + otomatik).
 BEK_PROFIL, BEK_SEVIYE = "Main", "5.0"
-if _SECENEK.get("--profil") == "kaynak":
+KAYNAK_MODU = _SECENEK.get("--profil") == "kaynak"
+if KAYNAK_MODU:
     _k = json.loads(subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name,profile,level",
          "-of", "json", _SECENEK["--kaynak"]], capture_output=True, text=True, encoding="utf-8").stdout)["streams"][0]
@@ -53,6 +61,35 @@ if _SECENEK.get("--profil") == "kaynak":
     else:
         BEK_PROFIL, BEK_SEVIYE = "Main", None  # seviyeyi x264 seçer
 LOOKAHEAD = {"7": "1", "8": "1", "67": "11"}.get(THREADS, "?")
+
+# H.264 Tablo A-1 (programdaki H264Seviye'den bağımsız yazıldı):
+# (seviye, saniyede makroblok, karede makroblok, DPB makroblok, bit hızı kb/s, tampon kbit; Main, High'da 5/4 katı)
+SEVIYELER = [
+    ("1.0", 1485, 99, 396, 64, 175), ("1b", 1485, 99, 396, 128, 350), ("1.1", 3000, 396, 900, 192, 500),
+    ("1.2", 6000, 396, 2376, 384, 1000), ("1.3", 11880, 396, 2376, 768, 2000), ("2.0", 11880, 396, 2376, 2000, 2000),
+    ("2.1", 19800, 792, 4752, 4000, 4000), ("2.2", 20250, 1620, 8100, 4000, 4000),
+    ("3.0", 40500, 1620, 8100, 10000, 10000), ("3.1", 108000, 3600, 18000, 14000, 14000),
+    ("3.2", 216000, 5120, 20480, 20000, 20000), ("4.0", 245760, 8192, 32768, 20000, 25000),
+    ("4.1", 245760, 8192, 32768, 50000, 62500), ("4.2", 522240, 8704, 34816, 50000, 62500),
+    ("5.0", 589824, 22080, 110400, 135000, 135000), ("5.1", 983040, 36864, 184320, 240000, 240000),
+    ("5.2", 2073600, 36864, 184320, 240000, 240000), ("6.0", 4177920, 139264, 696320, 240000, 240000),
+    ("6.1", 8355840, 139264, 696320, 480000, 480000), ("6.2", 16711680, 139264, 696320, 800000, 800000),
+]
+SIRA = [s[0] for s in SEVIYELER]
+
+
+def en_az_seviye(w, h, fps_pay, fps_payda, vbv_maks, vbv_tampon, dpb, high):
+    """x264'ün seviye denetimi (validate_levels) gibi: kare boyutu ve kenarı, DPB, VBV, saniyedeki makroblok."""
+    mbw, mbh = (w + 15) // 16, (h + 15) // 16
+    mbs = mbw * mbh
+    kat = 5 if high else 4
+    for ad, mbps, fs, dpbmbs, br, cpb in SEVIYELER:
+        if fs < mbs or fs * 8 < mbw * mbw or fs * 8 < mbh * mbh or mbs * dpb > dpbmbs:
+            continue
+        if vbv_maks > br * kat // 4 or vbv_tampon > cpb * kat // 4 or mbs * fps_pay // fps_payda > mbps:
+            continue
+        return ad
+    return None
 TARGET_X264 = TARGET_X264.replace("THREADS", THREADS).replace("LOOKAHEAD", LOOKAHEAD)
 rows = []
 
@@ -87,7 +124,19 @@ chk("Kap", KAP, KAP if KAP in fmt.get("format_name", "") and path.lower().endswi
 chk("Video codec", "h264", v.get("codec_name"))
 chk("Video profil", BEK_PROFIL, v.get("profile"))
 _lv = f"{v.get('level', 0) / 10:.1f}"
-chk("Video level", BEK_SEVIYE or "otomatik (x264)", _lv, ok=_lv == BEK_SEVIYE if BEK_SEVIYE else float(_lv) > 0)
+if KAYNAK_MODU:
+    # Kaynakla aynı seviye; çıktıya yetmiyorsa yeten en düşük. Kaynak H.264 değilse x264'ün seçtiği en düşük seviye.
+    _fp, _fd = (int(x) for x in v["r_frame_rate"].split("/"))
+    _gerekli = en_az_seviye(v["width"], v["height"], _fp, _fd, VBV_MAKS, VBV_TAMPON, DPB_KARE, BEK_PROFIL == "High")
+    if BEK_SEVIYE in SIRA and _gerekli:
+        _bek = max(BEK_SEVIYE, _gerekli, key=SIRA.index)
+        _ad = _bek if _bek == BEK_SEVIYE else f"{_bek} (kaynak {BEK_SEVIYE} yetmez)"
+    else:
+        _bek = _gerekli or BEK_SEVIYE
+        _ad = f"{_bek} (x264 seçer)"
+    chk("Video level", _ad, _lv, ok=_lv == _bek)
+else:
+    chk("Video level", BEK_SEVIYE, _lv)
 chk("Çözünürlük", BOYUT, f"{v.get('width')}x{v.get('height')}")
 sar = v.get("sample_aspect_ratio")
 if sar in (None, "0:1", "N/A"):

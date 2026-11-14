@@ -67,9 +67,10 @@ public sealed class ProfilAyarlari : Gozlenebilir
     ///    (eski 9:16 ayarı 0.8.4'e kadar "hazır ön ayar" olarak duruyordu; artık ön ayar listesine program bir şey koymaz).
     /// 5: YouTube'da anahtar kare aralığı 30 fps'e göre (50 / 26, 60 fps'te 100 / 51).
     /// 6: TikTok ve YouTube varsayılan dosya biçimi MOV.
-    /// 7: TikTok NVENC tamponu 55000 kb (bit hızı 34375 kb/s).
+    /// 7: (yalnızca 0.8.6) TikTok NVENC tamponu 55000 kb; 8'de geri alındı.
+    /// 8: TikTok NVENC tamponu yine boş (bit hızı kadar); YouTube x264 VBV 34375 kb/s, tampon 55000 kb.
     /// </summary>
-    public const int GuncelSurum = 7;
+    public const int GuncelSurum = 8;
 
     public VideoAyarlari Video { get => _video; set => Bagla(ref _video, value); }
 
