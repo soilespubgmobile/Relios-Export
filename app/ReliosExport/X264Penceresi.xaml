@@ -149,7 +149,7 @@
                                       SelectedValue="{Binding BPiramit, Converter={StaticResource Bos}}"/>
                         </DockPanel>
                         <TextBlock Style="{StaticResource Ipucu}" Margin="220,-2,0,10"
-                                   Text="B-kare sapması ve uyarlamalı B-kare yalnızca B-kare 1 ve üstündeyken, B-piramit 2 ve üstündeyken etkilidir; B-kare 0 iken hiçbiri kullanılmaz."/>
+                                   Text="B&#x2011;kare sapması ve uyarlamalı B&#x2011;kare yalnızca B&#x2011;kare 1 ve üstündeyken, B&#x2011;piramit 2 ve üstündeyken etkilidir; B&#x2011;kare 0 iken hiçbiri kullanılmaz."/>
 
                         <TextBlock Text="ÖNDEN BAKIŞ VE DİLİMLER" Style="{StaticResource AltBaslik}"/>
                         <DockPanel Style="{StaticResource FormSatiri}">
