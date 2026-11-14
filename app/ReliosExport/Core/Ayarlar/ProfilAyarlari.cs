@@ -69,8 +69,9 @@ public sealed class ProfilAyarlari : Gozlenebilir
     /// 6: TikTok ve YouTube varsayılan dosya biçimi MOV.
     /// 7: (yalnızca 0.8.6) TikTok NVENC tamponu 55000 kb; 8'de geri alındı.
     /// 8: TikTok NVENC tamponu yine boş (bit hızı kadar); YouTube x264 VBV 34375 kb/s, tampon 55000 kb.
+    /// 9: TikTok ve YouTube sesi WAV 16 bit 48 kHz, en yüksek dönüşüm kalitesi (soxr 33 bit), üçgen titreşim.
     /// </summary>
-    public const int GuncelSurum = 8;
+    public const int GuncelSurum = 9;
 
     public VideoAyarlari Video { get => _video; set => Bagla(ref _video, value); }
 

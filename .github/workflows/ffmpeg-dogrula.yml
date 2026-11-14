@@ -9,6 +9,8 @@ name: FFmpeg dogrulama (Windows)
 #    Programin urettigi komut, XviD4PSP ile dogrulanan 0.3.0'in komutuyla harf harf karsilastirilir.
 # 3) Diger ayarlar da denenir: YouTube varsayilani, 2 / 3 gecisli x264, WAV sesli MOV, siyah kenar,
 #    sessiz, ses seviyesi / gecikme, HE-AAC, NVENC komutu (tools/ayar_kontrol.py).
+# 4) Ses donusumu: TikTok ve YouTube varsayilani (WAV 16 bit 48 kHz) 24 bit kaynagi ucgen titresimle 16 bit'e
+#    indirmeli, 16 bit 48 kHz kaynagin sesine hic dokunmamali (tools/ses_donusum_kontrol.py).
 on:
   workflow_run:
     workflows: ["Relios FFmpeg (win64, nonfree, en son kararli surumler)"]
@@ -205,15 +207,15 @@ jobs:
           $yt = @('--profil', 'youtube')
           $testler = @(
             @{ ad = 'YouTube varsayilani: 1080p60 yatay H.264 (XviD4PSP ayarlari; boyut, fps, profil, seviye kaynak)'; k = '01_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               hedef = @('--boyut', '1920x1080', '--fps', '60/1', '--gop', '100/51', '--vbv', '34375/55000', '--kap', 'mov'); ayar = @('kap=mov') },
+               hedef = @('--boyut', '1920x1080', '--fps', '60/1', '--gop', '100/51', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'pcm16'); ayar = @('kap=mov', 'acodec=pcm_s16le', 'ar=48000', 'ac=2') },
             @{ ad = 'YouTube varsayilani: telefon (dondurulmus HEVC 10 bit)'; k = '03_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               hedef = @('--boyut', '1080x1920', '--fps', '30/1', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov'); ayar = @('kap=mov') },
+               hedef = @('--boyut', '1080x1920', '--fps', '30/1', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'pcm16'); ayar = @('kap=mov', 'acodec=pcm_s16le', 'ar=48000', 'ac=2') },
             @{ ad = 'YouTube varsayilani: 1080x2400 uzun dikey'; k = '13_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               hedef = @('--boyut', '1080x2400', '--fps', '30/1', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov'); ayar = @('kap=mov') },
+               hedef = @('--boyut', '1080x2400', '--fps', '30/1', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'pcm16'); ayar = @('kap=mov', 'acodec=pcm_s16le', 'ar=48000', 'ac=2') },
             @{ ad = 'YouTube varsayilani: 32 bit float WAV sesli 4K50 ProRes'; k = '06_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               hedef = @('--boyut', '3840x2160', '--fps', '50/1', '--gop', '83/42', '--vbv', '34375/55000', '--kap', 'mov'); ayar = @('kap=mov') },
+               hedef = @('--boyut', '3840x2160', '--fps', '50/1', '--gop', '83/42', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'pcm16'); ayar = @('kap=mov', 'acodec=pcm_s16le', 'ar=48000', 'ac=2') },
             @{ ad = 'YouTube varsayilani: 1080x1920 29.97 fps H.264 High@4.0 (34375 kb/s 4.0 sinirini asar: seviye 4.1)'; k = '02_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               hedef = @('--boyut', '1080x1920', '--fps', '30000/1001', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov'); ayar = @('kap=mov') },
+               hedef = @('--boyut', '1080x1920', '--fps', '30000/1001', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'pcm16'); ayar = @('kap=mov', 'acodec=pcm_s16le', 'ar=48000', 'ac=2') },
             @{ ad = 'YouTube varsayilani: 1080x1080 sessiz H.264 High@3.2 (seviye 4.1)'; k = '07_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
                hedef = @('--boyut', '1080x1080', '--fps', '30/1', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov'); ayar = @('kap=mov') },
             @{ ad = 'x264 2 gecis 4000 kb/s'; k = '12_'; arg = @('--profil', 'tiktok-916', '--ayarla', 'Video.X264.Mod=IkiGecis', '--ayarla', 'Video.X264.BitHizi=4000'); sag = @()
@@ -232,9 +234,10 @@ jobs:
                ayar = @('ses_seviye=-42.8±2.5') },
             @{ ad = 'FDK HE-AAC 48 kb/s (Turkce adli kaynak)'; k = '08_'; arg = @('--profil', 'tiktok-916', '--ayarla', 'Ses.Fdk.Profil=aac_he', '--ayarla', 'Ses.Fdk.BitHizi=48'); sag = @()
                ayar = @('acodec=aac', 'aprofil=HE-AAC', 'abit=48000±10%') },
-            @{ ad = 'TikTok varsayilani komutu: H.264 High@4.2 60 fps kaynak (NVENC CBR 34375, kart yok: yalnizca komut)'; k = '01_'; arg = @('--sadece-komut'); komut = @(
+            @{ ad = 'TikTok varsayilani komutu: H.264 High@4.2 60 fps kaynak (NVENC CBR 34375; ses WAV 16 bit, soxr 33 bit, ucgen titresim; kart yok: yalnizca komut)'; k = '01_'; arg = @('--sadece-komut'); komut = @(
                  '-vf scale=trunc(iw*sar/2)*2:trunc(ih/2)*2:flags=lanczos', '-c:v h264_nvenc -preset p7 -tune hq -profile:v high -level:v 4.2 -rc cbr -b:v 34375k -bufsize 34375k',
-                 '-bf 0 -refs 3 -dpb_size 3', '-coder cabac -g 30 -no-scenecut 1', '-c:a libfdk_aac -profile:a aac_low -b:a 128k -ar 48000 -ac 2'); yok = @('crop=', 'fps=', '-b_ref_mode') },
+                 '-bf 0 -refs 3 -dpb_size 3', '-coder cabac -g 30 -no-scenecut 1',
+                 '-af aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a pcm_s16le -ar 48000 -ac 2'); yok = @('crop=', 'fps=', '-b_ref_mode', 'libfdk_aac') },
             @{ ad = 'TikTok varsayilani komutu: HEVC 10 bit telefon kaynak (Main, seviye otomatik)'; k = '03_'; arg = @('--sadece-komut'); komut = @(
                  '-c:v h264_nvenc -preset p7 -tune hq -profile:v main -rc cbr -b:v 34375k -bufsize 34375k', '-bf 0 -refs 3 -dpb_size 3', '-g 30'); yok = @('-level:v', 'crop=', 'fps=') },
             @{ ad = 'TikTok varsayilani komutu: High@3.2 kare kaynak (34375 kb/s 3.2 sinirini asar, NVENC reddederdi: seviye 4.1)'; k = '07_'; arg = @('--sadece-komut'); komut = @(
@@ -302,6 +305,54 @@ jobs:
           if ($hatali) { "`n$hatali ayar denemesinde sorun var."; exit 1 }
           "`nTum ayar denemeleri temiz."
           exit 0  # son deneme bilerek hata koduyla biter; adimin sonucunu o belirlemesin
+
+      - name: Ses donusumu denemesi (WAV 16 bit 48 kHz; 24 bit kaynakta ucgen titresim, 16 bit kaynakta bit bit ayni)
+        if: always()
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          # Gercek 24 bit ayrintili ses (aevalsrc double uretir) ile 24 bit ve 16 bit 48 kHz stereo deneme videolari
+          $ses = 'aevalsrc=0.5*sin(2*PI*997*t)+0.001*sin(2*PI*3001*t)|0.4*sin(2*PI*1499*t):s=48000:d=2'
+          $k24 = Join-Path $PWD 'ses_24bit_48k.mov'
+          $k16 = Join-Path $PWD 'ses_16bit_48k.mov'
+          foreach ($k in @(@($k24, 'pcm_s24le'), @($k16, 'pcm_s16le'))) {
+            ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i $ses -t 2 -pix_fmt yuv420p -c:v libx264 -preset veryfast -c:a $k[1] -y $k[0]
+            "$([IO.Path]::GetFileName($k[0])): " + (ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,sample_rate,channels -of csv=p=0 $k[0])
+          }
+          $durumlar = @(
+            @{ ad = 'YouTube varsayilani, 24 bit 48 kHz kaynak (16 bit, ucgen titresim)'; src = $k24; arg = @('--profil', 'youtube'); kip = 'titresim' },
+            @{ ad = 'YouTube varsayilani, 16 bit 48 kHz kaynak (bit bit ayni)'; src = $k16; arg = @('--profil', 'youtube'); kip = 'ayni' },
+            @{ ad = 'TikTok varsayilani sesi (video x264), 24 bit 48 kHz kaynak'; src = $k24; arg = @('--ayarla', 'Video.Kodlayici=X264'); kip = 'titresim' },
+            @{ ad = 'TikTok varsayilani sesi (video x264), 16 bit 48 kHz kaynak'; src = $k16; arg = @('--ayarla', 'Video.Kodlayici=X264'); kip = 'ayni' }
+          )
+          $satirlar = @(); $hatali = 0; $i = 0
+          foreach ($d in $durumlar) {
+            $i++
+            $dir = Join-Path $PWD "ses/$i"
+            Write-Host "::group::$i. $($d.ad)"
+            $log = & ./smoke/ReliosExport.Smoke.exe $d.src $dir @($d.arg) 2>&1 | ForEach-Object { "$_" }
+            $rc = $LASTEXITCODE
+            $log | ForEach-Object { Write-Host $_ }
+            $sonuc = 'OK'; $ozet = ''
+            if ($rc -ne 0) { $sonuc = "HATA (kod $rc)" }
+            else {
+              $out = (Get-ChildItem -LiteralPath $dir | Where-Object { $_.Extension -in '.mp4', '.mov' } | Select-Object -First 1).FullName
+              $c = & python -X utf8 -I tools/ses_donusum_kontrol.py $d.src $out $d.kip 2>&1 | ForEach-Object { "$_" }
+              $crc = $LASTEXITCODE
+              $c | ForEach-Object { Write-Host $_ }
+              $ozet = (($c | Where-Object { $_ -match '^(OK|FARK) +(En büyük hata|Ortalama karesel hata|Örnekler bit bit aynı)' }) -replace '^\S+ +(.*?) +hedef: .*çıktı: (.*)$', '$1: $2') -join ' · '
+              if ($crc -ne 0) { $sonuc = 'FARK'; $ozet += ' · ' + (($c | Where-Object { $_ -like 'FARK*' }) -join ' | ') }
+            }
+            if ($sonuc -ne 'OK') { $hatali++ }
+            Write-Host "::endgroup::"
+            $satirlar += "| $i | $($d.ad) | $ozet | $sonuc |"
+          }
+          $tablo = @("", "| # | Ses donusumu | Kontroller | Sonuc |", "|---|---|---|---|") + $satirlar
+          "`n===== SES DONUSUMU ====="
+          $tablo | ForEach-Object { $_ }
+          $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          if ($hatali) { "`n$hatali ses denemesinde sorun var."; exit 1 }
+          "`n24 bit kaynak 16 bit'e ucgen titresimle indirildi; 16 bit 48 kHz kaynagin sesi bit bit ayni kaldi."
+          exit 0
 
       - name: x264 seviye denemesi (programin sectigi seviyede x264 uyarmamali, bir alt seviyede uyarmali)
         if: always()

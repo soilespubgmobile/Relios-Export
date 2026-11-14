@@ -42,14 +42,32 @@ public sealed class AppSettings
     /// <summary>Profilin ayarları; kayıt yoksa ya da bozuksa fabrika ayarları.</summary>
     public ProfilAyarlari ProfilAyari(ExportProfileId id)
     {
+        Profiller.TryGetValue(id, out var kayit);
+        var a = Yukselt(id, kayit, onAyar: false);
+        if (!ReferenceEquals(a, kayit))
+        {
+            Profiller[id] = a;
+        }
+
+        return a;
+    }
+
+    /// <summary>
+    /// Kaydedilmiş bir ön ayarı profilin ayarı yapar. Ön ayar kullanıcının adını verip kaydettiği ayardır:
+    /// eski sürümde kaydedildiyse de sesi kaydedildiği gibi kalır (ses varsayılanının değişmesi ona yansımaz).
+    /// </summary>
+    public ProfilAyarlari OnAyariYukle(ExportProfileId id, ProfilAyarlari kayit) =>
+        Profiller[id] = Yukselt(id, kayit, onAyar: true);
+
+    private static ProfilAyarlari Yukselt(ExportProfileId id, ProfilAyarlari? a, bool onAyar)
+    {
         // Eski sürümlerde kaydedilmiş YouTube ayarı eski varsayılandır: yenisiyle değişir.
-        if (!Profiller.TryGetValue(id, out var a) || a is null
+        if (a is null
             || a.Surum is < 1 or > ProfilAyarlari.GuncelSurum
             || (id == ExportProfileId.YouTube && a.Surum < 3)
             || (id == ExportProfileId.TikTok && a.Surum < 4))
         {
             a = Varsayilanlar.For(id);
-            Profiller[id] = a;
         }
         else
         {
@@ -77,6 +95,19 @@ public sealed class AppSettings
             {
                 // 0.8.6 TikTok tamponunu kendiliğinden 55000 kb yapmıştı; varsayılan yine boş (bit hızı kadar).
                 a.Video.Nvenc.Tampon = null;
+            }
+
+            if (!onAyar && a.Surum < 9
+                && a.Ses is { Kodlayici: SesKodlayici.FdkAac, OrnekHizi: 48000, Kanal: KanalModu.Stereo, Kalite: DonusumKalitesi.Yuksek, Titresim: Titresim.Yok }
+                && a.Ses.Fdk is
+                {
+                    Profil: "aac_low", Mod: FdkModu.Cbr, BitHizi: 128, Kesim: 0, Afterburner: true, Sinyal: "default",
+                    DrcProfili: null, SikistirmaProfili: null, DrcHedef: null, SikistirmaHedef: null, ProgramSeviyesi: null,
+                })
+            {
+                // Eski ses varsayılanı (FDK AAC 128 kb/s 48 kHz): artık WAV 16 bit, en yüksek dönüşüm kalitesi,
+                // üçgen titreşim. Kullanıcının değiştirdiği ses ayarına dokunulmaz.
+                Varsayilanlar.PlatformSesi(a.Ses);
             }
 
             if (id == ExportProfileId.YouTube && a.Surum < 8

@@ -443,8 +443,8 @@ public partial class MainWindow : Window
     {
         var p = SelectedProfile;
         var not = p.Id == ExportProfileId.TikTok
-            ? " TikTok: ekran kartıyla (NVENC) CBR 34375 kb/s; boyut, kare hızı, profil ve seviye kaynakla aynı; FDK AAC 128 kb/s 48 kHz; MOV."
-            : " YouTube: x264 CRF 18, en yüksek bit hızı 34375 kb/s, tampon 55000 kb; çözünürlük, kare hızı, profil ve seviye kaynakla aynı; anahtar kare 30 fps'e göre 50 / 26; FDK AAC 128 kb/s 48 kHz; MOV.";
+            ? " TikTok: ekran kartıyla (NVENC) CBR 34375 kb/s; boyut, kare hızı, profil ve seviye kaynakla aynı; ses WAV 16 bit 48 kHz (en yüksek dönüşüm kalitesi, üçgen titreşim); MOV."
+            : " YouTube: x264 CRF 18, en yüksek bit hızı 34375 kb/s, tampon 55000 kb; çözünürlük, kare hızı, profil ve seviye kaynakla aynı; anahtar kare 30 fps'e göre 50 / 26; ses WAV 16 bit 48 kHz (en yüksek dönüşüm kalitesi, üçgen titreşim); MOV.";
         if (!ConfirmDialog.Ask(
                 this,
                 $"{p.DisplayName} ayarları varsayılana dönsün mü?",
@@ -466,7 +466,7 @@ public partial class MainWindow : Window
         var dlg = new OnAyarPenceresi(_settings, SelectedProfile, _ayarlar) { Owner = this };
         if (dlg.ShowDialog() == true && dlg.Yuklenen is { } yeni)
         {
-            _settings.Profiller[SelectedProfile.Id] = yeni;
+            _settings.OnAyariYukle(SelectedProfile.Id, yeni);
             AyarlariBagla();
             KaydetHemen();
         }

@@ -3,12 +3,14 @@
 
 Kullanım: python3 -I hedef_kontrol.py <dosya.mp4> [iş parçacığı] [--boyut GxY] [--fps N/D]
           [--gop N/M] [--vbv MAKS/TAMPON] [--kap mp4|mov] [--profil kaynak --kaynak <kaynak video>]
+          [--ses aac|pcm16]
 
 --boyut / --fps: YouTube gibi "kaynakla aynı" profillerde beklenen çözünürlük ve kare hızı
 (varsayılan TikTok hedefi: 1216x2160, 30000/1001). --gop: beklenen keyint / min-keyint (varsayılan 50/26;
 YouTube'da 30 fps'e göre: 60 fps'te 100/51). --vbv: beklenen vbv-maxrate / vbv-bufsize (varsayılan 14000/28000;
 YouTube 34375/55000). --profil kaynak: profil ve seviye kaynakla aynı; seviye çıktıya yetmiyorsa (boyut, kare hızı,
-VBV, referans kare) yeten en düşük seviye. Diğer her şey XviD4PSP hedefiyle aynı beklenir.
+VBV, referans kare) yeten en düşük seviye. --ses pcm16: ses WAV (PCM) 16 bit 48 kHz stereo (varsayılan aac: AAC-LC
+128 kb/s 48 kHz stereo). Diğer her şey XviD4PSP hedefiyle aynı beklenir.
 """
 import datetime
 import json
@@ -38,6 +40,9 @@ _SECENEK = dict(zip(_ek[0::2], _ek[1::2]))
 BOYUT = _SECENEK.get("--boyut", "1216x2160")
 GOP_N, GOP_MIN = _SECENEK.get("--gop", "50/26").split("/")
 KAP = _SECENEK.get("--kap", "mp4")
+SES = _SECENEK.get("--ses", "aac")
+if SES not in ("aac", "pcm16"):
+    sys.exit(f"--ses aac ya da pcm16 olmalı: {SES}")
 TARGET_X264 = TARGET_X264.replace("keyint=50 / keyint_min=26", f"keyint={GOP_N} / keyint_min={GOP_MIN}")
 VBV_MAKS, VBV_TAMPON = (int(x) for x in _SECENEK.get("--vbv", "14000/28000").split("/"))
 TARGET_X264 = TARGET_X264.replace("vbv_maxrate=14000 / vbv_bufsize=28000",
@@ -188,12 +193,21 @@ chk("Yazan kütüphane (XviD4PSP ile aynı)", f"x264 core {TARGET_CORE}", f"x264
 if a is None:
     note("Ses", "-", "yok (sessiz video)")
 else:
-    chk("Ses codec", "aac", a.get("codec_name"))
-    chk("Ses profili", "LC", a.get("profile"))
+    if SES == "pcm16":
+        # WAV (PCM) 16 bit: 48000 x 16 x 2 = 1536 kb/s, her zaman sabit.
+        chk("Ses codec", "pcm_s16le", a.get("codec_name"))
+        chk("Ses örnek biçimi", "s16", a.get("sample_fmt"))
+        chk("Ses bit derinliği", "16", a.get("bits_per_sample"))
+    else:
+        chk("Ses codec", "aac", a.get("codec_name"))
+        chk("Ses profili", "LC", a.get("profile"))
     chk("Örnekleme hızı", "48000", a.get("sample_rate"))
     chk("Kanal", "2 (stereo)", f"{a.get('channels')} ({a.get('channel_layout')})")
     br = int(a.get("bit_rate") or 0)
-    chk("Ses bitrate", "~128 kb/s", f"{br / 1000:.1f} kb/s", ok=126000 <= br <= 130500)
+    if SES == "pcm16":
+        chk("Ses bitrate", "1536 kb/s", f"{br / 1000:.1f} kb/s", ok=br == 1536000)
+    else:
+        chk("Ses bitrate", "~128 kb/s", f"{br / 1000:.1f} kb/s", ok=126000 <= br <= 130500)
     chk("Ses dili", "eng", a.get("tags", {}).get("language"))
     chk("Ses Default", "Yes", "Yes" if a.get("disposition", {}).get("default") else "No")
 
@@ -266,7 +280,11 @@ if moov:
             if "wave" in kids and "esds" not in kids:
                 # MOV: AAC'nin esds kutusu ses örnek tanımındaki "wave" kutusunun içindedir.
                 kids.update({n: (cs, ce) for n, cs, ce in boxes(raw, *kids["wave"])})
-            if "esds" in kids:
+            if SES == "pcm16":
+                # MOV'da 16 bit küçük sonlu PCM: "sowt" (ya da "lpcm") örnek tanımı; AAC'nin esds kutusu olmaz.
+                chk("Ses örnek tanımı (stsd)", "sowt / lpcm", etype, ok=etype in ("sowt", "lpcm"))
+                chk("Ses esds kutusu", "yok", "var" if "esds" in kids else "yok")
+            elif "esds" in kids:
                 q = kids["esds"][0] + 4
                 q += 1
                 _, q = desc_len(raw, q)

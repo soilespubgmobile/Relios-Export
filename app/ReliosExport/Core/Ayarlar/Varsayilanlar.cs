@@ -10,7 +10,7 @@ public static class Varsayilanlar
     /// <summary>
     /// TikTok: ekran kartıyla (NVENC H.264) sabit bit hızı CBR 34375 kb/s (tampon boş: bit hızı kadar, 1 saniye);
     /// çözünürlük, kare hızı, H.264 profili ve seviyesi kaynakla aynı; B-kare yok, 3 referans kare, 30 karede bir
-    /// anahtar kare; MOV. Ses: FDK AAC LC 128 kb/s 48 kHz (9:16 ayarıyla aynı).
+    /// anahtar kare; MOV. Ses: WAV 16 bit 48 kHz (bkz. <see cref="PlatformSesi"/>).
     /// </summary>
     public static ProfilAyarlari TikTok()
     {
@@ -41,7 +41,26 @@ public static class Varsayilanlar
         k.EnBuyuk = 30;
         k.EnKucuk = null;
         k.SahneDegisimi = 0;
+        PlatformSesi(a.Ses);
         return a;
+    }
+
+    /// <summary>
+    /// TikTok ve YouTube sesi: WAV (PCM) 16 bit, 48 kHz, stereo (dosya MOV). Platform sesi zaten kendisi sıkıştırır;
+    /// 16 bit PCM, FDK AAC'nin de girişte kullandığı 16 bitlik sesi hiç sıkıştırmadan verir (YouTube'a yükleyip
+    /// indirerek denendi: 128 kb/s AAC yüklemeye göre 15-17 kHz'te 1,7-3,6 dB daha çok ayrıntı kalıyor, altı aynı).
+    /// Dönüşüm en yüksek kalitede (soxr 33 bit). 24 / 32 bit ya da kayan noktalı kaynak 16 bite üçgen titreşimle
+    /// iner: çok kısık yerlerde ve sönen seslerde yuvarlama bozulması olmaz. Kaynak zaten 16 bit 48 kHz ise ses
+    /// bit bit aynı kalır.
+    /// </summary>
+    public static void PlatformSesi(SesAyarlari s)
+    {
+        s.Kodlayici = SesKodlayici.Wav;
+        s.WavBit = WavBitDerinligi.Bit16;
+        s.OrnekHizi = 48000;
+        s.Kanal = KanalModu.Stereo;
+        s.Kalite = DonusumKalitesi.EnYuksek;
+        s.Titresim = Titresim.Ucgen;
     }
 
     /// <summary>
@@ -138,10 +157,10 @@ public static class Varsayilanlar
     }
 
     /// <summary>
-    /// YouTube: dikey 9:16 ayarının kodlama ayarları (x264 CRF 18, anahtar kare, FDK AAC). Farkları: çözünürlük,
+    /// YouTube: dikey 9:16 ayarının kodlama ayarları (x264 CRF 18, anahtar kare). Farkları: çözünürlük,
     /// en-boy oranı, kare hızı, H.264 profili ve seviyesi kaynakla aynı (kırpma, ölçekleme, fps çevirme yok);
     /// VBV en yüksek bit hızı 34375 kb/s, tampon 55000 kb; anahtar kare aralığı 30 fps'e göre, kare hızıyla
-    /// orantılı; MOV.
+    /// orantılı; MOV; ses WAV 16 bit 48 kHz (bkz. <see cref="PlatformSesi"/>).
     /// </summary>
     public static ProfilAyarlari YouTube()
     {
@@ -166,6 +185,7 @@ public static class Varsayilanlar
         // Anahtar kare aralığı aynı süre kalsın: 30 fps'te 50 / 26, 60 fps'te 100 / 51 (kare hızı kaynakla aynı).
         a.AnahtarKare.Birim = AralikBirimi.Kare30;
         a.Video.Kap = KapBicimi.Mov;
+        PlatformSesi(a.Ses);
         return a;
     }
 

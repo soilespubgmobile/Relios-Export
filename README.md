@@ -10,7 +10,7 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
     sekmeli pencerelerde. Ayarlar adıyla ön ayar olarak kaydedilebilir.
   - TikTok varsayılanı: ekran kartıyla (NVENC H.264) CBR 34375 kb/s, tampon 1 saniye; çözünürlük, kare hızı,
     H.264 profili ve seviyesi kaynakla aynı; B-kare yok, 3 referans kare, 30 karede bir anahtar kare;
-    FDK AAC 128 kb/s 48 kHz. NVENC seviyeyi katı denetler: kaynağın seviyesi çıktının boyutuna, kare hızına,
+    ses WAV 16 bit 48 kHz (aşağıda). NVENC seviyeyi katı denetler: kaynağın seviyesi çıktının boyutuna, kare hızına,
     bit hızına ya da tamponuna yetmiyorsa (ör. 34375 kb/s, 4.0 ve altının sınırını aşar) seviye yeten en düşük
     seviyeye çıkar; yoksa kart kodlamayı hiç başlatmaz. Referans kare tamponu (DPB) da referans kare sayısı kadar
     verilir (`-dpb_size`): ffmpeg'de `-refs` yalnızca kare başına referanstır, DPB boş kalınca kart 6 kare seçer
@@ -19,7 +19,7 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
   - Varsayılan kayıt yeri: İndirilenler klasörü.
   - Dikey 9:16 ayarı (1216×2160, 29,97 fps, x264 Main@L5.0 CRF 18, FDK AAC 128 kb/s 48 kHz; önceki TikTok
     varsayılanı) yalnızca kodda durur: YouTube varsayılanının temeli ve GitHub doğrulamasının hedef ayarı.
-  - YouTube varsayılanı: dikey 9:16 ayarıyla aynı x264 (CRF 18) / FDK AAC ayarları; çözünürlük, en-boy oranı,
+  - YouTube varsayılanı: dikey 9:16 ayarıyla aynı x264 (CRF 18) ayarları; ses WAV 16 bit 48 kHz; çözünürlük, en-boy oranı,
     kare hızı, H.264 profili ve seviyesi kaynakla aynı. VBV: en yüksek bit hızı 34375 kb/s, tampon 55000 kb
     (kalite yine CRF 18'le belirlenir; bit hızı en çok 34375 kb/s'e çıkar). Anahtar kare aralığı 30 fps'e göre
     50 / 26 ve kare hızıyla orantılı (aynı süre): 25 fps'te 42 / 22, 50 fps'te 83 / 42, 60 fps'te 100 / 51
@@ -30,6 +30,13 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
     uymazdı. Referans kareler x264'ün kendi hesabıyla sayılır (B-kare varsa en az 2, B-piramitte en az 4; boş
     bırakılanlar hız ayarından).
   - TikTok ve YouTube varsayılan dosya biçimi MOV (dikey 9:16 ön ayarı MP4); ses WAV ise dosya her zaman MOV.
+  - TikTok ve YouTube sesi WAV (PCM) 16 bit, 48 kHz, stereo. Platform sesi zaten kendisi sıkıştırır; 16 bit PCM,
+    FDK AAC'nin de girişte kullandığı 16 bitlik sesi hiç sıkıştırmadan verir. YouTube'a yükleyip indirerek
+    denendi: 128 kb/s AAC yüklemeye göre 15–17 kHz'te 1,7–3,6 dB daha çok ayrıntı kalıyor, altı aynı.
+    Dönüşüm en yüksek kalitede (soxr 33 bit); 24 / 32 bit ya da kayan noktalı kaynak 16 bite üçgen titreşimle
+    iner (çok kısık yerlerde ve sönen seslerde yuvarlama bozulması olmaz). Kaynak zaten 16 bit 48 kHz ise ses
+    bit bit aynı kalır. Son kullanılan ayardaki ses eski varsayılandaysa (FDK AAC 128 kb/s) kendiliğinden geçer;
+    adını verip kaydettiğin ön ayarların sesi kaydedildiği gibi kalır.
   - Kaynağın etiketleri (başlık, tarih, kodlayıcı adları) çıktıya taşınmaz. Video ve ses izi İngilizce (eng)
     etiketlenir. Encoded date / Tagged date (dosyanın ve izlerin oluşturma / değiştirme zamanı) kodlamanın
     başladığı an olarak yazılır: bilgisayarın saatinden, MP4 / MOV kuralı gereği UTC (MediaInfo "UTC" diye
@@ -37,7 +44,7 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
   - Videonun yanında aynı adlı ses dosyası (ör. `edit1.mp4` için `edit1.wav`) varsa videonun kendi
     sesi yerine o kullanılır. Videoda birden fazla ses izi varsa WAV (PCM) ya da başka kayıpsız iz tercih edilir
     (aynı videoda WAV ve AAC varsa FDK AAC'ye WAV'dan çevrilir), yoksa ilk iz.
-    Ses (videonun içindeki PCM / WAV dahil) 48 kHz'e yüksek kaliteyle (soxr) çevrilir;
+    Ses (videonun içindeki PCM / WAV dahil) 48 kHz'e soxr ile çevrilir;
     seviye değişmez. Mono ses stereoya iki kanala tam seviyede açılır (ffmpeg'in `-ac 2` açılışı -3 dB kısardı).
   - Ayarlar program klasöründeki `ayarlar.json` dosyasında, hata günlükleri `Günlük` klasöründe durur
     (kurulum yok). Program bir arşivin içinden (WinRAR, 7-Zip, zip) açılırsa arşiv programı exe'yi geçici bir

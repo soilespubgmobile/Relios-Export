@@ -433,13 +433,20 @@ internal static class BirimKontrol
         }
 
         var k = Komut(1, Varsayilanlar.YouTube());
-        Iceriyor("Mono kaynak (YouTube)", k, " -af pan=stereo|c0=c0|c1=c0,aresample=48000:resampler=soxr ");
-        Iceriyor("Mono kaynak (YouTube)", k, " -ar 48000 -ac 2 ");
+        Iceriyor("Mono kaynak (YouTube)", k, " -af pan=stereo|c0=c0|c1=c0,aresample=48000:resampler=soxr:precision=33:dither_method=triangular ");
+        Iceriyor("Mono kaynak (YouTube)", k, " -c:a pcm_s16le -ar 48000 -ac 2 ");
         k = Komut(1, Varsayilanlar.TikTok());
-        Iceriyor("Mono kaynak (TikTok)", k, " -af pan=stereo|c0=c0|c1=c0,aresample=48000:resampler=soxr ");
+        Iceriyor("Mono kaynak (TikTok)", k, " -af pan=stereo|c0=c0|c1=c0,aresample=48000:resampler=soxr:precision=33:dither_method=triangular ");
+        Iceriyor("Mono kaynak (TikTok)", k, " -c:a pcm_s16le -ar 48000 -ac 2 ");
         k = Komut(2, Varsayilanlar.YouTube());
         Icermiyor("Stereo kaynak", k, "pan=");
-        Iceriyor("Stereo kaynak", k, " -af aresample=48000:resampler=soxr ");
+        Iceriyor("Stereo kaynak", k, " -af aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a pcm_s16le ");
+
+        // FDK AAC seçilirse de aynı dönüşüm (en yüksek kalite, üçgen titreşim) kullanılır.
+        var fdk = Varsayilanlar.YouTube();
+        fdk.Ses.Kodlayici = SesKodlayici.FdkAac;
+        k = Komut(2, fdk);
+        Iceriyor("YouTube'da FDK AAC seçilirse", k, " -af aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac -profile:a aac_low -b:a 128k ");
         var kaynakKanal = Varsayilanlar.YouTube();
         kaynakKanal.Ses.Kanal = KanalModu.Kaynak;
         k = Komut(1, kaynakKanal);
@@ -511,8 +518,21 @@ internal static class BirimKontrol
     {
         Console.WriteLine();
         Console.WriteLine("--- Kayıtlı ayarların yeni sürüme geçişi (eski ayar dosyası)");
+        // 0.8.8'e kadar TikTok ve YouTube sesi: FDK AAC 128 kb/s 48 kHz, yüksek kalite (soxr 20 bit), titreşim yok.
+        static void EskiSes(SesAyarlari s)
+        {
+            s.Kodlayici = SesKodlayici.FdkAac;
+            s.WavBit = WavBitDerinligi.Bit24;
+            s.Kalite = DonusumKalitesi.Yuksek;
+            s.Titresim = Titresim.Yok;
+        }
+
+        static string SesOzeti(SesAyarlari s) => $"{s.Kodlayici} {s.WavBit} {s.OrnekHizi} {s.Kalite} {s.Titresim}";
+        const string YeniSes = "Wav Bit16 48000 EnYuksek Ucgen";
+
         var eskiYt = Varsayilanlar.YouTube();
         eskiYt.Surum = 4;
+        EskiSes(eskiYt.Ses);
         eskiYt.Video.Kap = KapBicimi.Mp4;
         eskiYt.AnahtarKare.Birim = AralikBirimi.Kare;
         eskiYt.Video.X264.Crf = 20; // kullanıcının kendi değişikliği korunmalı
@@ -521,20 +541,25 @@ internal static class BirimKontrol
         var eskiTt = Varsayilanlar.TikTok();
         eskiTt.Surum = 5;
         eskiTt.Video.Kap = KapBicimi.Mp4;
+        EskiSes(eskiTt.Ses);
         var ayarlar = new AppSettings();
         ayarlar.Profiller[ExportProfileId.YouTube] = eskiYt;
         ayarlar.Profiller[ExportProfileId.TikTok] = eskiTt;
 
         var yt = ayarlar.ProfilAyari(ExportProfileId.YouTube);
-        Kontrol("YouTube 4 → 8: dosya biçimi", "Mov", yt.Video.Kap.ToString());
-        Kontrol("YouTube 4 → 8: anahtar kare birimi", "Kare30", yt.AnahtarKare.Birim.ToString());
-        Kontrol("YouTube 4 → 8: kendi CRF değeri korunur", "20", yt.Video.X264.Crf.ToString());
-        Kontrol("YouTube 4 → 8: VBV 34375 / 55000", "34375/55000", $"{yt.Video.X264.VbvMaks}/{yt.Video.X264.VbvTampon}");
+        Kontrol("YouTube 4 → 9: dosya biçimi", "Mov", yt.Video.Kap.ToString());
+        Kontrol("YouTube 4 → 9: anahtar kare birimi", "Kare30", yt.AnahtarKare.Birim.ToString());
+        Kontrol("YouTube 4 → 9: kendi CRF değeri korunur", "20", yt.Video.X264.Crf.ToString());
+        Kontrol("YouTube 4 → 9: VBV 34375 / 55000", "34375/55000", $"{yt.Video.X264.VbvMaks}/{yt.Video.X264.VbvTampon}");
         Kontrol("YouTube sürüm", ProfilAyarlari.GuncelSurum.ToString(), yt.Surum.ToString());
         var tt = ayarlar.ProfilAyari(ExportProfileId.TikTok);
-        Kontrol("TikTok 5 → 8: dosya biçimi", "Mov", tt.Video.Kap.ToString());
-        Kontrol("TikTok 5 → 8: NVENC kalır", "Nvenc", tt.Video.Kodlayici.ToString());
-        Kontrol("TikTok 5 → 8: tampon boş (bit hızı kadar)", "boş", tt.Video.Nvenc.Tampon?.ToString() ?? "boş");
+        Kontrol("TikTok 5 → 9: dosya biçimi", "Mov", tt.Video.Kap.ToString());
+        Kontrol("TikTok 5 → 9: NVENC kalır", "Nvenc", tt.Video.Kodlayici.ToString());
+        Kontrol("TikTok 5 → 9: tampon boş (bit hızı kadar)", "boş", tt.Video.Nvenc.Tampon?.ToString() ?? "boş");
+        Kontrol("TikTok 5 → 9: ses WAV 16 bit, en yüksek kalite, üçgen titreşim", YeniSes, SesOzeti(tt.Ses));
+        Kontrol("YouTube 4 → 9: ses WAV 16 bit, en yüksek kalite, üçgen titreşim", YeniSes, SesOzeti(yt.Ses));
+        Kontrol("TikTok varsayılanı: ses", YeniSes, SesOzeti(Varsayilanlar.TikTok().Ses));
+        Kontrol("YouTube varsayılanı: ses", YeniSes, SesOzeti(Varsayilanlar.YouTube().Ses));
 
         // 0.8.6'nın (sürüm 7) kendiliğinden yazdığı 55000 kb geri alınır; kullanıcının kendi VBV'si ve
         // yeni sürümde elle girilen tampon korunur.
@@ -548,9 +573,49 @@ internal static class BirimKontrol
         var ayarlar7 = new AppSettings();
         ayarlar7.Profiller[ExportProfileId.TikTok] = tt7;
         ayarlar7.Profiller[ExportProfileId.YouTube] = yt7;
-        Kontrol("TikTok 7 → 8: 0.8.6'nın tamponu geri alınır", "boş", ayarlar7.ProfilAyari(ExportProfileId.TikTok).Video.Nvenc.Tampon?.ToString() ?? "boş");
+        Kontrol("TikTok 7 → 9: 0.8.6'nın tamponu geri alınır", "boş", ayarlar7.ProfilAyari(ExportProfileId.TikTok).Video.Nvenc.Tampon?.ToString() ?? "boş");
         var yt8 = ayarlar7.ProfilAyari(ExportProfileId.YouTube).Video.X264;
-        Kontrol("YouTube 7 → 8: kendi VBV'si korunur", "20000/40000", $"{yt8.VbvMaks}/{yt8.VbvTampon}");
+        Kontrol("YouTube 7 → 9: kendi VBV'si korunur", "20000/40000", $"{yt8.VbvMaks}/{yt8.VbvTampon}");
+
+        // Kullanıcının kendi ses ayarı (ör. FDK AAC 256 kb/s) yeni sürümde de korunur.
+        var ytKendi = Varsayilanlar.YouTube();
+        ytKendi.Surum = 8;
+        EskiSes(ytKendi.Ses);
+        ytKendi.Ses.Fdk.BitHizi = 256;
+        var ayarlarKendi = new AppSettings();
+        ayarlarKendi.Profiller[ExportProfileId.YouTube] = ytKendi;
+        var sesKendi = ayarlarKendi.ProfilAyari(ExportProfileId.YouTube).Ses;
+        Kontrol("YouTube 8 → 9: kendi ses ayarı (FDK AAC 256) korunur", "FdkAac 256", $"{sesKendi.Kodlayici} {sesKendi.Fdk.BitHizi}");
+        var ttKendi = Varsayilanlar.TikTok();
+        ttKendi.Surum = 8;
+        EskiSes(ttKendi.Ses);
+        ttKendi.Ses.Fdk.Afterburner = false;
+        var ayarlarKendi2 = new AppSettings();
+        ayarlarKendi2.Profiller[ExportProfileId.TikTok] = ttKendi;
+        var sesKendi2 = ayarlarKendi2.ProfilAyari(ExportProfileId.TikTok).Ses;
+        Kontrol("TikTok 8 → 9: FDK ince ayarı değişmişse (afterburner kapalı) korunur", "FdkAac False Yuksek Yok",
+            $"{sesKendi2.Kodlayici} {sesKendi2.Fdk.Afterburner} {sesKendi2.Kalite} {sesKendi2.Titresim}");
+
+        // 0.8.8'de kaydedilmiş ön ayar (ses FDK AAC 128) yüklenince sesi kaydedildiği gibi kalır; yeniden açılınca da.
+        var onAyar = Varsayilanlar.YouTube();
+        onAyar.Surum = 8;
+        EskiSes(onAyar.Ses);
+        var ayarlarOn = new AppSettings();
+        var yuklenen = ayarlarOn.OnAyariYukle(ExportProfileId.YouTube, onAyar);
+        Kontrol("Ön ayar (sürüm 8) yüklenince sesi korunur", "FdkAac 128 Yuksek Yok 9",
+            $"{yuklenen.Ses.Kodlayici} {yuklenen.Ses.Fdk.BitHizi} {yuklenen.Ses.Kalite} {yuklenen.Ses.Titresim} {yuklenen.Surum}");
+        var sonra = ayarlarOn.ProfilAyari(ExportProfileId.YouTube).Ses;
+        Kontrol("Ön ayardan sonra yeniden açılınca da korunur", "FdkAac 128", $"{sonra.Kodlayici} {sonra.Fdk.BitHizi}");
+
+        // Ön ayarın diğer eski varsayılanları yine güncellenir (ör. 0.8.6'ya kadar YouTube VBV 14000 / 28000).
+        var onAyar7 = Varsayilanlar.YouTube();
+        onAyar7.Surum = 7;
+        EskiSes(onAyar7.Ses);
+        onAyar7.Video.X264.VbvMaks = 14000;
+        onAyar7.Video.X264.VbvTampon = 28000;
+        var yuklenen7 = new AppSettings().OnAyariYukle(ExportProfileId.YouTube, onAyar7);
+        Kontrol("Ön ayar (sürüm 7): VBV 34375 / 55000 olur, ses FDK AAC kalır", "34375/55000 FdkAac",
+            $"{yuklenen7.Video.X264.VbvMaks}/{yuklenen7.Video.X264.VbvTampon} {yuklenen7.Ses.Kodlayici}");
 
         var tt8 = Varsayilanlar.TikTok();
         tt8.Video.Nvenc.Tampon = 55000;
