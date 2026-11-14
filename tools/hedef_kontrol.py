@@ -10,6 +10,7 @@ YouTube'da 30 fps'e göre: 60 fps'te 100/51). --vbv: beklenen vbv-maxrate / vbv-
 YouTube 34375/55000). --profil kaynak: profil ve seviye kaynakla aynı; seviye çıktıya yetmiyorsa (boyut, kare hızı,
 VBV, referans kare) yeten en düşük seviye. Diğer her şey XviD4PSP hedefiyle aynı beklenir.
 """
+import datetime
 import json
 import re
 import struct
@@ -284,6 +285,34 @@ if moov:
                 av = int.from_bytes(raw[q + 9:q + 13], "big")
                 chk("Ses bitrate modu", "Constant", f"max {mx} / ort {av}",
                     ok=av > 0 and mx <= av * 1.005)
+
+# ---- Encoded date / Tagged date (MediaInfo): mvhd ile her izin tkhd ve mdhd kutusundaki oluşturma / değiştirme
+# zamanı (1904'ten beri saniye, UTC). Program kodlamanın başladığı anı yazar: hepsi aynı olmalı ve denetimden en çok
+# birkaç saat önce olmalı (gelecekte olamaz).
+if moov:
+    _1904 = datetime.datetime(1904, 1, 1, tzinfo=datetime.timezone.utc)
+
+    def _zamanlar(s_):
+        return struct.unpack(">QQ", raw[s_ + 4:s_ + 20]) if raw[s_] == 1 else struct.unpack(">II", raw[s_ + 4:s_ + 12])
+
+    def _yaz(sn):
+        return (_1904 + datetime.timedelta(seconds=sn)).strftime("UTC %Y-%m-%d %H:%M:%S") if sn else "yok"
+
+    _kutular = [("mvhd", *_zamanlar(child(raw, *moov, "mvhd")[0]))]
+    for t, ts, te in boxes(raw, *moov):
+        if t == "trak":
+            _kutular.append(("tkhd", *_zamanlar(child(raw, ts, te, "tkhd")[0])))
+            _kutular.append(("mdhd", *_zamanlar(child(raw, *child(raw, ts, te, "mdia"), "mdhd")[0])))
+    _degerler = {z for _, c, m in _kutular for z in (c, m)}
+    _ilk = _kutular[0][1]
+    _once = (datetime.datetime.now(datetime.timezone.utc) - (_1904 + datetime.timedelta(seconds=_ilk))).total_seconds()
+    chk("Encoded date / Tagged date", "kodlama anı (UTC), mvhd, tkhd, mdhd'de aynı",
+        f"{_yaz(_ilk)} · {len(_kutular)} kutu" + ("" if len(_degerler) == 1 else f" · farklı: {sorted(_degerler)}"),
+        ok=len(_degerler) == 1 and _ilk > 0 and -120 <= _once <= 3 * 3600)
+    # ffmpeg'in kendi okuyucusu da aynı zamanı görmeli (dosya ve izler).
+    _ct = {(fmt.get("tags") or {}).get("creation_time", "")} | {(s_.get("tags") or {}).get("creation_time", "") for s_ in streams}
+    _bek = (_1904 + datetime.timedelta(seconds=_ilk)).strftime("%Y-%m-%dT%H:%M:%S.000000Z") if _ilk else "?"
+    chk("creation_time (ffprobe: dosya ve izler)", _bek, ", ".join(sorted(_ct)), ok=_ct == {_bek})
 
 # ---- Rapor
 w = max(len(r[1]) for r in rows)

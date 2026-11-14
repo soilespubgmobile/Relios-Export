@@ -286,6 +286,10 @@ public static class ArgsBuilder
 
         args.AddRange(
         [
+            // Encoded date / Tagged date: dosyanın oluşturma ve değiştirme zamanı = kodlamanın başladığı an.
+            // ffmpeg "now"ı bilgisayarın saatinden alır ve MP4 / MOV kuralı gereği UTC olarak dosyanın (mvhd) ve
+            // her izin (tkhd, mdhd) başlığına yazar. Kaynağın tarihi yukarıda -map_metadata -1 ile taşınmaz.
+            "-metadata", "creation_time=now",
             "-movflags", "+faststart",
             "-progress", "pipe:1",
             "-stats_period", "0.5",

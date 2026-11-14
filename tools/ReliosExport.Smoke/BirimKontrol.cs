@@ -484,7 +484,7 @@ internal static class BirimKontrol
     private static void Kaplar()
     {
         Console.WriteLine();
-        Console.WriteLine("--- Dosya biçimi: TikTok ve YouTube MOV, dikey 9:16 MP4, WAV ses her zaman MOV");
+        Console.WriteLine("--- Dosya biçimi: TikTok ve YouTube MOV, dikey 9:16 MP4, WAV ses her zaman MOV; kodlama tarihi");
         Kontrol("TikTok varsayılanı", ".mov", Varsayilanlar.TikTok().Uzanti);
         Kontrol("YouTube varsayılanı", ".mov", Varsayilanlar.YouTube().Uzanti);
         Kontrol("Dikey 9:16 ön ayarı", ".mp4", Varsayilanlar.Dikey916().Uzanti);
@@ -492,6 +492,19 @@ internal static class BirimKontrol
         wav.Ses.Kodlayici = SesKodlayici.Wav;
         Kontrol("MP4 + WAV ses", ".mov", wav.Uzanti);
         Kontrol("MP4 + WAV ses özeti", "MOV (WAV ses MP4'e girmez)", wav.KapOzeti);
+
+        // Encoded date / Tagged date: son geçişin komutunda kodlama anı; 2 geçişte ilk geçiş (çıktısız) yazmaz.
+        var m = Kaynak(1920, 1080, 30, "h264", "High", 40);
+        Iceriyor("TikTok: kodlama tarihi", NvencKomutu(m), " -metadata creation_time=now -movflags +faststart ");
+        Iceriyor("YouTube: kodlama tarihi", KomutMetni(m, Varsayilanlar.YouTube()), " -metadata creation_time=now -movflags +faststart ");
+        Iceriyor("Dikey 9:16 (MP4): kodlama tarihi", KomutMetni(m, Varsayilanlar.Dikey916()), " -metadata creation_time=now ");
+        var iki = Varsayilanlar.YouTube();
+        iki.Video.X264.Mod = X264Modu.IkiGecis;
+        var plan = ArgsBuilder.Olustur(iki, m, "KAYNAK.mp4", SesSecimi.Yok, "CIKTI.mov", "GECIS");
+        Kontrol("2 geçiş: geçiş sayısı", "2", plan.Gecisler.Count.ToString());
+        Icermiyor("2 geçiş: ilk geçiş (çıktısız)", " " + string.Join(' ', plan.Gecisler[0]) + " ", "creation_time");
+        Iceriyor("2 geçiş: son geçiş", " " + string.Join(' ', plan.Gecisler[^1]) + " ", " -metadata creation_time=now ");
+        Iceriyor("Kaynağın etiketleri taşınmaz", KomutMetni(m, Varsayilanlar.YouTube()), " -map_metadata -1 ");
     }
 
     private static void AyarGecisi()

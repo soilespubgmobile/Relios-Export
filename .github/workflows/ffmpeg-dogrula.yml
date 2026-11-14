@@ -149,11 +149,12 @@ jobs:
             if ($k.eski_komut -ne $false) {
               $yeniKomut = (($log | Where-Object { $_ -like "Komut 1/1: *" } | Select-Object -First 1) -replace '^Komut 1/1: ', '')
               $eskiKomut = (& ./eski/ReliosExport.EskiKomut.exe "$env:FFBIN/ffprobe.exe" $src 2>&1 | ForEach-Object { "$_" } | Select-Object -Last 1)
-              # Bilincli farklar: x264 is parcacigi 7 -> 8 (islemcinin 8 cekirdegi); mono ses stereoya tam seviyede (pan)
-              $normal = $yeniKomut -creplace ':threads=8:', ':threads=7:' -creplace 'x264-params threads=8:', 'x264-params threads=7:'
+              # Bilincli farklar: x264 is parcacigi 7 -> 8 (islemcinin 8 cekirdegi); mono ses stereoya tam seviyede (pan);
+              # Encoded / Tagged date: kodlama ani (creation_time=now)
+              $normal = $yeniKomut -creplace ':threads=8:', ':threads=7:' -creplace 'x264-params threads=8:', 'x264-params threads=7:' -creplace ' -metadata creation_time=now', ''
               $monoNot = ''
               if ($normal -cmatch 'pan=stereo\|c0=c0\|c1=c0,') { $normal = $normal -creplace 'pan=stereo\|c0=c0\|c1=c0,', ''; $monoNot = ', mono ses iki kanala tam seviyede' }
-              if ($normal -ceq $eskiKomut) { $komut = "aynı (iş parçacığı 8$monoNot)" } else {
+              if ($normal -ceq $eskiKomut) { $komut = "aynı (iş parçacığı 8, kodlama tarihi$monoNot)" } else {
                 $komut = "FARK"; $komutFarki = $true
                 Write-Host "0.3.0 komutu: $eskiKomut"
                 Write-Host "Yeni komut  : $yeniKomut"

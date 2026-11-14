@@ -30,6 +30,10 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
     uymazdı. Referans kareler x264'ün kendi hesabıyla sayılır (B-kare varsa en az 2, B-piramitte en az 4; boş
     bırakılanlar hız ayarından).
   - TikTok ve YouTube varsayılan dosya biçimi MOV (dikey 9:16 ön ayarı MP4); ses WAV ise dosya her zaman MOV.
+  - Kaynağın etiketleri (başlık, tarih, kodlayıcı adları) çıktıya taşınmaz. Video ve ses izi İngilizce (eng)
+    etiketlenir. Encoded date / Tagged date (dosyanın ve izlerin oluşturma / değiştirme zamanı) kodlamanın
+    başladığı an olarak yazılır: bilgisayarın saatinden, MP4 / MOV kuralı gereği UTC (MediaInfo "UTC" diye
+    gösterir; Türkiye saatinden 3 saat geri).
   - Videonun yanında aynı adlı ses dosyası (ör. `edit1.mp4` için `edit1.wav`) varsa videonun kendi
     sesi yerine o kullanılır. Videoda birden fazla ses izi varsa WAV (PCM) ya da başka kayıpsız iz tercih edilir
     (aynı videoda WAV ve AAC varsa FDK AAC'ye WAV'dan çevrilir), yoksa ilk iz.
