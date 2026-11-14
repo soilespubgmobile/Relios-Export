@@ -370,7 +370,7 @@ jobs:
                 if ($j -gt 0) {
                   $altSev = $sira[$j - 1]
                   $u2 = Dene $altSev
-                  if ($u2.Count) { $not += " · $altSev ile: $($u2[0])" } else { $sonuc = 'FARK'; $not += " · $altSev ile de uyari yok (gereksiz yukseltme)" }
+                  if ($u2.Count) { $not += " · $altSev ile: $(@($u2)[0])" } else { $sonuc = 'FARK'; $not += " · $altSev ile de uyari yok (gereksiz yukseltme)" }
                 }
               }
             }
