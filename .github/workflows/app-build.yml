@@ -101,20 +101,25 @@ jobs:
           $ff = (Resolve-Path app/ReliosExport/ffmpeg/ffmpeg.exe).Path
           $m = Join-Path $PWD 'medya'
           New-Item -ItemType Directory $m -Force | Out-Null
-          function Uret { & $ff -hide_banner -loglevel error @args; if ($LASTEXITCODE -ne 0) { throw "deneme videosu uretilemedi: $args" } }
           # ses_var: 12 sn 720p, kisik ve yavas inip cikan ses (AAC) -> esitlemede dogrusal, -14'e yukselir.
           $deg = '(0.03+0.015*sin(2*PI*0.1*t))'
-          Uret -f lavfi -i testsrc2=size=1280x720:rate=30 -f lavfi -i "aevalsrc=$deg*sin(2*PI*440*t)|$deg*sin(2*PI*550*t):s=48000" -t 12 -pix_fmt yuv420p -c:v libx264 -preset veryfast -c:a aac -b:a 192k -y "$m/ses_var.mp4"
+          & $ff -hide_banner -loglevel error -f lavfi -i testsrc2=size=1280x720:rate=30 -f lavfi -i "aevalsrc=$deg*sin(2*PI*440*t)|$deg*sin(2*PI*550*t):s=48000" -t 12 -pix_fmt yuv420p -c:v libx264 -preset veryfast -c:a aac -b:a 192k -y "$m/ses_var.mp4"
           # sessiz: ses izi yok. harici: ses izi yok ama yaninda ayni adli WAV (mono, yuksek ses).
-          Uret -f lavfi -i testsrc2=size=640x360:rate=25 -t 3 -pix_fmt yuv420p -c:v libx264 -preset veryfast -an -y "$m/sessiz.mov"
-          Uret -f lavfi -i testsrc2=size=640x360:rate=30 -t 4 -pix_fmt yuv420p -c:v libx264 -preset veryfast -an -y "$m/harici.mp4"
-          Uret -f lavfi -i "aevalsrc=0.5*sin(2*PI*1000*t):s=48000:d=4" -c:a pcm_s16le -y "$m/harici.wav"
-          Uret -f lavfi -i "aevalsrc=0.2*sin(2*PI*500*t):s=48000:d=1" -c:a pcm_s16le -y "$m/yalniz.wav"
+          & $ff -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=25 -t 3 -pix_fmt yuv420p -c:v libx264 -preset veryfast -an -y "$m/sessiz.mov"
+          & $ff -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=30 -t 4 -pix_fmt yuv420p -c:v libx264 -preset veryfast -an -y "$m/harici.mp4"
+          & $ff -hide_banner -loglevel error -f lavfi -i "aevalsrc=0.5*sin(2*PI*1000*t):s=48000:d=4" -c:a pcm_s16le -y "$m/harici.wav"
+          & $ff -hide_banner -loglevel error -f lavfi -i "aevalsrc=0.2*sin(2*PI*500*t):s=48000:d=1" -c:a pcm_s16le -y "$m/yalniz.wav"
+          # Turkce karakterli, bosluklu ve parantezli ad: videonun sesi yok, yaninda ayni adli kisik stereo WAV.
+          & $ff -hide_banner -loglevel error -f lavfi -i testsrc2=size=1080x1920:rate=30 -t 12 -pix_fmt yuv420p -c:v libx264 -preset veryfast -an -y "$m/Türkçe ğüşıöç İsim (1).mp4"
+          & $ff -hide_banner -loglevel error -f lavfi -i "aevalsrc=$deg*sin(2*PI*440*t)|$deg*sin(2*PI*550*t):s=48000:d=12" -c:a pcm_s24le -y "$m/Türkçe ğüşıöç İsim (1).wav"
           # uzun: 40 sn 1080p gurultulu goruntu (x264'u yavaslatir) -> iptal denemesi.
-          Uret -f lavfi -i testsrc2=size=1920x1080:rate=30 -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 40 -vf "noise=alls=40:allf=t" -pix_fmt yuv420p -c:v libx264 -preset ultrafast -crf 28 -c:a aac -y "$m/uzun.mp4"
+          & $ff -hide_banner -loglevel error -f lavfi -i testsrc2=size=1920x1080:rate=30 -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 40 -vf "noise=alls=40:allf=t" -pix_fmt yuv420p -c:v libx264 -preset ultrafast -crf 28 -c:a aac -y "$m/uzun.mp4"
           Set-Content "$m/bozuk.mp4" ("bu bir video degil " * 2000)
           Set-Content "$m/notlar.txt" "video degil"
           Get-ChildItem $m | ForEach-Object { "{0,-14} {1,10:N0} bayt" -f $_.Name, $_.Length }
+          $eksik = @('ses_var.mp4', 'sessiz.mov', 'harici.mp4', 'harici.wav', 'yalniz.wav', 'uzun.mp4', 'bozuk.mp4', 'notlar.txt', 'Türkçe ğüşıöç İsim (1).mp4', 'Türkçe ğüşıöç İsim (1).wav') |
+            Where-Object { -not (Test-Path (Join-Path $m $_)) -or (Get-Item (Join-Path $m $_)).Length -eq 0 }
+          if ($eksik) { "HATA: deneme videosu uretilemedi: $($eksik -join ', ')"; exit 1 }
 
           # Onceki adimin (pencere kontrolu) ayarlari silinir: deneme fabrika ayarlariyla baslar.
           Remove-Item "out/ayarlar.json" -ErrorAction SilentlyContinue

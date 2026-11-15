@@ -75,21 +75,24 @@ internal static class UctanUca
         Esit("YouTube kodlayıcısı (varsayılan)", VideoKodlayici.X264, w.KontrolAyarlari.Video.Kodlayici);
         Esit("Liste boşken Başlat etkin değil", false, w.BtnStart.IsEnabled);
 
-        w.KontrolEkle(M("ses_var.mp4"), M("sessiz.mov"), M("harici.mp4"), M("harici.wav"), M("bozuk.mp4"), M("notlar.txt"), M("yalniz.wav"));
+        const string Tr = "Türkçe ğüşıöç İsim (1)";
+        w.KontrolEkle(M("ses_var.mp4"), M("sessiz.mov"), M("harici.mp4"), M("harici.wav"), M(Tr + ".mp4"), M(Tr + ".wav"),
+            M("bozuk.mp4"), M("notlar.txt"), M("yalniz.wav"));
         await Task.Delay(300);
-        Esit("Eklenen satırlar (ses ve metin dosyası listeye girmez)", "ses_var.mp4, sessiz.mov, harici.mp4, bozuk.mp4",
+        Esit("Eklenen satırlar (ses ve metin dosyası listeye girmez)", $"ses_var.mp4, sessiz.mov, harici.mp4, {Tr}.mp4, bozuk.mp4",
             string.Join(", ", w.KontrolSatirlar.Select(f => f.FileName)));
         Kontrol("Video olmayan dosya bildirildi", "1 dosya video olmadığı için eklenmedi", w.KontrolDurum,
             w.KontrolDurum.Contains("1 dosya video olmadığı için eklenmedi", StringComparison.Ordinal));
         Kontrol("Eşi olmayan ses dosyası bildirildi", "1 ses dosyasının aynı adlı videosu listede yok", w.KontrolDurum,
             w.KontrolDurum.Contains("1 ses dosyasının aynı adlı videosu listede yok", StringComparison.Ordinal));
         Esit("Aynı adlı ses bulundu", "harici.wav", Path.GetFileName(Satir("harici.mp4")?.HariciSes));
+        Esit("Türkçe / boşluklu adda aynı adlı ses bulundu", Tr + ".wav", Path.GetFileName(Satir(Tr + ".mp4")?.HariciSes));
         Kontrol("Aynı adlı ses satırda yazıyor", "Bekliyor · Ses: harici.wav", Durum("harici.mp4"),
             Durum("harici.mp4").StartsWith("Bekliyor · Ses: harici.wav", StringComparison.Ordinal));
 
         w.KontrolEkle(M("ses_var.mp4"));
         await Task.Delay(200);
-        Esit("Aynı video ikinci kez eklenmez", 4, w.KontrolSatirlar.Count);
+        Esit("Aynı video ikinci kez eklenmez", 5, w.KontrolSatirlar.Count);
 
         var tahmin = await Bekle(() => Durum("ses_var.mp4").Contains("en çok", StringComparison.Ordinal), 60);
         Kontrol("Tahmini boyut yazıldı (YouTube: CRF + en yüksek bit hızı → \"en çok\")", "… en çok … MB", Durum("ses_var.mp4"), tahmin);
@@ -101,7 +104,7 @@ internal static class UctanUca
         Esit("Düğme etkin", true, w.BtnStart.IsEnabled);
 
         // ------------------------------------------------------------------ 2. Başlat
-        Bolum("2. Başlat: 3 video kodlanır, bozuk dosya hata verir");
+        Bolum("2. Başlat: 4 video kodlanır, bozuk dosya hata verir");
         if (await Tikla(w.BtnStart, "Başlat"))
         {
             Esit("Kodlarken meşgul", true, w.KontrolMesgul);
@@ -112,7 +115,7 @@ internal static class UctanUca
             await Bitir("Dışa aktarma", 600);
         }
 
-        foreach (var ad in new[] { "ses_var.mp4", "sessiz.mov", "harici.mp4" })
+        foreach (var ad in new[] { "ses_var.mp4", "sessiz.mov", "harici.mp4", Tr + ".mp4" })
         {
             var s = Satir(ad);
             Esit(ad + ": durum", ItemState.Done, s?.State);
@@ -135,11 +138,16 @@ internal static class UctanUca
         Esit("harici: sesi aynı adlı WAV'dan (video sessizdi)", "pcm_s16le 48000 2",
             harici?.SesAkislari is [var a2] ? $"{a2.Codec} {a2.OrnekHizi} {a2.Kanal}" : "ses izi sayısı " + harici?.SesAkislari.Count);
 
+        var turkce = await Incele(Satir(Tr + ".mp4")?.OutputPath);
+        Esit("Türkçe ad: dikey boyut ve aynı adlı WAV'ın sesi", "1080×1920 pcm_s16le 48000 2",
+            turkce is null ? "çıktı okunamadı" : $"{turkce.DisplayWidth}×{turkce.DisplayHeight} "
+            + (turkce.SesAkislari is [var a4] ? $"{a4.Codec} {a4.OrnekHizi} {a4.Kanal}" : "ses izi sayısı " + turkce.SesAkislari.Count));
+
         var bozuk = Satir("bozuk.mp4");
         Esit("bozuk: durum", ItemState.Failed, bozuk?.State);
         Kontrol("bozuk: hata yazısı", "Hata: …", bozuk?.Status, bozuk?.Status.StartsWith("Hata: ", StringComparison.Ordinal) == true);
         Esit("Yarım dosya kalmadı (.part)", 0, Parcalar().Length);
-        Esit("Durum yazısı", "3 video hazır · 1 hatalı", w.KontrolDurum);
+        Esit("Durum yazısı", "4 video hazır · 1 hatalı", w.KontrolDurum);
         Esit("Hatalı satır varken düğme", "Başlat", Dugme());
         Esit("Bitince \"Video ekle\" açık", true, w.BtnAdd.IsEnabled);
 
@@ -164,7 +172,7 @@ internal static class UctanUca
         }
 
         await Task.Delay(200);
-        Esit("Satır sayısı", 3, w.KontrolSatirlar.Count);
+        Esit("Satır sayısı", 4, w.KontrolSatirlar.Count);
         Esit("Hepsi bitince düğme", "Tekrar işle", Dugme());
         w.KontrolAyarlari.Ses.Esitleme = true;
         await Task.Delay(200);
@@ -174,7 +182,7 @@ internal static class UctanUca
             await Bitir("Tekrar işleme", 600);
         }
 
-        foreach (var ad in new[] { "ses_var.mp4", "sessiz.mov", "harici.mp4" })
+        foreach (var ad in new[] { "ses_var.mp4", "sessiz.mov", "harici.mp4", Tr + ".mp4" })
         {
             var s = Satir(ad);
             Esit(ad + ": durum", ItemState.Done, s?.State);
@@ -188,12 +196,14 @@ internal static class UctanUca
             Satir("ses_var.mp4")?.Detail?.Contains("Karar: doğrusal", StringComparison.Ordinal) == true);
         Kontrol("harici: yüksek ses (yalnızca kısık yükseltilir) → dokunulmadı", "… LUFS (dokunulmadı)", Durum("harici.mp4"),
             Durum("harici.mp4").EndsWith("LUFS (dokunulmadı)", StringComparison.Ordinal));
+        Kontrol("Türkçe ad: aynı adlı kısık WAV -14'e getirildi", "… · -14,0 LUFS", Durum(Tr + ".mp4"),
+            Regex.IsMatch(Durum(Tr + ".mp4"), @" · -1[34],\d LUFS$"));
         Kontrol("sessiz: sesi olmayan videoda eşitleme yazısı yok", "LUFS yok", Durum("sessiz.mov"),
             !Durum("sessiz.mov").Contains("LUFS", StringComparison.Ordinal));
         var esitlenmis = await Incele(Satir("ses_var.mp4")?.OutputPath);
         Esit("ses_var (_2): ses yine WAV 16 bit 48 kHz stereo", "pcm_s16le 48000 2",
             esitlenmis?.SesAkislari is [var a3] ? $"{a3.Codec} {a3.OrnekHizi} {a3.Kanal}" : "ses izi sayısı " + esitlenmis?.SesAkislari.Count);
-        Esit("Durum yazısı", "3 video hazır", w.KontrolDurum);
+        Esit("Durum yazısı", "4 video hazır", w.KontrolDurum);
         w.KontrolAyarlari.Ses.Esitleme = false;
         await Task.Delay(200);
 
@@ -216,14 +226,14 @@ internal static class UctanUca
         Esit("Yarım dosya silindi (.part)", 0, Parcalar().Length);
         Esit("uzun: çıktı oluşmadı", 0, Directory.GetFiles(cikti, "uzun_*").Length);
         Esit("İptalden sonra düğme", "Başlat", Dugme());
-        Esit("Bitenlere dokunulmadı", "Done, Done, Done",
-            string.Join(", ", new[] { "ses_var.mp4", "sessiz.mov", "harici.mp4" }.Select(a => Satir(a)?.State.ToString())));
+        Esit("Bitenlere dokunulmadı", "Done, Done, Done, Done",
+            string.Join(", ", new[] { "ses_var.mp4", "sessiz.mov", "harici.mp4", Tr + ".mp4" }.Select(a => Satir(a)?.State.ToString())));
 
         // ------------------------------------------------------------------ 6. TikTok (NVENC): ekran kartı yok
         Bolum("6. TikTok'a geç: satırlar sıfırlanır; NVENC'siz bilgisayarda anlaşılır hata + günlük");
         w.RbTikTok.IsChecked = true;
         await Task.Delay(300);
-        Esit("Platform değişince satırlar bekliyor", "Waiting, Waiting, Waiting, Waiting",
+        Esit("Platform değişince satırlar bekliyor", "Waiting, Waiting, Waiting, Waiting, Waiting",
             string.Join(", ", w.KontrolSatirlar.Select(f => f.State.ToString())));
         Kontrol("Satır yazısı yeniden \"Bekliyor\"", "Bekliyor …", Durum("ses_var.mp4"),
             Durum("ses_var.mp4").StartsWith("Bekliyor", StringComparison.Ordinal));
@@ -234,7 +244,7 @@ internal static class UctanUca
             await Bitir("TikTok dışa aktarma", 300);
         }
 
-        Esit("Hepsi hatalı (ekran kartı yok)", "Failed, Failed, Failed, Failed",
+        Esit("Hepsi hatalı (ekran kartı yok)", "Failed, Failed, Failed, Failed, Failed",
             string.Join(", ", w.KontrolSatirlar.Select(f => f.State.ToString())));
         Kontrol("Hata yazısı anlaşılır (NVENC / ekran kartı)", "Hata: NVENC kullanılamadı …", Durum("ses_var.mp4"),
             Durum("ses_var.mp4").StartsWith("Hata: NVENC", StringComparison.Ordinal));
@@ -243,7 +253,7 @@ internal static class UctanUca
         Kontrol("Günlükte komut ve ffmpeg çıktısı", "Komut 1/1 … ----- ffmpeg çıktısı -----", gunluk,
             gunluk is not null && File.Exists(gunluk) && File.ReadAllText(gunluk) is var g
             && g.Contains("Komut 1/1:", StringComparison.Ordinal) && g.Contains("----- ffmpeg çıktısı -----", StringComparison.Ordinal));
-        Esit("Durum yazısı", "4 video hatalı", w.KontrolDurum);
+        Esit("Durum yazısı", "5 video hatalı", w.KontrolDurum);
         Esit("Yarım dosya kalmadı (.part)", 0, Parcalar().Length);
 
         // ------------------------------------------------------------------ 7. Temizle, ayar dosyası
