@@ -908,6 +908,7 @@ public partial class MainWindow : Window
 
                 try
                 {
+                    EsitlemeRaporu? esitleme = null;
                     var output = await Exporter.ExportAsync(
                         item.Path,
                         _outputFolder,
@@ -915,14 +916,17 @@ public partial class MainWindow : Window
                         ayarlar,
                         progress,
                         info => item.Status = "Kodlanıyor · " + info,
-                        token);
+                        token,
+                        r => esitleme = r);
                     item.OutputPath = output;
                     item.Progress = 1;
                     item.State = ItemState.Done;
+                    // LUFS eşitleme açıksa sonucu da yazılır: "-14,0 LUFS", "-16,0 LUFS (hedefe ulaşılamadı)", "-9,2 LUFS (dokunulmadı)".
                     item.Status = "Hazır · " + Path.GetFileName(output)
                                   + (item.Gecen is { } sure ? " · " + FileItem.SureMetni(sure) : string.Empty)
-                                  + DosyaBoyutu(output);
-                    item.Detail = output;
+                                  + DosyaBoyutu(output)
+                                  + (esitleme?.SatirMetni is { } sesSonucu ? " · " + sesSonucu : string.Empty);
+                    item.Detail = output + (esitleme is not null ? "\n\n" + esitleme.Ayrinti : string.Empty);
                     ok++;
                 }
                 catch (OperationCanceledException)
@@ -1087,7 +1091,7 @@ public partial class MainWindow : Window
         var biten = new FileItem(Path.Combine(klasor, "klip.mp4"))
         {
             State = ItemState.Done,
-            Status = "Hazır · klip_TikTok.mp4 · 1 dk 05 sn · 128 MB",
+            Status = "Hazır · klip_TikTok.mp4 · 1 dk 05 sn · 128 MB · -14,0 LUFS",
             Progress = 1,
         };
         var hatali = new FileItem(Path.Combine(klasor, "bozuk.mkv"))

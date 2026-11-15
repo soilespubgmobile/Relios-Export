@@ -511,6 +511,43 @@ internal static class BirimKontrol
         var olc = ArgsBuilder.LoudnormOlcumKomutu(esit.Ses, "KAYNAK.mp4", ArgsBuilder.SesSec(esit.Ses, Kaynak48(), "KAYNAK.mp4"), 10);
         Iceriyor("Ölçüm komutu", " " + string.Join(' ', olc) + " ", " -map 0:a:0 -vn -sn -dn -t 10 -af loudnorm=I=-14.0:TP=-1.0:LRA=11:print_format=json -f null - ");
 
+        foreach (var (ad, a) in new[] { ("TikTok", Varsayilanlar.TikTok()), ("YouTube", Varsayilanlar.YouTube()) })
+        {
+            Kontrol(ad + ": eşitleme yönü", "YalnizcaYukselt", a.Ses.EsitlemeYonu.ToString());
+        }
+
+        // Karar (hedef -14, tavan -1): loudnorm'un kuralı — tepe + kazanç <= tavan ve 0 < aralık <= 11 ise doğrusal.
+        var ka = Varsayilanlar.YouTube().Ses;
+        ka.Esitleme = true;
+        string Karar(LoudnormOlcum? o)
+        {
+            var r = Esitleme.KararVer(ka, o);
+            return r.Karar + (r.Neden != DinamikNedeni.Yok ? "/" + r.Neden : string.Empty);
+        }
+
+        Kontrol("Kısık, tepe -12 (+11 dB → tam -1): doğrusal", "Dogrusal", Karar(new LoudnormOlcum(-25, -12, 5, -35, 0)));
+        Kontrol("Kısık, tepe -11,9 (+11 dB → -0,9): dinamik", "Dinamik/AniTepeler", Karar(new LoudnormOlcum(-25, -11.9, 5, -35, 0)));
+        Kontrol("Kısık, ses aralığı 12 LU: dinamik", "Dinamik/GenisAralik", Karar(new LoudnormOlcum(-25, -20, 12, -35, 0)));
+        Kontrol("Kısık, ses aralığı 0 (sabit ton): dinamik", "Dinamik/SabitSes", Karar(new LoudnormOlcum(-25, -20, 0, -35, 0)));
+        Kontrol("Hedefe 0,4 LU yakın: dokunulmaz", "Hedefte", Karar(new LoudnormOlcum(-14.4, -3, 5, -24, 0)));
+        Kontrol("Hedefe 0,6 LU uzak: doğrusal", "Dogrusal", Karar(new LoudnormOlcum(-14.6, -3, 5, -24, 0)));
+        Kontrol("Yüksek (-9), yalnızca yükselt: dokunulmaz", "ZatenYuksek", Karar(new LoudnormOlcum(-9, -3, 5, -19, 0)));
+        Kontrol("Ölçülemedi (sessiz)", "Olculemedi", Karar(null));
+        ka.EsitlemeYonu = EsitlemeYonu.IkiYon;
+        Kontrol("Yüksek (-9), iki yön: doğrusal (kısılır)", "Dogrusal", Karar(new LoudnormOlcum(-9, -3, 5, -19, 0)));
+        ka.EsitlemeYonu = EsitlemeYonu.YalnizcaYukselt;
+
+        var rd = Esitleme.KararVer(ka, new LoudnormOlcum(-25, -12, 5, -35, 0));
+        Kontrol("Bilgi satırı (doğrusal)", "-25,0 → -14 LUFS (yalnızca yükseltilir)", rd.BilgiMetni);
+        Kontrol("Biten satır (sonuç -14,02)", "-14,0 LUFS", (rd with { SonucYukseklik = -14.02 }).SatirMetni ?? "yok");
+        var rt = Esitleme.KararVer(ka, new LoudnormOlcum(-25.52, -1.59, 2.8, -37.82, 8.68));
+        Kontrol("Bilgi satırı (ani tepeler)", "-25,5 → -14 LUFS (dinamik: ani tepeler yüzünden)", rt.BilgiMetni);
+        Kontrol("Biten satır (sonuç -16,04)", "-16,0 LUFS (hedefe ulaşılamadı)", (rt with { SonucYukseklik = -16.04 }).SatirMetni ?? "yok");
+        Kontrol("Biten satır (zaten yüksek)", "-9,2 LUFS (dokunulmadı)",
+            Esitleme.KararVer(ka, new LoudnormOlcum(-9.2, -3, 5, -19, 0)).SatirMetni ?? "yok");
+        Iceriyor("Sonuç ölçüm komutu", " " + string.Join(' ', Esitleme.SonucOlcumKomutu("CIKTI.mov", ka)) + " ",
+            " -i CIKTI.mov -map 0:a:0 -vn -sn -dn -af loudnorm=I=-14.0:TP=-1.0:LRA=11:print_format=json -f null - ");
+
         const string json = "[Parsed_loudnorm_0 @ 0x1]\n{\n\t\"input_i\" : \"-21.37\",\n\t\"input_tp\" : \"-3.20\",\n\t\"input_lra\" : \"6.40\",\n\t\"input_thresh\" : \"-31.60\",\n\t\"output_i\" : \"-14.02\",\n\t\"target_offset\" : \"0.25\"\n}";
         var oku = ArgsBuilder.LoudnormOlcumOku(json);
         Kontrol("Ölçüm JSON'u okunur", "-21.37/-3.2/6.4/-31.6/0.25",

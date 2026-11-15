@@ -154,6 +154,18 @@ public partial class App : Application
             EkranGoruntusu.Pencere(w, Path.Combine(ekran, "09-ana-pencere-tekrar-isle.png"));
         }
 
+        // Ses seviyesi bölümü, LUFS eşitleme açıkken (hedef, yön seçimi görünür); sonra varsayılana (kapalı) döner.
+        w.KontrolAyarlari.Ses.Esitleme = true;
+        EkranGoruntusu.Bekle(w.Dispatcher);
+        if (ekran is not null)
+        {
+            EkranGoruntusu.Oge(w.AyarPaneli, arka, Path.Combine(ekran, "10-ayar-paneli-esitleme.png"));
+        }
+
+        rapor.AppendLine("Eşitleme yönü: " + w.KontrolAyarlari.Ses.EsitlemeYonu);
+        w.KontrolAyarlari.Ses.Esitleme = false;
+        EkranGoruntusu.Bekle(w.Dispatcher);
+
         // Ön ayar penceresi boş görünmesin: bellekte iki örnek (diske yazılmaz).
         var ayarlar = w.KontrolAyarlari;
         var dosya = w.KontrolAyarDosyasi;

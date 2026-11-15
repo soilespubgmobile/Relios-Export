@@ -479,17 +479,23 @@
                                         <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Text="{Binding Ses.Seviye, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                                     </DockPanel>
                                     <CheckBox Content="LUFS eşitleme (EBU R128)" IsChecked="{Binding Ses.Esitleme}" Margin="0,2,0,8"/>
-                                    <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Ses.Esitleme, Converter={StaticResource DogruysaGorunur}}">
-                                        <TextBlock Text="Hedef (LUFS)" Width="130" Style="{StaticResource AlanEtiketi}"/>
-                                        <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Text="{Binding Ses.EsitlemeHedef, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
-                                    </DockPanel>
+                                    <StackPanel Visibility="{Binding Ses.Esitleme, Converter={StaticResource DogruysaGorunur}}">
+                                        <DockPanel Style="{StaticResource FormSatiri}">
+                                            <TextBlock Text="Hedef (LUFS)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Text="{Binding Ses.EsitlemeHedef, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                        </DockPanel>
+                                        <DockPanel Style="{StaticResource FormSatiri}">
+                                            <TextBlock Text="Yön" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                            <ComboBox ItemsSource="{x:Static a:Secenekler.EsitlemeYonleri}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Ses.EsitlemeYonu}"/>
+                                        </DockPanel>
+                                    </StackPanel>
                                     <CheckBox Content="Tepe sınırlayıcı (taşmayı önler)" IsChecked="{Binding Ses.Sinirlayici}" Margin="0,2,0,8"/>
                                     <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Ses.Sinirlayici, Converter={StaticResource DogruysaGorunur}}">
                                         <TextBlock Text="Tavan (dB)" Width="130" Style="{StaticResource AlanEtiketi}"/>
                                         <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Text="{Binding Ses.SinirlayiciTavan, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                                     </DockPanel>
                                     <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8"
-                                               Text="LUFS eşitleme sesi önce ölçer, sonra hedef yüksekliğe getirir (TikTok ve YouTube: -14). Sınırlayıcı yalnızca ses yükseltildiğinde (artı dB ya da eşitleme) devreye girer ve tepeleri tavanda tutar; ses yükseltilmezse sese dokunmaz."/>
+                                               Text="LUFS eşitleme sesi önce ölçer, sonra bütün sesi aynı miktarda yükseltip (ya da kısıp) hedefe getirir (TikTok ve YouTube: -14). 'Yalnızca kısık sesi yükselt': hedeften yüksek sese dokunmaz (YouTube yüksek sesi kendisi kısar). Hedefe 0,5 LU yakınsa ses olduğu gibi kalır. Yükseltmek tepeyi tavanın üstüne çıkaracaksa ses yer yer farklı yükseltilir (dinamik); sonuç bitince satırda yazar. Sınırlayıcı yalnızca ses yükseltildiğinde devreye girer; ses yükseltilmezse sese dokunmaz."/>
                                 </StackPanel>
                             </Expander>
 

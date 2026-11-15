@@ -105,7 +105,27 @@ var progress = new Progress<double>(p =>
 try
 {
     var output = await Exporter.ExportAsync(
-        input, outDir, profil, ayarlar, progress, info => Console.WriteLine("Bilgi: " + info), CancellationToken.None);
+        input, outDir, profil, ayarlar, progress, info => Console.WriteLine("Bilgi: " + info), CancellationToken.None,
+        r =>
+        {
+            // Doğrulama ASCII satırları okur (ESITLEME_...): karar, satırda gösterilecek yazı, ölçülen sonuç.
+            Console.WriteLine("ESITLEME_KARAR=" + r.Karar + (r.Neden != DinamikNedeni.Yok ? "/" + r.Neden : string.Empty));
+            if (r.SonucYukseklik is { } sy)
+            {
+                Console.WriteLine("ESITLEME_SONUC=" + sy.ToString("0.00", CultureInfo.InvariantCulture));
+            }
+
+            Console.WriteLine("Eşitleme kararı: " + r.Karar + (r.Neden != DinamikNedeni.Yok ? " (" + r.Neden + ")" : string.Empty));
+            Console.WriteLine("Eşitleme satırı: " + (r.SatirMetni ?? "-"));
+            if (r.SonucYukseklik is { } y)
+            {
+                Console.WriteLine("Eşitleme sonucu: " + y.ToString("0.00", CultureInfo.InvariantCulture)
+                                  + " LUFS, tepe " + (r.SonucTepe?.ToString("0.00", CultureInfo.InvariantCulture) ?? "-") + " dBTP");
+            }
+
+            Console.WriteLine("Eşitleme ayrıntısı:");
+            Console.WriteLine(r.Ayrinti);
+        });
     Console.WriteLine("Çıktı: " + output);
     return 0;
 }

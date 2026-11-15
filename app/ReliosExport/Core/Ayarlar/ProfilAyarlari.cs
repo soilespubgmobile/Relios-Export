@@ -35,6 +35,12 @@ public enum FdkModu { Cbr, Vbr1, Vbr2, Vbr3, Vbr4, Vbr5 }
 
 public enum WavBitDerinligi { Bit16, Bit24, Bit32, Float32 }
 
+/// <summary>
+/// LUFS eşitlemenin yönü. <see cref="YalnizcaYukselt"/>: hedeften kısık ses yükseltilir, hedeften yüksek sese
+/// dokunulmaz (YouTube yüksek sesi kendisi kısar). <see cref="IkiYon"/>: kısık ses yükseltilir, yüksek ses kısılır.
+/// </summary>
+public enum EsitlemeYonu { YalnizcaYukselt, IkiYon }
+
 /// <summary>Çıktı dosyasının kabı. Görüntü ve ses ikisinde de aynıdır; WAV ses her zaman MOV'a yazılır.</summary>
 public enum KapBicimi { Mp4, Mov }
 
@@ -580,6 +586,7 @@ public sealed class SesAyarlari : Gozlenebilir
     private double _sinirlayiciTavan = -1;
     private bool _esitleme;
     private double _esitlemeHedef = -14;
+    private EsitlemeYonu _esitlemeYonu = EsitlemeYonu.YalnizcaYukselt;
 
     public SesAyarlari()
     {
@@ -624,6 +631,9 @@ public sealed class SesAyarlari : Gozlenebilir
     /// <summary>LUFS eşitlemenin hedefi (tümleşik yükseklik, LUFS).</summary>
     public double EsitlemeHedef { get => _esitlemeHedef; set => Set(ref _esitlemeHedef, Math.Clamp(Math.Round(value, 1), -40, -5)); }
 
+    /// <summary>LUFS eşitlemenin yönü: yalnızca kısık sesi yükselt (varsayılan) ya da iki yönde.</summary>
+    public EsitlemeYonu EsitlemeYonu { get => _esitlemeYonu; set => Set(ref _esitlemeYonu, value); }
+
     /// <summary>Sınırlayıcı bu ayarlarla devreye girer mi (açık ve ses yükseltiliyor).</summary>
     [JsonIgnore]
     public bool SinirlayiciEtkin => Sinirlayici && (Seviye > 0 || Esitleme);
@@ -647,7 +657,7 @@ public sealed class SesAyarlari : Gozlenebilir
             var metin = Seviye == 0 ? "Değişmez (0 dB)" : $"{(Seviye > 0 ? "+" : string.Empty)}{Bicim.Sayi(Seviye)} dB";
             if (Esitleme)
             {
-                metin += $" · {Bicim.Sayi(EsitlemeHedef)} LUFS";
+                metin += $" · {Bicim.Sayi(EsitlemeHedef)} LUFS" + (EsitlemeYonu == EsitlemeYonu.YalnizcaYukselt ? " (yalnızca yükseltme)" : string.Empty);
             }
 
             if (Sinirlayici)

@@ -243,6 +243,10 @@ public static class Secenekler
         (Titresim.UcgenYuksekGecis, "Üçgen, yüksek geçişli"),
         (Titresim.Shibata, "Shibata (gürültü şekillendirme)"));
 
+    public static Secenek[] EsitlemeYonleri { get; } = L(
+        (EsitlemeYonu.YalnizcaYukselt, "Yalnızca kısık sesi yükselt"),
+        (EsitlemeYonu.IkiYon, "Kısık sesi yükselt, yüksek sesi kıs"));
+
     public static Secenek[] Kanallar { get; } = L(
         (KanalModu.Kaynak, "Kaynakla aynı"),
         (KanalModu.Stereo, "Stereo"),

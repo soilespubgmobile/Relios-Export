@@ -354,26 +354,40 @@ jobs:
           "`n24 bit kaynak 16 bit'e ucgen titresimle indirildi; 16 bit 48 kHz kaynagin sesi bit bit ayni kaldi."
           exit 0
 
-      - name: Ses yuksekligi denemesi (tepe sinirlayici -1 dB, LUFS esitleme -14)
+      - name: Ses yuksekligi denemesi (tepe sinirlayici -1 dB; LUFS esitleme -14 dogrusal / dinamik / dokunulmadi)
         if: always()
         run: |
           [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-          # Ilk 1 sn sessiz, sonra ses. Yuksek kaynak: 0,9 genlik (+12 dB ile tasar). Kisik kaynak: ~-29 LUFS.
-          $yuksek = 'aevalsrc=if(gte(t\,1)\,0.9*sin(2*PI*440*t)\,0)|if(gte(t\,1)\,0.9*sin(2*PI*660*t)\,0):s=48000:d=4'
-          $kisik = 'aevalsrc=if(gte(t\,1)\,0.05*sin(2*PI*440*t)+0.02*sin(2*PI*3000*t)\,0)|if(gte(t\,1)\,0.05*sin(2*PI*550*t)\,0):s={0}:d=9'
-          $ky = Join-Path $PWD 'yuksek_48k.mov'
-          $kk = Join-Path $PWD 'kisik_48k.mov'
-          $kk44 = Join-Path $PWD 'kisik_44k.mov'
-          foreach ($k in @(@($ky, $yuksek, 4), @($kk, ($kisik -f 48000), 9), @($kk44, ($kisik -f 44100), 9))) {
-            ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i $k[1] -t $k[2] -pix_fmt yuv420p -c:v libx264 -preset veryfast -c:a pcm_s24le -y $k[0]
-            "$([IO.Path]::GetFileName($k[0])): " + (ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,sample_rate,channels -of csv=p=0 $k[0])
+          # Yuksek ton: 0,9 genlik, ilk 1 sn sessiz (+12 dB ile tasar). Kisik degisken: ~-30 LUFS, yavas inip cikan (dogrusal).
+          # Tepeli: kisik degisken + 2 sn'de bir 10 ms'lik yuksek vurus (dinamik). Sabit ton: hic degismeyen (LRA 0, dinamik).
+          # Yuksek degisken: ~-7 LUFS, 16 bit 48 kHz (yalnizca yukselt: dokunulmamali, bit bit ayni).
+          $deg = '(0.03+0.015*sin(2*PI*0.1*t))'
+          $kaynaklar = @(
+            @{ ad = 'yuksek_ton'; ses = 'aevalsrc=if(gte(t\,1)\,0.9*sin(2*PI*440*t)\,0)|if(gte(t\,1)\,0.9*sin(2*PI*660*t)\,0):s=48000:d=4'; d = 4; c = 'pcm_s24le' },
+            @{ ad = 'kisik_degisken'; ses = "aevalsrc=$deg*sin(2*PI*440*t)|$deg*sin(2*PI*550*t):s=48000:d=12"; d = 12; c = 'pcm_s24le' },
+            @{ ad = 'kisik_degisken_44k'; ses = "aevalsrc=$deg*sin(2*PI*440*t)|$deg*sin(2*PI*550*t):s=44100:d=12"; d = 12; c = 'pcm_s24le' },
+            @{ ad = 'tepeli'; ses = "aevalsrc=$deg*sin(2*PI*440*t)+if(lt(mod(t\,2)\,0.01)\,0.8*sin(2*PI*1000*t)\,0)|$deg*sin(2*PI*550*t):s=48000:d=12"; d = 12; c = 'pcm_s24le' },
+            @{ ad = 'sabit_ton'; ses = 'aevalsrc=0.05*sin(2*PI*440*t)+0.02*sin(2*PI*3000*t)|0.05*sin(2*PI*550*t):s=48000:d=9'; d = 9; c = 'pcm_s24le' },
+            @{ ad = 'yuksek_degisken'; ses = 'aevalsrc=(0.40+0.12*sin(2*PI*0.1*t))*sin(2*PI*1000*t)|(0.40+0.12*sin(2*PI*0.1*t))*sin(2*PI*1250*t):s=48000:d=12'; d = 12; c = 'pcm_s16le' }
+          )
+          $K = @{}
+          foreach ($k in $kaynaklar) {
+            $yol = Join-Path $PWD "$($k.ad).mov"
+            ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i $k.ses -t $k.d -pix_fmt yuv420p -c:v libx264 -preset veryfast -c:a $k.c -y $yol
+            $K[$k.ad] = $yol
+            "$($k.ad).mov: " + (ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,sample_rate,channels -of csv=p=0 $yol)
           }
+          $yt = @('--profil', 'youtube')
+          $esit = @('--ayarla', 'Ses.Esitleme=true')
           $durumlar = @(
-            @{ ad = 'Ses +12 dB, sinirlayici acik (varsayilan, -1 dB)'; src = $ky; arg = @('--profil', 'youtube', '--ayarla', 'Ses.Seviye=12'); kip = @('sinir') },
-            @{ ad = 'Ses +12 dB, sinirlayici kapali (kirpilir)'; src = $ky; arg = @('--profil', 'youtube', '--ayarla', 'Ses.Seviye=12', '--ayarla', 'Ses.Sinirlayici=false'); kip = @('kirpik') },
-            @{ ad = 'LUFS esitleme -14 (YouTube, kisik kaynak)'; src = $kk; arg = @('--profil', 'youtube', '--ayarla', 'Ses.Esitleme=true'); kip = @('lufs') },
-            @{ ad = 'LUFS esitleme -14 (TikTok sesi, video x264)'; src = $kk; arg = @('--ayarla', 'Video.Kodlayici=X264', '--ayarla', 'Ses.Esitleme=true'); kip = @('lufs') },
-            @{ ad = 'LUFS esitleme -14, ornekleme kaynakla ayni (44,1 kHz kalir)'; src = $kk44; arg = @('--profil', 'youtube', '--ayarla', 'Ses.Esitleme=true', '--ayarla', 'Ses.OrnekHizi=null'); kip = @('lufs', '--hz', '44100') }
+            @{ ad = 'Ses +12 dB, sinirlayici acik (varsayilan, -1 dB)'; src = $K.yuksek_ton; arg = $yt + @('--ayarla', 'Ses.Seviye=12'); arac = 'yukseklik'; kip = @('sinir'); karar = $null },
+            @{ ad = 'Ses +12 dB, sinirlayici kapali (kirpilir)'; src = $K.yuksek_ton; arg = $yt + @('--ayarla', 'Ses.Seviye=12', '--ayarla', 'Ses.Sinirlayici=false'); arac = 'yukseklik'; kip = @('kirpik'); karar = $null },
+            @{ ad = 'Esitleme: kisik, inip cikan ses (YouTube) -> dogrusal, yalnizca yukseltildi'; src = $K.kisik_degisken; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $K.kisik_degisken); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme: kisik, 44,1 kHz, ornekleme kaynakla ayni (TikTok sesi, video x264) -> dogrusal'; src = $K.kisik_degisken_44k; arg = @('--ayarla', 'Video.Kodlayici=X264', '--ayarla', 'Ses.OrnekHizi=null') + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--hz', '44100', '--kaynak', $K.kisik_degisken_44k); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme: kisik + ani tepeler -> dinamik, tepe -1 dB, kirpilma yok'; src = $K.tepeli; arg = $yt + $esit; arac = 'yukseklik'; kip = @('tepeli'); karar = 'Dinamik/AniTepeler' },
+            @{ ad = 'Esitleme: hic degismeyen ton -> dinamik'; src = $K.sabit_ton; arg = $yt + $esit; arac = 'yukseklik'; kip = @('lufs'); karar = 'Dinamik/SabitSes' },
+            @{ ad = 'Esitleme: yuksek ses (-7), yalnizca yukselt -> dokunulmadi (bit bit ayni)'; src = $K.yuksek_degisken; arg = $yt + $esit; arac = 'donusum'; kip = @('ayni'); karar = 'ZatenYuksek' },
+            @{ ad = 'Esitleme: yuksek ses (-7), iki yon -> dogrusal, yalnizca kisildi'; src = $K.yuksek_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.EsitlemeYonu=IkiYon'); arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $K.yuksek_degisken); karar = 'Dogrusal' }
           )
           $satirlar = @(); $hatali = 0; $i = 0
           foreach ($d in $durumlar) {
@@ -386,12 +400,22 @@ jobs:
             $sonuc = 'OK'; $ozet = ''
             if ($rc -ne 0) { $sonuc = "HATA (kod $rc)" }
             else {
+              $karar = (($log | Where-Object { $_ -like 'ESITLEME_KARAR=*' }) -replace '^ESITLEME_KARAR=', '') -join ''
+              $prog = (($log | Where-Object { $_ -like 'ESITLEME_SONUC=*' }) -replace '^ESITLEME_SONUC=', '') -join ''
+              if ($d.karar -and $karar -ne $d.karar) { $sonuc = 'FARK'; $ozet += "karar: beklenen $($d.karar), cikti $karar · " }
+              elseif ($d.karar) { $ozet += "karar: $karar · " }
               $out = (Get-ChildItem -LiteralPath $dir | Where-Object { $_.Extension -in '.mp4', '.mov' } | Select-Object -First 1).FullName
-              $c = & python -X utf8 -I tools/ses_yukseklik_kontrol.py $out @($d.kip) 2>&1 | ForEach-Object { "$_" }
+              $ek = @($d.kip)
+              if ($d.arac -eq 'yukseklik') {
+                if ($prog) { $ek += @('--program', $prog) }
+                elseif ($d.karar -like 'Dogrusal*' -or $d.karar -like 'Dinamik*') { $sonuc = 'FARK'; $ozet += 'program sonucu yazmadi · ' }
+                $c = & python -X utf8 -I tools/ses_yukseklik_kontrol.py $out @ek 2>&1 | ForEach-Object { "$_" }
+              } else {
+                $c = & python -X utf8 -I tools/ses_donusum_kontrol.py $d.src $out @ek 2>&1 | ForEach-Object { "$_" }
+              }
               $crc = $LASTEXITCODE
               $c | ForEach-Object { Write-Host $_ }
-              $ozet = (($c | Where-Object { $_ -match '^(OK|FARK) ' -and $_ -notmatch 'codec|Örnekleme' }) -replace '^\S+ +(.*?) +hedef: .*çıktı: (.*)$', '$1: $2') -join ' · '
-              $ozet += ' · ' + (($c | Where-Object { $_ -like 'Ses yüksekliği:*' }) -join '')
+              $ozet += (($c | Where-Object { $_ -match '^(OK|FARK) ' -and $_ -notmatch 'codec|Örnekleme hızı|Kanal|Kaynak' }) -replace '^\S+ +(.*?) +hedef: .*çıktı: (.*)$', '$1: $2') -join ' · '
               if ($crc -ne 0) { $sonuc = 'FARK' }
             }
             if ($sonuc -ne 'OK') { $hatali++ }
@@ -403,7 +427,7 @@ jobs:
           $tablo | ForEach-Object { $_ }
           $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           if ($hatali) { "`n$hatali ses yuksekligi denemesinde sorun var."; exit 1 }
-          "`nSinirlayici tepeyi -1 dB'de tuttu, gecikme yok; LUFS esitleme -14'e getirdi."
+          "`nSinirlayici tepeyi -1 dB'de tuttu; esitleme dogrusalda yalnizca sabit kazanc uyguladi, dinamikte tasirmadi, yuksek sese dokunmadi."
           exit 0
 
       - name: x264 seviye denemesi (programin sectigi seviyede x264 uyarmamali, bir alt seviyede uyarmali)

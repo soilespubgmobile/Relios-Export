@@ -183,6 +183,7 @@ public static class Exporter
     }
 
     /// <param name="onInfo">Kaynak incelendikten sonra kısa bilgi verir (ör. "1920×1080 · 60 fps · 9:16 kırpılıyor").</param>
+    /// <param name="onEsitleme">LUFS eşitleme açıksa, bitince eşitlemenin raporu (ölçüm, karar, çıktının ölçülen yüksekliği).</param>
     public static async Task<string> ExportAsync(
         string input,
         string outputFolder,
@@ -190,23 +191,28 @@ public static class Exporter
         ProfilAyarlari ayarlar,
         IProgress<double>? progress,
         Action<string>? onInfo,
-        CancellationToken ct)
+        CancellationToken ct,
+        Action<EsitlemeRaporu>? onEsitleme = null)
     {
         // Kodlama sürerken arayüzde ayar değişse bile bu video başladığı ayarlarla biter.
         var a = ayarlar.Kopya();
         var media = await MediaProbe.ProbeAsync(Tools.Ffprobe, input, ct);
         var ses = await ArgsBuilder.SesSecAsync(Tools.Ffprobe, a.Ses, media, input, ct);
         onInfo?.Invoke(Describe(media, a, ses));
-        LoudnormOlcum? olcum = null;
+        EsitlemeRaporu? rapor = null;
         if (a.Ses.Esitleme && ses.Tur != SesSecimTuru.Yok)
         {
-            // LUFS eşitleme, 1. geçiş: sesin yüksekliği ölçülür (yalnızca ses okunur, kısa sürer).
+            // LUFS eşitleme, 1. geçiş: sesin yüksekliği ölçülür (yalnızca ses okunur, kısa sürer); sonra karar:
+            // dokunulmaz / doğrusal (bütün ses aynı miktarda) / dinamik.
             onInfo?.Invoke(Describe(media, a, ses) + " · ses ölçülüyor");
             var cikti = new List<string>();
             await FfmpegRunner.RunAsync(ArgsBuilder.LoudnormOlcumKomutu(a.Ses, input, ses, media.DurationSeconds), 0, null, ct, cikti);
-            olcum = ArgsBuilder.LoudnormOlcumOku(string.Join('\n', cikti));
-            onInfo?.Invoke(Describe(media, a, ses, olcum));
+            rapor = Esitleme.KararVer(a.Ses, ArgsBuilder.LoudnormOlcumOku(string.Join('\n', cikti)));
+            onInfo?.Invoke(Describe(media, a, ses, rapor));
         }
+
+        // Ölçüm yalnızca ses değiştirilecekse komuta girer (dokunulmayan ses olduğu gibi kalır).
+        var olcum = rapor is { Uygulandi: true } ? rapor.Olcum : null;
 
         Directory.CreateDirectory(outputFolder);
         var output = OutputPathFor(input, outputFolder, profile, ArgsBuilder.Uzanti(a));
@@ -233,7 +239,7 @@ public static class Exporter
             sb.AppendLine("Relios Export · hata günlüğü · " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
             sb.AppendLine("Kaynak : " + input);
             sb.AppendLine("Profil : " + profile.DisplayName);
-            sb.AppendLine("Bilgi  : " + Describe(media, a, ses, olcum));
+            sb.AppendLine("Bilgi  : " + Describe(media, a, ses, rapor));
             sb.AppendLine("Açıklama: " + ex.Message);
             sb.AppendLine();
             for (var i = 0; i < plan.Gecisler.Count; i++)
@@ -263,6 +269,31 @@ public static class Exporter
             }
         }
 
+        if (rapor is { Uygulandi: true })
+        {
+            // Eşitlemenin sonucu: çıktının sesi bir kez daha ölçülür (yalnızca ses okunur). Ölçülemese de video hazırdır.
+            onInfo?.Invoke(Describe(media, a, ses, rapor) + " · çıktının sesi ölçülüyor");
+            try
+            {
+                var cikti = new List<string>();
+                await FfmpegRunner.RunAsync(Esitleme.SonucOlcumKomutu(output, a.Ses), 0, null, ct, cikti);
+                if (ArgsBuilder.LoudnormOlcumOku(string.Join('\n', cikti)) is { } sonuc)
+                {
+                    rapor = rapor with { SonucYukseklik = sonuc.Yukseklik, SonucTepe = sonuc.Tepe };
+                }
+            }
+            catch (Exception ex) when (ex is FfmpegHatasi or OperationCanceledException or InvalidOperationException
+                                           or System.ComponentModel.Win32Exception)
+            {
+                // Sonuç yazılmaz; çıktı dosyası tamamdır.
+            }
+        }
+
+        if (rapor is not null)
+        {
+            onEsitleme?.Invoke(rapor);
+        }
+
         return output;
     }
 
@@ -287,7 +318,7 @@ public static class Exporter
     }
 
     /// <summary>Kaynağın kısa Türkçe özeti: çözünürlük, kare hızı, kırpma ve hangi sesin kullanılacağı.</summary>
-    public static string Describe(MediaInfo media, ProfilAyarlari a, SesSecimi ses, LoudnormOlcum? olcum = null)
+    public static string Describe(MediaInfo media, ProfilAyarlari a, SesSecimi ses, EsitlemeRaporu? esitleme = null)
     {
         var tr = CultureInfo.GetCultureInfo("tr-TR");
         var text = $"{media.DisplayWidth}×{media.DisplayHeight}";
@@ -331,10 +362,10 @@ public static class Exporter
         }
 
         text += " · Ses: " + ses.Aciklama;
-        if (olcum is not null)
+        if (esitleme is not null)
         {
-            // Ör. "-21,3 → -14 LUFS"
-            text += " · " + Bicim.Sayi(Math.Round(olcum.Yukseklik, 1)) + " → " + Bicim.Sayi(a.Ses.EsitlemeHedef) + " LUFS";
+            // Ör. "-21,3 → -14 LUFS (yalnızca yükseltilir)", "-9,2 LUFS · zaten yüksek, dokunulmuyor"
+            text += " · " + esitleme.BilgiMetni;
         }
 
         return text;
