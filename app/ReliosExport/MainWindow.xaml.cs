@@ -353,8 +353,20 @@ public partial class MainWindow : Window
 
         BtnStart.IsEnabled = IsBusy
             ? _cts is { IsCancellationRequested: false }
-            : _ffmpegOk && _files.Any(f => f.State != ItemState.Done);
+            : _ffmpegOk && _files.Count > 0;
+        if (!IsBusy)
+        {
+            // Bütün videolar bittiyse düğme "Tekrar işle" olur: hepsi paneldeki o anki ayarlarla yeniden kodlanır.
+            var tekrar = TekrarIslenecekMi;
+            BtnStart.Content = tekrar ? "Tekrar işle" : "Başlat";
+            BtnStart.ToolTip = tekrar
+                ? "Bütün videoları şu anki ayarlarla yeniden işler. Önceki dosyalar silinmez; yenileri ayrı adla kaydedilir."
+                : null;
+        }
     }
+
+    /// <summary>Listede video var ve hepsi bitmiş: Başlat düğmesi hepsini yeniden işler.</summary>
+    private bool TekrarIslenecekMi => _files.Count > 0 && _files.All(f => f.State == ItemState.Done);
 
     // ---------------------------------------------------------------- ayarlar
 
@@ -701,23 +713,6 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// Tekrar işle: biten video yeniden sıraya alınır; Başlat'a basınca paneldeki o anki ayarlarla yeniden kodlanır.
-    /// Önceki çıktı silinmez; yeni dosya ayrı adla (ör. klip_TikTok_2.mov) kaydedilir.
-    /// </summary>
-    private void OnRedoItem(object sender, RoutedEventArgs e)
-    {
-        if (IsBusy || (sender as FrameworkElement)?.DataContext is not FileItem { State: ItemState.Done } item)
-        {
-            return;
-        }
-
-        item.Reset();
-        item.HariciSes = HariciSes.Bul(item.Path);
-        BekliyorYaz(item);
-        OnListChanged();
-    }
-
     private void OnShowItem(object sender, RoutedEventArgs e)
     {
         switch ((sender as FrameworkElement)?.DataContext)
@@ -793,7 +788,8 @@ public partial class MainWindow : Window
         CheckTools();
         GirisKutulari.Uygula(this);
         var profile = SelectedProfile;
-        var queue = _files.Where(f => f.State != ItemState.Done).ToList();
+        // Bekleyen / hatalı / iptal edilen varsa yalnızca onlar; hepsi bittiyse (Tekrar işle) hepsi yeniden.
+        var queue = TekrarIslenecekMi ? _files.ToList() : _files.Where(f => f.State != ItemState.Done).ToList();
         if (!_ffmpegOk || queue.Count == 0)
         {
             return;
@@ -928,7 +924,11 @@ public partial class MainWindow : Window
     private void SetBusy(bool busy)
     {
         IsBusy = busy;
-        BtnStart.Content = busy ? "İptal" : "Başlat";
+        BtnStart.Content = busy ? "İptal" : TekrarIslenecekMi ? "Tekrar işle" : "Başlat";
+        if (busy)
+        {
+            BtnStart.ToolTip = null;
+        }
         BtnStart.Style = (Style)FindResource(busy ? "DangerButton" : "PrimaryButton");
         BtnAdd.IsEnabled = !busy;
         BtnFolder.IsEnabled = !busy;
@@ -1011,6 +1011,33 @@ public partial class MainWindow : Window
         {
             exp.IsExpanded = true;
         }
+    }
+
+    /// <summary>
+    /// Yalnızca pencere kontrolü için: listede yalnızca bitmiş videolar kalır; Başlat düğmesi "Tekrar işle"
+    /// olmalı. Düğmenin yazısını döndürür.
+    /// </summary>
+    internal string KontrolIcinHepsiBitti()
+    {
+        foreach (var item in _files.Where(f => f.State != ItemState.Done).ToList())
+        {
+            _files.Remove(item);
+        }
+
+        if (_files.Count == 0)
+        {
+            _files.Add(new FileItem(Path.Combine(Path.GetTempPath(), "Relios Export örnek", "klip.mp4")));
+        }
+
+        foreach (var item in _files)
+        {
+            item.State = ItemState.Done;
+            item.Status = "Hazır · " + Path.GetFileNameWithoutExtension(item.Path) + "_TikTok.mov";
+            item.Progress = 1;
+        }
+
+        OnListChanged();
+        return BtnStart.Content as string ?? string.Empty;
     }
 
     /// <summary>Yalnızca pencere kontrolü için: panelin bütün satırları açılır (tam görüntü).</summary>

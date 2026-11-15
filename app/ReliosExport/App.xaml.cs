@@ -132,6 +132,20 @@ public partial class App : Application
             EkranGoruntusu.Bekle(w.Dispatcher);
         }
 
+        // Hepsi bitince Başlat düğmesi "Tekrar işle" olmalı.
+        var dugme = w.KontrolIcinHepsiBitti();
+        EkranGoruntusu.Bekle(w.Dispatcher);
+        rapor.AppendLine("Tekrar işle düğmesi: " + (dugme == "Tekrar işle" ? "tamam" : "HATA (" + dugme + ")"));
+        if (dugme != "Tekrar işle")
+        {
+            throw new InvalidOperationException("Hepsi bitince Başlat düğmesi 'Tekrar işle' olmadı: " + dugme);
+        }
+
+        if (ekran is not null)
+        {
+            EkranGoruntusu.Pencere(w, Path.Combine(ekran, "09-ana-pencere-tekrar-isle.png"));
+        }
+
         // Ön ayar penceresi boş görünmesin: bellekte iki örnek (diske yazılmaz).
         var ayarlar = w.KontrolAyarlari;
         var dosya = w.KontrolAyarDosyasi;
