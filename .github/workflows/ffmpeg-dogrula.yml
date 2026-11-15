@@ -370,24 +370,24 @@ jobs:
             @{ ad = 'sabit_ton'; ses = 'aevalsrc=0.05*sin(2*PI*440*t)+0.02*sin(2*PI*3000*t)|0.05*sin(2*PI*550*t):s=48000:d=9'; d = 9; c = 'pcm_s24le' },
             @{ ad = 'yuksek_degisken'; ses = 'aevalsrc=(0.40+0.12*sin(2*PI*0.1*t))*sin(2*PI*1000*t)|(0.40+0.12*sin(2*PI*0.1*t))*sin(2*PI*1250*t):s=48000:d=12'; d = 12; c = 'pcm_s16le' }
           )
-          $K = @{}
+          $Kay = @{}  # (PowerShell degisken adlarinda buyuk / kucuk harf ayirmaz: $k ile ayni olmasin)
           foreach ($k in $kaynaklar) {
             $yol = Join-Path $PWD "$($k.ad).mov"
             ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i $k.ses -t $k.d -pix_fmt yuv420p -c:v libx264 -preset veryfast -c:a $k.c -y $yol
-            $K[$k.ad] = $yol
+            $Kay[$k.ad] = $yol
             "$($k.ad).mov: " + (ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,sample_rate,channels -of csv=p=0 $yol)
           }
           $yt = @('--profil', 'youtube')
           $esit = @('--ayarla', 'Ses.Esitleme=true')
           $durumlar = @(
-            @{ ad = 'Ses +12 dB, sinirlayici acik (varsayilan, -1 dB)'; src = $K.yuksek_ton; arg = $yt + @('--ayarla', 'Ses.Seviye=12'); arac = 'yukseklik'; kip = @('sinir'); karar = $null },
-            @{ ad = 'Ses +12 dB, sinirlayici kapali (kirpilir)'; src = $K.yuksek_ton; arg = $yt + @('--ayarla', 'Ses.Seviye=12', '--ayarla', 'Ses.Sinirlayici=false'); arac = 'yukseklik'; kip = @('kirpik'); karar = $null },
-            @{ ad = 'Esitleme: kisik, inip cikan ses (YouTube) -> dogrusal, yalnizca yukseltildi'; src = $K.kisik_degisken; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $K.kisik_degisken); karar = 'Dogrusal' },
-            @{ ad = 'Esitleme: kisik, 44,1 kHz, ornekleme kaynakla ayni (TikTok sesi, video x264) -> dogrusal'; src = $K.kisik_degisken_44k; arg = @('--ayarla', 'Video.Kodlayici=X264', '--ayarla', 'Ses.OrnekHizi=null') + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--hz', '44100', '--kaynak', $K.kisik_degisken_44k); karar = 'Dogrusal' },
-            @{ ad = 'Esitleme: kisik + ani tepeler -> dinamik, tepe -1 dB, kirpilma yok'; src = $K.tepeli; arg = $yt + $esit; arac = 'yukseklik'; kip = @('tepeli'); karar = 'Dinamik/AniTepeler' },
-            @{ ad = 'Esitleme: hic degismeyen ton -> dinamik'; src = $K.sabit_ton; arg = $yt + $esit; arac = 'yukseklik'; kip = @('lufs'); karar = 'Dinamik/SabitSes' },
-            @{ ad = 'Esitleme: yuksek ses (-7), yalnizca yukselt -> dokunulmadi (bit bit ayni)'; src = $K.yuksek_degisken; arg = $yt + $esit; arac = 'donusum'; kip = @('ayni'); karar = 'ZatenYuksek' },
-            @{ ad = 'Esitleme: yuksek ses (-7), iki yon -> dogrusal, yalnizca kisildi'; src = $K.yuksek_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.EsitlemeYonu=IkiYon'); arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $K.yuksek_degisken); karar = 'Dogrusal' }
+            @{ ad = 'Ses +12 dB, sinirlayici acik (varsayilan, -1 dB)'; src = $Kay.yuksek_ton; arg = $yt + @('--ayarla', 'Ses.Seviye=12'); arac = 'yukseklik'; kip = @('sinir'); karar = $null },
+            @{ ad = 'Ses +12 dB, sinirlayici kapali (kirpilir)'; src = $Kay.yuksek_ton; arg = $yt + @('--ayarla', 'Ses.Seviye=12', '--ayarla', 'Ses.Sinirlayici=false'); arac = 'yukseklik'; kip = @('kirpik'); karar = $null },
+            @{ ad = 'Esitleme: kisik, inip cikan ses (YouTube) -> dogrusal, yalnizca yukseltildi'; src = $Kay.kisik_degisken; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.kisik_degisken); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme: kisik, 44,1 kHz, ornekleme kaynakla ayni (TikTok sesi, video x264) -> dogrusal'; src = $Kay.kisik_degisken_44k; arg = @('--ayarla', 'Video.Kodlayici=X264', '--ayarla', 'Ses.OrnekHizi=null') + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--hz', '44100', '--kaynak', $Kay.kisik_degisken_44k); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme: kisik + ani tepeler -> dinamik, tepe -1 dB, kirpilma yok'; src = $Kay.tepeli; arg = $yt + $esit; arac = 'yukseklik'; kip = @('tepeli'); karar = 'Dinamik/AniTepeler' },
+            @{ ad = 'Esitleme: hic degismeyen ton -> dinamik'; src = $Kay.sabit_ton; arg = $yt + $esit; arac = 'yukseklik'; kip = @('lufs'); karar = 'Dinamik/SabitSes' },
+            @{ ad = 'Esitleme: yuksek ses (-7), yalnizca yukselt -> dokunulmadi (bit bit ayni)'; src = $Kay.yuksek_degisken; arg = $yt + $esit; arac = 'donusum'; kip = @('ayni'); karar = 'ZatenYuksek' },
+            @{ ad = 'Esitleme: yuksek ses (-7), iki yon -> dogrusal, yalnizca kisildi'; src = $Kay.yuksek_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.EsitlemeYonu=IkiYon'); arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.yuksek_degisken); karar = 'Dogrusal' }
           )
           $satirlar = @(); $hatali = 0; $i = 0
           foreach ($d in $durumlar) {
