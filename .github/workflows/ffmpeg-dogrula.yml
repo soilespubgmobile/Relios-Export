@@ -451,12 +451,14 @@ jobs:
         run: |
           [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
           $src = Join-Path $PWD 'boyut_kaynak.mov'
-          ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=1920x1080:rate=30 -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 10 -vf "noise=alls=20:allf=t" -pix_fmt yuv420p -c:v libx264 -preset ultrafast -crf 20 -c:a aac -ac 2 -y $src
+          # Gercekci (sikistirilabilir) goruntu, 30 sn. (Saf parazitte x264'un qpmax 33 siniri bit hizini asar; bu
+          # uc durum tahminin ipucunda yazar.)
+          ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=1920x1080:rate=30 -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 30 -pix_fmt yuv420p -c:v libx264 -preset veryfast -crf 18 -c:a aac -ac 2 -y $src
           $yt = @('--profil', 'youtube')
           $durumlar = @(
-            @{ ad = 'x264 CBR 8000 kb/s + WAV 16 bit'; arg = $yt + @('--ayarla', 'Video.X264.Mod=Cbr', '--ayarla', 'Video.X264.BitHizi=8000'); tur = 'Yaklasik'; pay = 0.05 },
+            @{ ad = 'x264 CBR 8000 kb/s (tampon 2 sn) + WAV 16 bit'; arg = $yt + @('--ayarla', 'Video.X264.Mod=Cbr', '--ayarla', 'Video.X264.BitHizi=8000', '--ayarla', 'Video.X264.VbvTampon=null'); tur = 'Yaklasik'; pay = 0.05 },
             @{ ad = 'x264 2 gecis 5000 kb/s + WAV 16 bit'; arg = $yt + @('--ayarla', 'Video.X264.Mod=IkiGecis', '--ayarla', 'Video.X264.BitHizi=5000'); tur = 'Yaklasik'; pay = 0.10 },
-            @{ ad = 'x264 CBR 6000 kb/s + FDK AAC 192 kb/s'; arg = $yt + @('--ayarla', 'Video.X264.Mod=Cbr', '--ayarla', 'Video.X264.BitHizi=6000', '--ayarla', 'Ses.Kodlayici=FdkAac', '--ayarla', 'Ses.Fdk.BitHizi=192'); tur = 'Yaklasik'; pay = 0.05 },
+            @{ ad = 'x264 CBR 6000 kb/s (tampon 2 sn) + FDK AAC 192 kb/s'; arg = $yt + @('--ayarla', 'Video.X264.Mod=Cbr', '--ayarla', 'Video.X264.BitHizi=6000', '--ayarla', 'Video.X264.VbvTampon=null', '--ayarla', 'Ses.Kodlayici=FdkAac', '--ayarla', 'Ses.Fdk.BitHizi=192'); tur = 'Yaklasik'; pay = 0.05 },
             @{ ad = 'YouTube varsayilani (CRF 18, en yuksek 34375 kb/s): en cok'; arg = $yt; tur = 'EnCok'; pay = 0.01 }
           )
           $satirlar = @(); $hatali = 0; $i = 0

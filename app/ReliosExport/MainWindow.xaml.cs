@@ -559,7 +559,8 @@ public partial class MainWindow : Window
         {
             item.Detail = (item.Detail is null ? string.Empty : item.Detail + "\n\n")
                           + "Tahmini dosya boyutu: (video + ses bit hızı) × süre. "
-                          + "\"En çok\": bit hızının yalnızca üst sınırı belli (ör. CRF + en yüksek bit hızı); gerçek dosya genelde daha küçüktür.";
+                          + "\"En çok\": bit hızının yalnızca üst sınırı belli (ör. CRF + en yüksek bit hızı; tampon payı dahil); gerçek dosya genelde daha küçüktür. "
+                          + "Çok karmaşık görüntüde (yoğun kumlanma, parazit) x264'ün en yüksek QP sınırı (qpmax) yüzünden aşılabilir.";
         }
     }
 

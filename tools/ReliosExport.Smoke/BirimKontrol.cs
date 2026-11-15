@@ -582,7 +582,11 @@ internal static class BirimKontrol
         // (34375 + 48000 × 16 × 2 / 1000) kb/s × 60 s = 269 332 500 bayt = 256,9 MB
         Kontrol("TikTok 60 sn (CBR 34375 + WAV 16 bit 48 kHz stereo)", "tahmini 257 MB", BoyutTahmini.Hesapla(tt, m, ses)?.Metin ?? "yok");
         var yt = Varsayilanlar.YouTube();
-        Kontrol("YouTube 60 sn (CRF 18, en yüksek 34375)", "en çok 257 MB", BoyutTahmini.Hesapla(yt, m, ses)?.Metin ?? "yok");
+        // + tampon payı: 55000 kbit × 0,9 (x264 vbv-init varsayılanı) = 6 187 500 bayt → 275 520 000 bayt = 262,8 MB
+        Kontrol("YouTube 60 sn (CRF 18, en yüksek 34375, tampon 55000)", "en çok 263 MB", BoyutTahmini.Hesapla(yt, m, ses)?.Metin ?? "yok");
+        var kisa = m with { DurationSeconds = 5 };
+        // 5 sn: (34375 + 1536) × 5 + 49500 = 229 055 kbit = 28 631 875 bayt = 27,3 MB (tamponsuz 21,4 MB idi)
+        Kontrol("YouTube 5 sn: tampon payı kısa videoda büyük", "en çok 27,3 MB", BoyutTahmini.Hesapla(yt, kisa, ses)?.Metin ?? "yok");
         yt.Video.X264.VbvMaks = null;
         Kontrol("CRF, üst sınır yok: tahmin yapılmaz", "yok", BoyutTahmini.Hesapla(yt, m, ses)?.Metin ?? "yok");
         var sessiz = Varsayilanlar.TikTok();

@@ -29,8 +29,15 @@ public static class BoyutTahmini
         }
 
         var sesKbps = SesBitHizi(a.Ses, ses);
-        var bayt = (video.Kbps + sesKbps) * 1000.0 / 8 * m.DurationSeconds;
-        return new BoyutTahmin((long)Math.Round(bayt), video.Tur);
+        var kbit = (video.Kbps + sesKbps) * m.DurationSeconds;
+        if (video.Tur == TahminTuru.EnCok && TamponPayi(a) is { } pay)
+        {
+            // Üst sınırda kodlayıcının tamponu da sayılır: video başında tampondaki bitleri harcayabilir, kısa
+            // videoda ortalama en yüksek bit hızının üstüne çıkabilir (ör. 5 sn'de 55000 kb'lık tampon ≈ +%29).
+            kbit += pay;
+        }
+
+        return new BoyutTahmin((long)Math.Round(kbit * 1000.0 / 8), video.Tur);
     }
 
     /// <summary>Videonun bit hızı (kb/s) ve tahminin türü; ayarlardan belli değilse null.</summary>
@@ -63,6 +70,22 @@ public static class BoyutTahmini
             default:
                 return null;
         }
+    }
+
+    /// <summary>
+    /// "En çok" tahmininde tamponun payı (kbit): x264'te tampon × başlangıç doluluğu (vbv-init, boşsa x264'ün
+    /// varsayılanı 0,9); NVENC'te tampon (verildiyse). Bilinmiyorsa null.
+    /// </summary>
+    private static double? TamponPayi(ProfilAyarlari a)
+    {
+        var v = a.Video;
+        if (v.Kodlayici == VideoKodlayici.Nvenc)
+        {
+            return v.Nvenc.Tampon is > 0 ? v.Nvenc.Tampon.Value : null;
+        }
+
+        var x = v.X264;
+        return x.VbvTampon is > 0 ? x.VbvTampon.Value * Math.Clamp(x.VbvBaslangic ?? 0.9, 0, 1) : null;
     }
 
     /// <summary>Sesin bit hızı (kb/s). WAV kesin; FDK AAC CBR kesin, VBR kipin üst değeri (kanal başına).</summary>
