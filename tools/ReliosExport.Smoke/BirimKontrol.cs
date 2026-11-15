@@ -490,8 +490,21 @@ internal static class BirimKontrol
 
         var arti = Varsayilanlar.YouTube();
         arti.Ses.Seviye = 6;
-        Iceriyor("+6 dB: seviye, sonra sınırlayıcı (-1 dB = 0,891251)", Komut(arti),
-            " -af volume=6dB,alimiter=limit=0.891251:level=0:latency=1,aresample=48000:");
+        Iceriyor("+6 dB: seviye, 192 kHz, sınırlayıcı (-1 dB = 0,891251), 48 kHz'e dönüş", Komut(arti),
+            " -af volume=6dB,aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.891251:level=0:latency=1,"
+            + "aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a pcm_s16le ");
+        var artiKaynak = Varsayilanlar.YouTube();
+        artiKaynak.Ses.Seviye = 6;
+        artiKaynak.Ses.OrnekHizi = null;
+        Iceriyor("+6 dB, örnekleme 'kaynakla aynı': 192 kHz'ten kaynağın hızına (44,1 kHz)", Komut(artiKaynak),
+            ",alimiter=limit=0.891251:level=0:latency=1,aresample=44100:resampler=soxr");
+        Iceriyor("+6 dB, örnekleme 'kaynakla aynı'", Komut(artiKaynak), " -ar 44100 ");
+        var artiYuksek = Varsayilanlar.YouTube();
+        artiYuksek.Ses.Seviye = 6;
+        artiYuksek.Ses.Kalite = DonusumKalitesi.Yuksek;
+        artiYuksek.Ses.Titresim = Titresim.Yok;
+        Iceriyor("+6 dB, dönüşüm kalitesi Yüksek: iki dönüşüm de soxr varsayılanıyla", Komut(artiYuksek),
+            " -af volume=6dB,aresample=192000:resampler=soxr,alimiter=limit=0.891251:level=0:latency=1,aresample=48000:resampler=soxr -c:a ");
         arti.Ses.Sinirlayici = false;
         Icermiyor("+6 dB, sınırlayıcı kapalı", Komut(arti), "alimiter");
         var eksi = Varsayilanlar.YouTube();
@@ -503,6 +516,7 @@ internal static class BirimKontrol
         var olcum = new LoudnormOlcum(-21.37, -3.2, 6.4, -31.6, 0.25);
         Iceriyor("Eşitleme: ölçülen değerlerle doğrusal loudnorm + sınırlayıcı", Komut(esit, olcum),
             " -af loudnorm=I=-14.0:TP=-1.0:LRA=11:measured_I=-21.37:measured_TP=-3.2:measured_LRA=6.4:measured_thresh=-31.6:offset=0.25:linear=true:print_format=none,alimiter=limit=0.891251:level=0:latency=1,aresample=48000:");
+        Icermiyor("Eşitleme: loudnorm zaten 192 kHz verir, ikinci kez yükseltilmez", Komut(esit, olcum), "aresample=192000");
         Icermiyor("Eşitleme açık ama ölçüm yok (sessiz ses)", Komut(esit), "loudnorm");
         esit.Ses.OrnekHizi = null;
         Iceriyor("Eşitleme + örnekleme 'kaynakla aynı': 192 kHz'ten kaynağın hızına", Komut(esit, olcum), ",aresample=44100:resampler=soxr");

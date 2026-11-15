@@ -6,6 +6,7 @@ Kullanım: python3 -I ses_yukseklik_kontrol.py <çıktı> <kip> [--hz 48000] [--
                                                [--codec pcm_s16le]
 
 sinir:    ses yükseltilmiş, sınırlayıcı açık: en büyük örnek tavanın altında (16 bit titreşim payı 0,05 dB),
+          örneklerin arasındaki gerçek tepe de tavanın altında (+ 0,3 dB pay; sınırlayıcı 192 kHz'te çalışır),
           ses kaynaktaki yerinde başlar (sınırlayıcının gecikmesi telafi edilmiş: 1,000 sn ± 1 ms).
 kirpik:   ses yükseltilmiş, sınırlayıcı kapalı: örnekler tam ölçekte kırpılır (sınırlayıcının işe yaradığının karşılığı).
 lufs:     LUFS eşitleme: tümleşik yükseklik hedefte (± 0,5 LU), gerçek tepe tavanın altında (+ 0,3 dB pay).
@@ -88,6 +89,8 @@ if kip in ("sinir", "kirpik"):
     if kip == "sinir":
         chk("En büyük örnek (dBFS)", f"<= {TAVAN + 0.05:.2f}", f"{tepe:.2f}", tepe <= TAVAN + 0.05)
         chk("Ses yükseltildi (tavana yakın)", f">= {TAVAN - 1.5:.2f}", f"{tepe:.2f}", tepe >= TAVAN - 1.5)
+        _, gercek = r128(cikti)
+        chk("Gerçek tepe (dBTP, örnekler arası)", f"<= {TAVAN + 0.3:.1f}", f"{gercek:.2f}", gercek <= TAVAN + 0.3)
         # Sesin başladığı yer: ilk kanalda 1000'i (-30 dBFS) aşan ilk örnek.
         ilk = next((i // kanal for i in range(0, len(s), kanal) if abs(s[i]) > 1000), -1)
         sn = ilk / HZ if ilk >= 0 else -1

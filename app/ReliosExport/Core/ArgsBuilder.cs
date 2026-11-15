@@ -1117,6 +1117,14 @@ public static class ArgsBuilder
 
     private static string Db(double d) => d.ToString("0.0#", Inv);
 
+    /// <summary>soxr ve seçilen dönüşüm kalitesi: Yüksek soxr'un varsayılanı (20 bit), Çok yüksek 28, En yüksek 33 bit.</summary>
+    private static string SoxrAyari(SesAyarlari s) => s.Kalite switch
+    {
+        DonusumKalitesi.Yuksek => "resampler=soxr",
+        DonusumKalitesi.CokYuksek => "resampler=soxr:precision=28",
+        _ => "resampler=soxr:precision=33",
+    };
+
     /// <summary>
     /// LUFS eşitlemenin ölçüm geçişi: sesi yalnızca okur (görüntü yok), loudnorm ölçtüğü değerleri JSON olarak
     /// ffmpeg çıktısına yazar. Süre videonunkiyle sınırlanır (harici ses videodan uzunsa sonu çıktıda kesilir).
@@ -1190,16 +1198,28 @@ public static class ArgsBuilder
                    + $":measured_thresh={Db(o.Esik)}:offset={Db(o.Ofset)}:linear=true:print_format=none");
         }
 
-        if (s.Sinirlayici && (s.Seviye > 0 || esitleme))
+        var sinirla = s.Sinirlayici && (s.Seviye > 0 || esitleme);
+
+        // Sınırlayıcı 192 kHz'te (4 kat örneklemede) çalışır: örneklerin arasındaki gerçek tepeler de tavanda kalır.
+        // Kaynağın hızında çalışsaydı yalnızca örnekleri sınırlardı; tiz ya da sıkıştırılmış seste gerçek tepe tavanı
+        // birkaç dB aşabilir, 44,1 kHz kaynak 48 kHz'e çevrilirken tam ölçekte kırpılabilirdi. Eşitlemede loudnorm
+        // zaten 192 kHz verir; yalnızca elle yükseltmede ses önce 192 kHz'e çıkarılır.
+        var yukariOrnekle = sinirla && !esitleme;
+        if (sinirla)
         {
+            if (yukariOrnekle)
+            {
+                af.Add("aresample=192000:" + SoxrAyari(s));
+            }
+
             // Tepe sınırlayıcı: yalnızca ses yükseltilince. Tavan doğrusal değere çevrilir (-1 dB = 0,891);
             // otomatik seviye kapalı (sesi kendisi yükseltmez), gecikmesi telafi edilir (senkron kaymaz).
             var tavan = Math.Pow(10, s.SinirlayiciTavan / 20);
             af.Add(string.Create(Inv, $"alimiter=limit={tavan:0.######}:level=0:latency=1"));
         }
 
-        // loudnorm çıktısı 192 kHz'tir: örnekleme hızı "kaynakla aynı" ise kaynağın hızına geri döner.
-        var hedefHz = s.OrnekHizi ?? (esitleme ? kaynakHz ?? 48000 : null);
+        // 192 kHz'ten (loudnorm ya da sınırlayıcı) dönüş: örnekleme hızı "kaynakla aynı" ise kaynağın hızına.
+        var hedefHz = s.OrnekHizi ?? (esitleme || yukariOrnekle ? kaynakHz ?? 48000 : null);
         var kaliteVar = s.Kalite != DonusumKalitesi.Yuksek || s.Titresim != Titresim.Yok;
         if (hedefHz is not null || kaliteVar)
         {
@@ -1209,11 +1229,7 @@ public static class ArgsBuilder
                 r.Add(hz.ToString(Inv));
             }
 
-            r.Add("resampler=soxr");
-            if (s.Kalite != DonusumKalitesi.Yuksek)
-            {
-                r.Add("precision=" + (s.Kalite == DonusumKalitesi.CokYuksek ? "28" : "33"));
-            }
+            r.Add(SoxrAyari(s));
 
             if (s.Titresim != Titresim.Yok)
             {
