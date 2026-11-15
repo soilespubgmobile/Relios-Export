@@ -37,15 +37,15 @@ Bu dosya önceki Claude sohbetinin özetidir. Yeni oturum buradan devam eder.
 ## Doğrulama (her değişiklikte)
 1. Push → `app-build.yml` çalışır (ekran görüntüleri log'da base64, `EKRAN|ad|...` satırları).
 2. `gh api -X POST repos/soilespubgmobile/Relios-Export/actions/workflows/ffmpeg-dogrula.yml/dispatches -f ref=main -f inputs[run_id]=43369861243`
-3. Bakılacaklar: birim kontrol (`--birim-kontrol`, son: 218 kontrol 0 fark), 19 deneme videosu, Diğer ayarlar, Ses dönüşümü, x264 seviye tabloları, Ses yüksekliği (14 deneme), Tahmini boyut (4 deneme) — hepsi 0 fark.
-- `app-build.yml` ayrıca **uçtan uca arayüz denemesi** çalıştırır (`--uctan-uca`, `Arayuz/UctanUca.cs`): gerçek pencereyle ekle / Başlat / yalnızca hatalıyı yeniden / çıkar / Tekrar işle + eşitleme / iptal / TikTok-NVENC hatası + günlük / Türkçe dosya adı / temizle / ayar dosyası — son: 99 kontrol 0 fark. GitHub'da ekran kartı yok: NVENC kodlaması yalnızca kullanıcının bilgisayarında denenebilir.
+3. Bakılacaklar: birim kontrol (`--birim-kontrol`, son: 226 kontrol 0 fark), 19 deneme videosu, Diğer ayarlar, Ses dönüşümü, x264 seviye tabloları, Ses yüksekliği (14 deneme), Tahmini boyut (4 deneme) — hepsi 0 fark.
+- `app-build.yml` ayrıca **uçtan uca arayüz denemesi** çalıştırır (`--uctan-uca`, `Arayuz/UctanUca.cs`): gerçek pencereyle ekle / Başlat / yalnızca hatalıyı yeniden / çıkar / Tekrar işle + eşitleme / iptal / TikTok-NVENC hatası + günlük / Türkçe dosya adı / temizle / ayar dosyası — son: 101 kontrol 0 fark. GitHub'da ekran kartı yok: NVENC kodlaması yalnızca kullanıcının bilgisayarında denenebilir.
 - Exe bu oturumdan indirilemiyor (artifact deposu engelli): kullanıcıya Actions sayfasındaki Artifacts bağlantısı verilir.
 - Yardımcılar: `tools/hedef_kontrol.py` (`--ses pcm16`, `--vbv`, `--kap`), `tools/ayar_kontrol.py`, `tools/saglamlik_kontrol.py`, `tools/ses_donusum_kontrol.py`.
 - Commit mesajlarında Co-Authored-By satırı kullanılıyor.
 
 ## Son oturum (15 Kasım 2026) — A'dan Z'ye
 
-### Yapılanlar (hepsi GitHub'da doğrulandı; son yeşil: app-build 43713377407, ffmpeg-dogrula 43713392628, commit 017a52d)
+### Yapılanlar (hepsi GitHub'da doğrulandı; son yeşil: app-build 43763139516, ffmpeg-dogrula 43763152254, commit 0a501ee)
 1. **Tekrar işle:** Önce satıra küçük bir düğme eklendi; kullanıcı beğenmedi, kaldırıldı. Şimdi bütün videolar bitince **Başlat** düğmesinin yazısı **"Tekrar işle"** oluyor ve hepsini o anki ayarlarla yeniden işliyor. Önceki dosya silinmiyor, yenisi `_2` adıyla kaydediliyor. Bekleyen ya da hatalı video varsa düğme "Başlat" kalıyor ve yalnızca onları işliyor.
 2. **Tek ilerleme çizgisi:** Alttaki genel ilerleme şeridi kaldırıldı; yalnızca videonun satırındaki çizgi kaldı. Görev çubuğundaki ilerleme duruyor.
 3. **Tahmini dosya boyutu:** Bekleyen satırda "tahmini 257 MB" ya da "en çok … MB" yazıyor (`Core/BoyutTahmini.cs`); "en çok" x264 tampon payını da sayıyor (tampon × vbv-init, varsayılan 0,9). Biten satırda gerçek boyut yazıyor. İpucunda qpmax notu var.
@@ -70,7 +70,7 @@ Bu dosya önceki Claude sohbetinin özetidir. Yeni oturum buradan devam eder.
   - İndirilenler klasörüne erişim verildi.
   - Bilgisayar kullanımı: File Explorer yalnızca "click" düzeyinde verilebiliyor. Çalışırken Chrome ve Discord pencereleri gizleniyor.
   - `Relios Export` kurulu bir uygulama olmadığı (taşınabilir exe) için `computer_resolve_access` onu bulamadı. Program açıkken bulup bulamadığı denenmedi; bulamazsa kullanıcıdan programı açmasını ya da çözüm üretmesini iste.
-- **Yeni exe kullanıcının bilgisayarında değil.** İndirilenler'deki `Relios Export.exe` 14 Kasım tarihli (eski). Yeni exe: Actions run **43713377407** → Artifacts → `relios-export-win64` (87,1 MB zip).
+- **Yeni exe kullanıcının bilgisayarında değil.** İndirilenler'deki `Relios Export.exe` 14 Kasım tarihli (eski). Yeni exe: Actions run **43763139516** → Artifacts → `relios-export-win64` (87,1 MB zip).
   - Bulut oturumundan artifact indirilemiyor (blob deposu engelli).
   - Uygulama içi tarayıcı GitHub'a girişli değil.
   - Kullanıcıya iki yol sunuldu, cevap gelmedi: A) tarayıcı panelinde (Ctrl+Shift+B) GitHub'a kendisi giriş yapar, Claude indirir; B) Chrome'dan zip'i kendisi indirir.
