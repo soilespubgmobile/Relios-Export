@@ -37,7 +37,9 @@ Bu dosya önceki Claude sohbetinin özetidir. Yeni oturum buradan devam eder.
 ## Doğrulama (her değişiklikte)
 1. Push → `app-build.yml` çalışır (ekran görüntüleri log'da base64, `EKRAN|ad|...` satırları).
 2. `gh api -X POST repos/soilespubgmobile/Relios-Export/actions/workflows/ffmpeg-dogrula.yml/dispatches -f ref=main -f inputs[run_id]=43369861243`
-3. Bakılacaklar: birim kontrol (`--birim-kontrol`, son: 212 kontrol 0 fark), 19 deneme videosu, Diğer ayarlar, Ses dönüşümü, x264 seviye tabloları, Ses yüksekliği (8 deneme) — hepsi 0 fark.
+3. Bakılacaklar: birim kontrol (`--birim-kontrol`, son: 218 kontrol 0 fark), 19 deneme videosu, Diğer ayarlar, Ses dönüşümü, x264 seviye tabloları, Ses yüksekliği (14 deneme), Tahmini boyut (4 deneme) — hepsi 0 fark.
+- `app-build.yml` ayrıca **uçtan uca arayüz denemesi** çalıştırır (`--uctan-uca`, `Arayuz/UctanUca.cs`): gerçek pencereyle ekle / Başlat / yalnızca hatalıyı yeniden / çıkar / Tekrar işle + eşitleme / iptal / TikTok-NVENC hatası + günlük / Türkçe dosya adı / temizle / ayar dosyası — son: 99 kontrol 0 fark. GitHub'da ekran kartı yok: NVENC kodlaması yalnızca kullanıcının bilgisayarında denenebilir.
+- Exe bu oturumdan indirilemiyor (artifact deposu engelli): kullanıcıya Actions sayfasındaki Artifacts bağlantısı verilir.
 - Yardımcılar: `tools/hedef_kontrol.py` (`--ses pcm16`, `--vbv`, `--kap`), `tools/ayar_kontrol.py`, `tools/saglamlik_kontrol.py`, `tools/ses_donusum_kontrol.py`.
 - Commit mesajlarında Co-Authored-By satırı kullanılıyor.
 
@@ -46,4 +48,6 @@ Bu dosya önceki Claude sohbetinin özetidir. Yeni oturum buradan devam eder.
 - TikTok'a WAV sesli MOV'u kullanıcı henüz denemedi — ilk yüklemede sesi kontrol etmesi önerildi.
 - TikTok indirmesi (1024×576, ~2,2 Mb/s, High@3.1, kodlayıcı bvc0ot) incelendi: muhtemelen tavanlı VBR; kesinlik için dosyanın kendisi gerekiyor.
 - Bir kayıt dosyası (Record_…mp4) incelendi: NVENC benzeri, Main@4.2, 1080p60, HRD'de VBR 13 Mb/s, 3 B-kare, 120 karede IDR, tam aralık; görüntü siyahtı. Kayıt cihazının saat dilimi UTC+4 görünüyordu (Türkiye UTC+3).
+- Kapsamlı testte bulunan ve düzeltilen: eşitleme + mono çıktı -14 yerine ~-20 LUFS veriyordu (artık önce mono'ya inilir); ölçüm hatasında günlük yazılmıyordu; "en çok" tahmini kısa videoda tamponu saymıyordu.
+- Bilgi: x264 qpmax 33 (YouTube varsayılanı, hedef videodan) saf parazit gibi aşırı karmaşık görüntüde VBV üst sınırını aşabiliyor; gerçek videolarda görülmedi, varsayılana dokunulmadı.
 - Önceden önerilen ama istenmeyen fikirler: 1440p yükleme seçeneği, H.264 olmayan YouTube kaynaklarında High profil.
