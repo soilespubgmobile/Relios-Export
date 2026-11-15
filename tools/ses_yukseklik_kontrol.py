@@ -3,6 +3,7 @@
 
 Kullanım: python3 -I ses_yukseklik_kontrol.py <çıktı> <kip> [--hz 48000] [--hedef -14] [--tavan -1]
                                                [--kaynak <kaynak>] [--program <programın ölçtüğü LUFS>]
+                                               [--codec pcm_s16le]
 
 sinir:    ses yükseltilmiş, sınırlayıcı açık: en büyük örnek tavanın altında (16 bit titreşim payı 0,05 dB),
           ses kaynaktaki yerinde başlar (sınırlayıcının gecikmesi telafi edilmiş: 1,000 sn ± 1 ms).
@@ -28,6 +29,7 @@ HEDEF = float(_ek.get("--hedef", "-14"))
 TAVAN = float(_ek.get("--tavan", "-1"))
 KAYNAK = _ek.get("--kaynak")
 PROGRAM = _ek.get("--program")
+CODEC = _ek.get("--codec", "pcm_s16le")
 if kip not in ("sinir", "kirpik", "lufs", "dogrusal", "tepeli"):
     sys.exit(f"bilinmeyen kip: {kip}")
 if kip == "dogrusal" and not KAYNAK:
@@ -76,7 +78,7 @@ def r128(yol):
 
 
 bilgi = akis(cikti)
-chk("Ses codec", "pcm_s16le", bilgi.get("codec_name"), bilgi.get("codec_name") == "pcm_s16le")
+chk("Ses codec", CODEC, bilgi.get("codec_name"), bilgi.get("codec_name") == CODEC)
 chk("Örnekleme hızı", HZ, bilgi.get("sample_rate"), str(bilgi.get("sample_rate")) == str(HZ))
 
 if kip in ("sinir", "kirpik"):

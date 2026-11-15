@@ -508,6 +508,19 @@ internal static class BirimKontrol
         Iceriyor("Eşitleme + örnekleme 'kaynakla aynı': 192 kHz'ten kaynağın hızına", Komut(esit, olcum), ",aresample=44100:resampler=soxr");
         Iceriyor("Eşitleme + örnekleme 'kaynakla aynı'", Komut(esit, olcum), " -ar 44100 ");
 
+        // Mono çıktı: kanal indirme ölçümden ve eşitlemeden önce (stereo ölçülüp mono'ya inilince sonuç 3–6 dB düşük kalırdı).
+        var mono = Varsayilanlar.YouTube();
+        mono.Ses.Kanal = KanalModu.Mono;
+        Icermiyor("Mono, eşitleme kapalı: kanal indirme yine -ac 1 ile (eskisi gibi)", Komut(mono), "pan=mono");
+        Iceriyor("Mono, eşitleme kapalı", Komut(mono), " -ac 1 ");
+        mono.Ses.Esitleme = true;
+        Iceriyor("Mono + eşitleme: önce mono'ya iner (yarım + yarım), sonra loudnorm", Komut(mono, olcum),
+            " -af pan=mono|c0=0.5*c0+0.5*c1,loudnorm=I=-14.0:TP=-1.0:LRA=11:measured_I=-21.37:");
+        Iceriyor("Mono + eşitleme: ölçüm de mono", " " + string.Join(' ', ArgsBuilder.LoudnormOlcumKomutu(mono.Ses, "KAYNAK.mp4",
+            ArgsBuilder.SesSec(mono.Ses, Kaynak48(), "KAYNAK.mp4"), 10)) + " ",
+            " -af pan=mono|c0=0.5*c0+0.5*c1,loudnorm=I=-14.0:TP=-1.0:LRA=11:print_format=json ");
+        Icermiyor("Mono + eşitleme, ses dokunulmadı (ölçüm yok): indirme yine -ac 1 ile", Komut(mono), "pan=mono");
+
         var olc = ArgsBuilder.LoudnormOlcumKomutu(esit.Ses, "KAYNAK.mp4", ArgsBuilder.SesSec(esit.Ses, Kaynak48(), "KAYNAK.mp4"), 10);
         Iceriyor("Ölçüm komutu", " " + string.Join(' ', olc) + " ", " -map 0:a:0 -vn -sn -dn -t 10 -af loudnorm=I=-14.0:TP=-1.0:LRA=11:print_format=json -f null - ");
 

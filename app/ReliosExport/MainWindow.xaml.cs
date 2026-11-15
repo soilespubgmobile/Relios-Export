@@ -1152,4 +1152,37 @@ public partial class MainWindow : Window
     internal ProfilAyarlari KontrolAyarlari => _ayarlar;
 
     internal AppSettings KontrolAyarDosyasi => _settings;
+
+    // ---------------------------------------------------------------- uçtan uca deneme (yalnızca GitHub, --uctan-uca)
+
+    /// <summary>Kayıt yeri (ayar dosyasına yazılmaz).</summary>
+    internal void KontrolCiktiKlasoru(string yol)
+    {
+        _outputFolder = yol;
+        OutputFolderBox.Text = yol;
+    }
+
+    /// <summary>Dosya ekleme: sürükle-bırak ve "Video ekle" ile aynı yol.</summary>
+    internal void KontrolEkle(params string[] yollar) => AddPaths(yollar);
+
+    internal IReadOnlyList<FileItem> KontrolSatirlar => _files;
+
+    internal bool KontrolMesgul => IsBusy;
+
+    internal string KontrolDurum => StatusText.Text;
+
+    /// <summary>Satırdaki "çıkar" düğmesi.</summary>
+    internal void KontrolCikar(FileItem item) => OnRemoveItem(new FrameworkElement { DataContext = item }, new RoutedEventArgs());
+
+    /// <summary>Bir düğmeye tıklama (yalnızca düğme etkinse; değilse false).</summary>
+    internal static bool KontrolTikla(System.Windows.Controls.Primitives.ButtonBase dugme)
+    {
+        if (!dugme.IsEnabled)
+        {
+            return false;
+        }
+
+        dugme.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+        return true;
+    }
 }

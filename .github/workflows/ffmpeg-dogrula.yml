@@ -377,6 +377,16 @@ jobs:
             $Kay[$k.ad] = $yol
             "$($k.ad).mov: " + (ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,sample_rate,channels -of csv=p=0 $yol)
           }
+          # Ayni adli kisik WAV (videonun kendi sesi yok) ve iki ses izli video (1. iz yuksek AAC, 2. iz kisik PCM:
+          # program kayipsiz izi secer; olcum de o izden yapilmali).
+          $hk = Join-Path $PWD 'harici_kisik.mov'
+          ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=30 -t 12 -pix_fmt yuv420p -c:v libx264 -preset veryfast -an -y $hk
+          ffmpeg -hide_banner -loglevel error -f lavfi -i "aevalsrc=$deg*sin(2*PI*440*t)|$deg*sin(2*PI*550*t):s=48000:d=12" -c:a pcm_s24le -y (Join-Path $PWD 'harici_kisik.wav')
+          $Kay['harici_kisik'] = $hk
+          $ci = Join-Path $PWD 'cok_izli.mov'
+          ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i 'aevalsrc=0.5*sin(2*PI*1000*t):s=48000' -f lavfi -i "aevalsrc=$deg*sin(2*PI*440*t)|$deg*sin(2*PI*550*t):s=48000" -map 0:v -map 1:a -map 2:a -t 12 -pix_fmt yuv420p -c:v libx264 -preset veryfast -c:a:0 aac -c:a:1 pcm_s24le -y $ci
+          $Kay['cok_izli'] = $ci
+          "cok_izli.mov: " + ((ffprobe -v error -show_entries stream=codec_name -select_streams a -of csv=p=0 $ci) -join ' + ')
           $yt = @('--profil', 'youtube')
           $esit = @('--ayarla', 'Ses.Esitleme=true')
           $durumlar = @(
@@ -387,6 +397,12 @@ jobs:
             @{ ad = 'Esitleme: kisik + ani tepeler -> dinamik, tepe -1 dB, kirpilma yok'; src = $Kay.tepeli; arg = $yt + $esit; arac = 'yukseklik'; kip = @('tepeli'); karar = 'Dinamik/AniTepeler' },
             @{ ad = 'Esitleme: hic degismeyen ton -> dinamik'; src = $Kay.sabit_ton; arg = $yt + $esit; arac = 'yukseklik'; kip = @('lufs'); karar = 'Dinamik/SabitSes' },
             @{ ad = 'Esitleme: yuksek ses (-7), yalnizca yukselt -> dokunulmadi (bit bit ayni)'; src = $Kay.yuksek_degisken; arg = $yt + $esit; arac = 'donusum'; kip = @('ayni'); karar = 'ZatenYuksek' },
+            @{ ad = 'Esitleme: kisik ses, mono cikti -> once mono, sonra -14'; src = $Kay.kisik_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.Kanal=Mono'); arac = 'yukseklik'; kip = @('lufs'); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme + ayni adli WAV (kisik) -> olcum WAV''dan, dogrusal'; src = $Kay.harici_kisik; arg = $yt + $esit; arac = 'yukseklik'; kip = @('lufs'); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme + iki ses izli video -> kayipsiz (kisik) iz olculur, dogrusal'; src = $Kay.cok_izli; arg = $yt + $esit; arac = 'yukseklik'; kip = @('lufs'); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme + FDK AAC'; src = $Kay.kisik_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.Kodlayici=FdkAac'); arac = 'yukseklik'; kip = @('lufs', '--codec', 'aac'); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme + x264 2 gecis (4000 kb/s) -> yalnizca yukseltildi'; src = $Kay.kisik_degisken; arg = $yt + $esit + @('--ayarla', 'Video.X264.Mod=IkiGecis', '--ayarla', 'Video.X264.BitHizi=4000'); arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.kisik_degisken); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme + ses gecikmesi +250 ms'; src = $Kay.kisik_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.Gecikme=250'); arac = 'yukseklik'; kip = @('lufs'); karar = 'Dogrusal' },
             @{ ad = 'Esitleme: yuksek ses (-7), iki yon -> dogrusal, yalnizca kisildi'; src = $Kay.yuksek_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.EsitlemeYonu=IkiYon'); arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.yuksek_degisken); karar = 'Dogrusal' }
           )
           $satirlar = @(); $hatali = 0; $i = 0
@@ -428,6 +444,53 @@ jobs:
           $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           if ($hatali) { "`n$hatali ses yuksekligi denemesinde sorun var."; exit 1 }
           "`nSinirlayici tepeyi -1 dB'de tuttu; esitleme dogrusalda yalnizca sabit kazanc uyguladi, dinamikte tasirmadi, yuksek sese dokunmadi."
+          exit 0
+
+      - name: Tahmini boyut denemesi (programin yazdigi tahmin gercek dosyayla karsilastirilir)
+        if: always()
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          $src = Join-Path $PWD 'boyut_kaynak.mov'
+          ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=1920x1080:rate=30 -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 10 -vf "noise=alls=20:allf=t" -pix_fmt yuv420p -c:v libx264 -preset ultrafast -crf 20 -c:a aac -ac 2 -y $src
+          $yt = @('--profil', 'youtube')
+          $durumlar = @(
+            @{ ad = 'x264 CBR 8000 kb/s + WAV 16 bit'; arg = $yt + @('--ayarla', 'Video.X264.Mod=Cbr', '--ayarla', 'Video.X264.BitHizi=8000'); tur = 'Yaklasik'; pay = 0.05 },
+            @{ ad = 'x264 2 gecis 5000 kb/s + WAV 16 bit'; arg = $yt + @('--ayarla', 'Video.X264.Mod=IkiGecis', '--ayarla', 'Video.X264.BitHizi=5000'); tur = 'Yaklasik'; pay = 0.10 },
+            @{ ad = 'x264 CBR 6000 kb/s + FDK AAC 192 kb/s'; arg = $yt + @('--ayarla', 'Video.X264.Mod=Cbr', '--ayarla', 'Video.X264.BitHizi=6000', '--ayarla', 'Ses.Kodlayici=FdkAac', '--ayarla', 'Ses.Fdk.BitHizi=192'); tur = 'Yaklasik'; pay = 0.05 },
+            @{ ad = 'YouTube varsayilani (CRF 18, en yuksek 34375 kb/s): en cok'; arg = $yt; tur = 'EnCok'; pay = 0.01 }
+          )
+          $satirlar = @(); $hatali = 0; $i = 0
+          foreach ($d in $durumlar) {
+            $i++
+            $dir = Join-Path $PWD "boyut/$i"
+            Write-Host "::group::$i. $($d.ad)"
+            $log = & ./smoke/ReliosExport.Smoke.exe $src $dir @($d.arg) 2>&1 | ForEach-Object { "$_" }
+            $rc = $LASTEXITCODE
+            $log | ForEach-Object { Write-Host $_ }
+            Write-Host "::endgroup::"
+            $t = ($log | Where-Object { $_ -match '^TAHMIN_BAYT=(\d+) TAHMIN_TUR=(\w+)' } | Select-Object -First 1)
+            $sonuc = 'OK'; $ozet = ''
+            if ($rc -ne 0 -or -not $t) { $sonuc = "HATA (kod $rc, tahmin: $t)" }
+            else {
+              $null = $t -match '^TAHMIN_BAYT=(\d+) TAHMIN_TUR=(\w+)'
+              $tahmin = [double]$Matches[1]; $tur = $Matches[2]
+              $out = (Get-ChildItem -LiteralPath $dir | Where-Object { $_.Extension -in '.mp4', '.mov' } | Select-Object -First 1)
+              $gercek = [double]$out.Length
+              $oran = ($gercek - $tahmin) / $tahmin
+              $ozet = "tahmin {0:N0} bayt ({1}) · gercek {2:N0} bayt · fark {3:+0.0;-0.0}%" -f $tahmin, $tur, $gercek, ($oran * 100)
+              if ($tur -ne $d.tur) { $sonuc = 'FARK'; $ozet += " · beklenen tur $($d.tur)" }
+              elseif ($d.tur -eq 'EnCok' -and $oran -gt $d.pay) { $sonuc = 'FARK'; $ozet += ' · gercek tahminden buyuk' }
+              elseif ($d.tur -eq 'Yaklasik' -and [math]::Abs($oran) -gt $d.pay) { $sonuc = 'FARK'; $ozet += " · pay %$($d.pay * 100)" }
+            }
+            if ($sonuc -ne 'OK') { $hatali++ }
+            $satirlar += "| $i | $($d.ad) | $ozet | $sonuc |"
+          }
+          $tablo = @("", "| # | Tahmini boyut | Karsilastirma | Sonuc |", "|---|---|---|---|") + $satirlar
+          "`n===== TAHMINI BOYUT ====="
+          $tablo | ForEach-Object { $_ }
+          $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          if ($hatali) { "`n$hatali tahmini boyut denemesinde sorun var."; exit 1 }
+          "`nTahmini boyut gercek dosyayla uyumlu."
           exit 0
 
       - name: x264 seviye denemesi (programin sectigi seviyede x264 uyarmamali, bir alt seviyede uyarmali)

@@ -1075,8 +1075,10 @@ public static class ArgsBuilder
     /// <summary>
     /// Sesin yüksekliğini değiştirmeden önceki filtreler: gecikme, seviye, mono → stereo. LUFS eşitlemede ölçüm de
     /// bunlardan sonraki sese yapılır (ikinci geçişte loudnorm aynı yerde durur).
+    /// <paramref name="kanalIndir"/>: LUFS eşitlemede çıktının kanal sayısına (mono / stereo) burada inilir; yükseklik
+    /// çıktıdaki kanallarla ölçülmeli (stereo ölçülüp sonra mono'ya inilince sonuç hedefin 3–6 dB altında kalır).
     /// </summary>
-    private static List<string> OnSesFiltreleri(SesAyarlari s, int? kaynakKanal)
+    private static List<string> OnSesFiltreleri(SesAyarlari s, int? kaynakKanal, bool kanalIndir = false)
     {
         var af = new List<string>();
         if (s.Gecikme > 0)
@@ -1099,6 +1101,16 @@ public static class ArgsBuilder
             // video stereo çalınınca kaynaktan sessiz kalırdı. Oynatıcılar da mono sesi iki hoparlöre aynen verir.
             af.Add("pan=stereo|c0=c0|c1=c0");
         }
+        else if (kanalIndir && s.Kanal == KanalModu.Mono && kaynakKanal != 1)
+        {
+            // Stereo → mono: ffmpeg'in "-ac 1" ile yaptığının aynısı (iki kanalın yarısı); başka kanal sayısında
+            // ffmpeg'in kendi indirmesi.
+            af.Add(kaynakKanal == 2 ? "pan=mono|c0=0.5*c0+0.5*c1" : "aformat=channel_layouts=mono");
+        }
+        else if (kanalIndir && s.Kanal == KanalModu.Stereo && kaynakKanal is > 2)
+        {
+            af.Add("aformat=channel_layouts=stereo");
+        }
 
         return af;
     }
@@ -1119,7 +1131,7 @@ public static class ArgsBuilder
             args.AddRange(["-t", sureSaniye.ToString("0.###", Inv)]);
         }
 
-        var af = OnSesFiltreleri(s, ses.Kanal);
+        var af = OnSesFiltreleri(s, ses.Kanal, kanalIndir: true);
         af.Add($"loudnorm=I={Db(s.EsitlemeHedef)}:TP={Db(s.SinirlayiciTavan)}:LRA=11:print_format=json");
         args.AddRange(["-af", string.Join(',', af), "-f", "null", "-"]);
         return args;
@@ -1166,8 +1178,8 @@ public static class ArgsBuilder
 
     private static void Ses(List<string> args, SesAyarlari s, bool harici, int? kaynakKanal = null, LoudnormOlcum? olcum = null, int? kaynakHz = null)
     {
-        var af = OnSesFiltreleri(s, kaynakKanal);
         var esitleme = s.Esitleme && olcum is not null;
+        var af = OnSesFiltreleri(s, kaynakKanal, kanalIndir: esitleme);
         if (esitleme)
         {
             // İkinci geçiş: ölçülen değerlerle doğrusal (sesin dinamiği değişmeden) hedefe getirilir; doğrusal

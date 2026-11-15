@@ -16,7 +16,7 @@ public partial class App : Application
         // Derleme kontrolünde (--ffmpeg-kontrol / --pencere-kontrol) hata penceresi açılmaz:
         // hata yalnızca dosyaya yazılır ve program hata koduyla kapanır.
         CrashReport.Silent = Array.Exists(
-            Environment.GetCommandLineArgs(), a => a is "--ffmpeg-kontrol" or "--pencere-kontrol");
+            Environment.GetCommandLineArgs(), a => a is "--ffmpeg-kontrol" or "--pencere-kontrol" or "--uctan-uca");
 
         // WPF'in kendisi başlatılmadan önce bağlanır: başlangıçta bir şey çökerse bile
         // hata "Relios Export hata.txt" dosyasına yazılır ve ekranda gösterilir.
@@ -43,6 +43,20 @@ public partial class App : Application
         //   --ffmpeg-kontrol <dosya>   tek exe'nin içindeki FFmpeg açılıyor mu
         //   --pencere-kontrol <dosya>  ana pencere ve ayar pencereleri hatasız açılıyor mu
         //   --ekran <klasör>           (pencere kontrolüyle) pencerelerin görüntüsünü PNG olarak kaydeder
+        //   --uctan-uca <rapor> --medya <klasör> --cikti <klasör>  arayüzü bir kullanıcı gibi kullanıp denetler
+        var uu = Array.IndexOf(e.Args, "--uctan-uca");
+        if (uu >= 0)
+        {
+            string Arg(string ad)
+            {
+                var i = Array.IndexOf(e.Args, ad);
+                return i >= 0 && i + 1 < e.Args.Length ? e.Args[i + 1] : string.Empty;
+            }
+
+            UctanUcaCalistir(Arg("--uctan-uca"), Arg("--medya"), Arg("--cikti"));
+            return;
+        }
+
         var ff = Array.IndexOf(e.Args, "--ffmpeg-kontrol");
         var win = Array.IndexOf(e.Args, "--pencere-kontrol");
         var k = ff >= 0 ? ff : win;
@@ -106,6 +120,32 @@ public partial class App : Application
 
             Shutdown(2);
         }
+    }
+
+    /// <summary>Uçtan uca deneme: sonuç rapora yazılır; fark varsa çıkış kodu 1, beklenmeyen hata 2.</summary>
+    private void UctanUcaCalistir(string raporYolu, string medya, string cikti)
+    {
+        var w = new MainWindow();
+        MainWindow = w;
+        w.Loaded += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Func<Task>(async () =>
+        {
+            var rapor = new StringBuilder();
+            var kod = 0;
+            try
+            {
+                kod = await UctanUca.CalistirAsync(w, medya, cikti, rapor) == 0 ? 0 : 1;
+            }
+            catch (Exception ex)
+            {
+                rapor.AppendLine("BEKLENMEYEN HATA | " + ex);
+                kod = 2;
+            }
+
+            await UctanUca.DurdurAsync(w);
+            File.WriteAllText(raporYolu, rapor.ToString());
+            Shutdown(kod);
+        }));
+        w.Show();
     }
 
     /// <summary>

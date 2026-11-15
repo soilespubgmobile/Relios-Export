@@ -206,7 +206,18 @@ public static class Exporter
             // dokunulmaz / doğrusal (bütün ses aynı miktarda) / dinamik.
             onInfo?.Invoke(Describe(media, a, ses) + " · ses ölçülüyor");
             var cikti = new List<string>();
-            await FfmpegRunner.RunAsync(ArgsBuilder.LoudnormOlcumKomutu(a.Ses, input, ses, media.DurationSeconds), 0, null, ct, cikti);
+            var olcumKomutu = ArgsBuilder.LoudnormOlcumKomutu(a.Ses, input, ses, media.DurationSeconds);
+            try
+            {
+                await FfmpegRunner.RunAsync(olcumKomutu, 0, null, ct, cikti);
+            }
+            catch (FfmpegHatasi ex)
+            {
+                // Ölçüm de hata günlüğüne yazılır (satırdaki "Günlük" düğmesi açar).
+                ex.GunlukDosyasi = HataAciklamasi.GunlukYaz(input, GunlukMetni(ex, input, profile, media, a, ses, null, [olcumKomutu]));
+                throw;
+            }
+
             rapor = Esitleme.KararVer(a.Ses, ArgsBuilder.LoudnormOlcumOku(string.Join('\n', cikti)));
             onInfo?.Invoke(Describe(media, a, ses, rapor));
         }
@@ -235,25 +246,7 @@ public static class Exporter
         }
         catch (FfmpegHatasi ex)
         {
-            var sb = new StringBuilder();
-            sb.AppendLine("Relios Export · hata günlüğü · " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
-            sb.AppendLine("Kaynak : " + input);
-            sb.AppendLine("Profil : " + profile.DisplayName);
-            sb.AppendLine("Bilgi  : " + Describe(media, a, ses, rapor));
-            sb.AppendLine("Açıklama: " + ex.Message);
-            sb.AppendLine();
-            for (var i = 0; i < plan.Gecisler.Count; i++)
-            {
-                sb.AppendLine($"Komut {i + 1}/{plan.Gecisler.Count}: \"{Tools.Ffmpeg}\" " + ArgsBuilder.KomutMetni(plan.Gecisler[i]));
-            }
-
-            sb.AppendLine();
-            sb.AppendLine("----- ffmpeg çıktısı -----");
-            sb.AppendLine(ex.Gunluk);
-            sb.AppendLine();
-            sb.AppendLine("----- ayarlar -----");
-            sb.AppendLine(AyarDosyasi.Yaz(a));
-            ex.GunlukDosyasi = HataAciklamasi.GunlukYaz(input, sb.ToString());
+            ex.GunlukDosyasi = HataAciklamasi.GunlukYaz(input, GunlukMetni(ex, input, profile, media, a, ses, rapor, plan.Gecisler));
             throw;
         }
         finally
@@ -295,6 +288,38 @@ public static class Exporter
         }
 
         return output;
+    }
+
+    /// <summary>Hata günlüğünün içeriği: kaynak, bilgi, açıklama, komutlar, ffmpeg çıktısı ve ayarlar.</summary>
+    private static string GunlukMetni(
+        FfmpegHatasi ex,
+        string input,
+        ExportProfile profile,
+        MediaInfo media,
+        ProfilAyarlari a,
+        SesSecimi ses,
+        EsitlemeRaporu? rapor,
+        IReadOnlyList<IReadOnlyList<string>> komutlar)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Relios Export · hata günlüğü · " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
+        sb.AppendLine("Kaynak : " + input);
+        sb.AppendLine("Profil : " + profile.DisplayName);
+        sb.AppendLine("Bilgi  : " + Describe(media, a, ses, rapor));
+        sb.AppendLine("Açıklama: " + ex.Message);
+        sb.AppendLine();
+        for (var i = 0; i < komutlar.Count; i++)
+        {
+            sb.AppendLine($"Komut {i + 1}/{komutlar.Count}: \"{Tools.Ffmpeg}\" " + ArgsBuilder.KomutMetni(komutlar[i]));
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("----- ffmpeg çıktısı -----");
+        sb.AppendLine(ex.Gunluk);
+        sb.AppendLine();
+        sb.AppendLine("----- ayarlar -----");
+        sb.AppendLine(AyarDosyasi.Yaz(a));
+        return sb.ToString();
     }
 
     /// <summary>

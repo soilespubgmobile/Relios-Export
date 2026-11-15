@@ -86,6 +86,13 @@ for (var g = 0; g < plan.Gecisler.Count; g++)
     Console.WriteLine($"Komut {g + 1}/{plan.Gecisler.Count}: ffmpeg {komut}");
 }
 
+// Doğrulama tahmini boyutu gerçek dosyayla karşılaştırır (ASCII satır).
+if (BoyutTahmini.Hesapla(ayarlar, media, ses) is { } tahmin)
+{
+    Console.WriteLine($"TAHMIN_BAYT={tahmin.Bayt} TAHMIN_TUR={tahmin.Tur}");
+    Console.WriteLine("Tahmini boyut: " + tahmin.Metin);
+}
+
 if (sadeceKomut)
 {
     return 0;
