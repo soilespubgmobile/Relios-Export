@@ -43,6 +43,46 @@ Bu dosya önceki Claude sohbetinin özetidir. Yeni oturum buradan devam eder.
 - Yardımcılar: `tools/hedef_kontrol.py` (`--ses pcm16`, `--vbv`, `--kap`), `tools/ayar_kontrol.py`, `tools/saglamlik_kontrol.py`, `tools/ses_donusum_kontrol.py`.
 - Commit mesajlarında Co-Authored-By satırı kullanılıyor.
 
+## Son oturum (15 Kasım 2026) — A'dan Z'ye
+
+### Yapılanlar (hepsi GitHub'da doğrulandı; son yeşil: app-build 43713377407, ffmpeg-dogrula 43713392628, commit 017a52d)
+1. **Tekrar işle:** Önce satıra küçük bir düğme eklendi; kullanıcı beğenmedi, kaldırıldı. Şimdi bütün videolar bitince **Başlat** düğmesinin yazısı **"Tekrar işle"** oluyor ve hepsini o anki ayarlarla yeniden işliyor. Önceki dosya silinmiyor, yenisi `_2` adıyla kaydediliyor. Bekleyen ya da hatalı video varsa düğme "Başlat" kalıyor ve yalnızca onları işliyor.
+2. **Tek ilerleme çizgisi:** Alttaki genel ilerleme şeridi kaldırıldı; yalnızca videonun satırındaki çizgi kaldı. Görev çubuğundaki ilerleme duruyor.
+3. **Tahmini dosya boyutu:** Bekleyen satırda "tahmini 257 MB" ya da "en çok … MB" yazıyor (`Core/BoyutTahmini.cs`); "en çok" x264 tampon payını da sayıyor (tampon × vbv-init, varsayılan 0,9). Biten satırda gerçek boyut yazıyor. İpucunda qpmax notu var.
+4. **Tepe sınırlayıcı:** alimiter, -1 dB, varsayılan açık. Yalnızca ses yükseltilince devreye giriyor (artı dB ya da LUFS eşitleme); yoksa sese dokunmuyor.
+5. **LUFS eşitleme** (`Core/Esitleme.cs`): loudnorm iki geçiş. Varsayılan kapalı, hedef -14. Yön: "Yalnızca kısık sesi yükselt" (varsayılan) ya da "Kısık sesi yükselt, yüksek sesi kıs". Hedefe ±0,5 LU yakınsa dokunmuyor. Doğrusal/dinamik kararı loudnorm'un kendi kuralıyla veriliyor (af_loudnorm.c): tepe + kazanç ≤ tavan ve 0 < LRA ≤ 11 ise doğrusal (sabit kazanç), değilse dinamik. Bitince çıktı ölçülüp satıra yazılıyor ("-14,0 LUFS", "(hedefe ulaşılamadı)", "(dokunulmadı)"); ayrıntı ipucunda. Mono çıktıda önce mono'ya iniliyor, sonra ölçülüyor.
+   - **TikTok -14 kullanıcının kararı.** Kullanıcı kendi "Relios Master" programında TikTok için -10 kullanmıştı; bu program GitHub'da yok, bilgisayarında İndirilenler'de "Relios Master 1.8.1" var. Araştırma sonucu: TikTok resmi bir değer yayınlamıyor; kaynakların çoğu -14 diyor, bazıları -10 ile -12 arası öneriyor.
+6. **Kapsamlı test:** Uçtan uca arayüz denemesi (99 kontrol, app-build'de), ses yüksekliği (14 deneme), tahmini boyut (4 deneme), birim kontrol (218). Bulunan 3 hata düzeltildi (aşağıdaki "Son konuşulanlar"da).
+
+### Önerilip yapılmayanlar (kullanıcı "önerilere sonra bakarım" dedi; sorulmadan yapma)
+- HDR ton eşleme: zimg gerekir, FFmpeg yeniden derlenmeli. Kullanıcı sordu; cevap: SDR için gerekmez, yalnızca HDR telefon videoları için.
+- x264 yolunda da ekran kartıyla çözme (NVDEC).
+- Aynı anda iki video işleme.
+- x264 threads için "otomatik" seçeneği (varsayılan 8 kalır).
+- Tamamen ekran kartında işleme (scale_cuda; bit bit aynı olmaz).
+- NVENC için qmin/qmax, gpu ve surfaces kutuları.
+- Başlangıç/bitiş kesme; bitince bildirim sesi ya da bilgisayarı kapatma; "kaynağın yanına kaydet" seçeneği.
+- Sürüm yükseltme (0.8.9 → 0.9.0): kullanıcıya soruldu, cevap gelmedi; sürüm hâlâ 0.8.9.
+
+### Yapılmayanlar / sıradaki iş
+- **Bilgisayar testleri yapılmadı.** Kullanıcının bilgisayarına bağlanıldı:
+  - Windows, cihaz `desktop-jdnkoph`, kullanıcı klasörü `C:\Users\relio`.
+  - İndirilenler klasörüne erişim verildi.
+  - Bilgisayar kullanımı: File Explorer yalnızca "click" düzeyinde verilebiliyor. Çalışırken Chrome ve Discord pencereleri gizleniyor.
+  - `Relios Export` kurulu bir uygulama olmadığı (taşınabilir exe) için `computer_resolve_access` onu bulamadı. Program açıkken bulup bulamadığı denenmedi; bulamazsa kullanıcıdan programı açmasını ya da çözüm üretmesini iste.
+- **Yeni exe kullanıcının bilgisayarında değil.** İndirilenler'deki `Relios Export.exe` 14 Kasım tarihli (eski). Yeni exe: Actions run **43713377407** → Artifacts → `relios-export-win64` (87,1 MB zip).
+  - Bulut oturumundan artifact indirilemiyor (blob deposu engelli).
+  - Uygulama içi tarayıcı GitHub'a girişli değil.
+  - Kullanıcıya iki yol sunuldu, cevap gelmedi: A) tarayıcı panelinde (Ctrl+Shift+B) GitHub'a kendisi giriş yapar, Claude indirir; B) Chrome'dan zip'i kendisi indirir.
+  - Exe, eski exe'nin ve ayarların üzerine yazılmadan İndirilenler'de **"Relios Export test 15-11"** klasörüne konacak. İndirme için kullanıcının açık izni gerekir (dosya adı, kaynak, boyut söylenerek).
+- **Öncelikli bilgisayar testleri (sırayla):**
+  1. TikTok + NVENC kodlama (GitHub'da ekran kartı yok; en önemlisi).
+  2. Kodlarken pencereyi kapatma: onay sorusu, "Durdur ve kapat", `.part` kalmamalı.
+  3. Programı kapatıp açma: ayarlar korunmalı.
+  4. Sürükle-bırak.
+  - **TikTok'a yüklemeyi kullanıcı en son kendisi yapacak.**
+- **Diğer bilgisayar testleri:** satırdaki klasör ve günlük düğmeleri, kayıt yeri seçme, ön ayar kaydet/yükle/sil, YouTube'da "content loudness" (eşitleme açık), HDR telefon videosu (renklerin soluk çıkması beklenir).
+
 ## Son konuşulanlar (bilgi)
 - YouTube'a PCM 16 bit yükleme, FDK 128'e göre 15–17 kHz'te biraz daha iyi sonuç verdi (kullanıcı testi). YouTube sesi zaten yeniden kodluyor.
 - TikTok'a WAV sesli MOV'u kullanıcı henüz denemedi — ilk yüklemede sesi kontrol etmesi önerildi.
