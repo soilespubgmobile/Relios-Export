@@ -354,13 +354,14 @@ jobs:
           "`n24 bit kaynak 16 bit'e ucgen titresimle indirildi; 16 bit 48 kHz kaynagin sesi bit bit ayni kaldi."
           exit 0
 
-      - name: Ses yuksekligi denemesi (tepe sinirlayici -1 dB; LUFS esitleme -14 dogrusal / dinamik / dokunulmadi)
+      - name: Ses yuksekligi denemesi (tepe sinirlayici -1 dB; LUFS esitleme -14 sabit kazanc / sinirlayici + telafi / dokunulmadi)
         if: always()
         run: |
           [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
           # Yuksek ton: 0,9 genlik, ilk 1 sn sessiz (+12 dB ile tasar). Tiz ton 44,1 kHz: 11025 Hz ornekler arasinda
           # tepe yapar (orneklerin 1,41 kati); sinirlayici kaynagin hizinda calissaydi 48 kHz'te tam olcekte kirpilirdi. Kisik degisken: ~-30 LUFS, yavas inip cikan (dogrusal).
-          # Tepeli: kisik degisken + 2 sn'de bir 10 ms'lik yuksek vurus (dinamik). Sabit ton: hic degismeyen (LRA 0, dinamik).
+          # Tepeli: kisik degisken + 2 sn'de bir 10 ms'lik yuksek vurus (sabit kazanc tepeyi asar: sinirlayici + telafi).
+          # Sabit ton: hic degismeyen (LRA 0). Genis aralik: ilk 4 sn 18 dB kisik (LRA > 11; eskiden dinamikti, hedefte kalmiyordu).
           # Yuksek degisken: ~-7 LUFS, 16 bit 48 kHz (yalnizca yukselt: dokunulmamali, bit bit ayni).
           $deg = '(0.03+0.015*sin(2*PI*0.1*t))'
           $kaynaklar = @(
@@ -370,6 +371,7 @@ jobs:
             @{ ad = 'kisik_degisken_44k'; ses = "aevalsrc=$deg*sin(2*PI*440*t)|$deg*sin(2*PI*550*t):s=44100:d=12"; d = 12; c = 'pcm_s24le' },
             @{ ad = 'tepeli'; ses = "aevalsrc=$deg*sin(2*PI*440*t)+if(lt(mod(t\,2)\,0.01)\,0.8*sin(2*PI*1000*t)\,0)|$deg*sin(2*PI*550*t):s=48000:d=12"; d = 12; c = 'pcm_s24le' },
             @{ ad = 'sabit_ton'; ses = 'aevalsrc=0.05*sin(2*PI*440*t)+0.02*sin(2*PI*3000*t)|0.05*sin(2*PI*550*t):s=48000:d=9'; d = 9; c = 'pcm_s24le' },
+            @{ ad = 'genis_aralik'; ses = 'aevalsrc=if(lt(t\,4)\,0.0076\,0.06)*sin(2*PI*440*t)|if(lt(t\,4)\,0.0076\,0.06)*sin(2*PI*550*t):s=48000:d=12'; d = 12; c = 'pcm_s24le' },
             @{ ad = 'yuksek_degisken'; ses = 'aevalsrc=(0.40+0.12*sin(2*PI*0.1*t))*sin(2*PI*1000*t)|(0.40+0.12*sin(2*PI*0.1*t))*sin(2*PI*1250*t):s=48000:d=12'; d = 12; c = 'pcm_s16le' }
           )
           $Kay = @{}  # (PowerShell degisken adlarinda buyuk / kucuk harf ayirmaz: $k ile ayni olmasin)
@@ -397,8 +399,9 @@ jobs:
             @{ ad = 'Ses +12 dB, sinirlayici kapali (kirpilir)'; src = $Kay.yuksek_ton; arg = $yt + @('--ayarla', 'Ses.Seviye=12', '--ayarla', 'Ses.Sinirlayici=false'); arac = 'yukseklik'; kip = @('kirpik'); karar = $null },
             @{ ad = 'Esitleme: kisik, inip cikan ses (YouTube) -> dogrusal, yalnizca yukseltildi'; src = $Kay.kisik_degisken; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.kisik_degisken); karar = 'Dogrusal' },
             @{ ad = 'Esitleme: kisik, 44,1 kHz, ornekleme kaynakla ayni (TikTok sesi, video x264) -> dogrusal'; src = $Kay.kisik_degisken_44k; arg = @('--ayarla', 'Video.Kodlayici=X264', '--ayarla', 'Ses.OrnekHizi=null') + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--hz', '44100', '--kaynak', $Kay.kisik_degisken_44k); karar = 'Dogrusal' },
-            @{ ad = 'Esitleme: kisik + ani tepeler -> dinamik, tepe -1 dB, kirpilma yok'; src = $Kay.tepeli; arg = $yt + $esit; arac = 'yukseklik'; kip = @('tepeli'); karar = 'Dinamik/AniTepeler' },
-            @{ ad = 'Esitleme: hic degismeyen ton -> dinamik'; src = $Kay.sabit_ton; arg = $yt + $esit; arac = 'yukseklik'; kip = @('lufs'); karar = 'Dinamik/SabitSes' },
+            @{ ad = 'Esitleme: kisik + ani tepeler -> sabit kazanc + sinirlayici + telafi, -14, tepe -1 dB, kirpilma yok'; src = $Kay.tepeli; arg = $yt + $esit; arac = 'yukseklik'; kip = @('tepeli'); karar = 'Dogrusal/Sinirli' },
+            @{ ad = 'Esitleme: hic degismeyen ton -> sabit kazanc'; src = $Kay.sabit_ton; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.sabit_ton); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme: genis aralik (kisik baslangic, LRA > 11) -> sabit kazanc, tam -14'; src = $Kay.genis_aralik; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.genis_aralik); karar = 'Dogrusal' },
             @{ ad = 'Esitleme: yuksek ses (-7), yalnizca yukselt -> dokunulmadi (bit bit ayni)'; src = $Kay.yuksek_degisken; arg = $yt + $esit; arac = 'donusum'; kip = @('ayni'); karar = 'ZatenYuksek' },
             @{ ad = 'Esitleme: kisik ses, mono cikti -> once mono, sonra -14'; src = $Kay.kisik_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.Kanal=Mono'); arac = 'yukseklik'; kip = @('lufs'); karar = 'Dogrusal' },
             @{ ad = 'Esitleme + ayni adli WAV (kisik) -> olcum WAV''dan, dogrusal'; src = $Kay.harici_kisik; arg = $yt + $esit; arac = 'yukseklik'; kip = @('lufs'); karar = 'Dogrusal' },
@@ -427,7 +430,7 @@ jobs:
               $ek = @($d.kip)
               if ($d.arac -eq 'yukseklik') {
                 if ($prog) { $ek += @('--program', $prog) }
-                elseif ($d.karar -like 'Dogrusal*' -or $d.karar -like 'Dinamik*') { $sonuc = 'FARK'; $ozet += 'program sonucu yazmadi · ' }
+                elseif ($d.karar -like 'Dogrusal*') { $sonuc = 'FARK'; $ozet += 'program sonucu yazmadi · ' }
                 $c = & python -X utf8 -I tools/ses_yukseklik_kontrol.py $out @ek 2>&1 | ForEach-Object { "$_" }
               } else {
                 $c = & python -X utf8 -I tools/ses_donusum_kontrol.py $d.src $out @ek 2>&1 | ForEach-Object { "$_" }
@@ -446,7 +449,7 @@ jobs:
           $tablo | ForEach-Object { $_ }
           $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           if ($hatali) { "`n$hatali ses yuksekligi denemesinde sorun var."; exit 1 }
-          "`nSinirlayici tepeyi (orneklerin arasindaki gercek tepe dahil) -1 dB'de tuttu; esitleme dogrusalda yalnizca sabit kazanc uyguladi, dinamikte tasirmadi, yuksek sese dokunmadi."
+          "`nSinirlayici tepeyi (orneklerin arasindaki gercek tepe dahil) -1 dB'de tuttu; esitleme butun sese yalnizca sabit kazanc uyguladi, tepeyi asan seste sinirlayici + telafiyle -14'e ulasti, yuksek sese dokunmadi."
           exit 0
 
       - name: Tahmini boyut denemesi (programin yazdigi tahmin gercek dosyayla karsilastirilir)

@@ -15,33 +15,18 @@ public enum EsitlemeKarari
     /// <summary>Ses hedeften yüksek ve "yalnızca kısık sesi yükselt" seçili: dokunulmaz.</summary>
     ZatenYuksek,
 
-    /// <summary>Bütün ses aynı miktarda yükseltilir / kısılır (sesin başka hiçbir yeri değişmez).</summary>
+    /// <summary>
+    /// Bütün ses aynı miktarda (sabit kazanç) yükseltilir / kısılır: sesin dengesi değişmez. Kazanç tepeyi tavanın
+    /// üstüne çıkaracaksa tepeleri sınırlayıcı tutar ve kıstığı pay telafi edilir.
+    /// </summary>
     Dogrusal,
-
-    /// <summary>Doğrusal olamıyor: ses yer yer farklı miktarda yükseltilir (loudnorm'un dinamik kipi).</summary>
-    Dinamik,
-}
-
-/// <summary>Dinamik kipin nedeni.</summary>
-public enum DinamikNedeni
-{
-    Yok,
-
-    /// <summary>Bütün sesi aynı miktarda yükseltmek tepeyi tavanın üstüne çıkarırdı.</summary>
-    AniTepeler,
-
-    /// <summary>Kısık ve yüksek yerler arasındaki fark (LRA) 11 LU'dan büyük.</summary>
-    GenisAralik,
-
-    /// <summary>Ses aralığı (LRA) 0 ölçüldü (hiç değişmeyen ses, ör. sabit ton).</summary>
-    SabitSes,
 }
 
 /// <summary>
 /// Bir videonun LUFS eşitleme raporu: ölçüm, karar ve (eşitlendiyse) çıktının ölçülen yüksekliği / tepesi.
 /// Kodlarken bilgi satırına, bitince videonun satırına ve ipucuna yazılır.
 /// </summary>
-public sealed record EsitlemeRaporu(EsitlemeKarari Karar, DinamikNedeni Neden, LoudnormOlcum? Olcum, double Hedef, double Tavan)
+public sealed record EsitlemeRaporu(EsitlemeKarari Karar, LoudnormOlcum? Olcum, double Hedef, double Tavan)
 {
     private static readonly CultureInfo Tr = CultureInfo.GetCultureInfo("tr-TR");
 
@@ -51,33 +36,41 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, DinamikNedeni Neden, L
     /// <summary>Çıktının ölçülen gerçek tepesi (dBTP).</summary>
     public double? SonucTepe { get; init; }
 
-    /// <summary>Ses değiştirildi mi (doğrusal ya da dinamik).</summary>
-    public bool Uygulandi => Karar is EsitlemeKarari.Dogrusal or EsitlemeKarari.Dinamik;
+    /// <summary>Sınırlayıcının kıstığı payı karşılamak için sese eklenen kazanç (dB, 0 ile <see cref="Esitleme.EnCokTelafi"/> arası).</summary>
+    public double Telafi { get; init; }
 
-    /// <summary>Sonuç hedefe 0,5 LU'dan uzak mı (ör. ani tepeler yüzünden -16'da kaldı).</summary>
+    /// <summary>Gereken telafi <see cref="Esitleme.EnCokTelafi"/> dB'yi aştı (çok tepeli ses; tepeler daha çok ezilmesin diye durdu).</summary>
+    public bool TelafiSiniri { get; init; }
+
+    /// <summary>Ses değiştirildi mi.</summary>
+    public bool Uygulandi => Karar == EsitlemeKarari.Dogrusal;
+
+    /// <summary>Ölçülen yükseklikten hedefe kazanç (dB).</summary>
+    public double Fark => Olcum is { } o ? Hedef - o.Yukseklik : 0;
+
+    /// <summary>Sese uygulanan toplam kazanç (dB): hedefe kazanç + telafi.</summary>
+    public double Kazanc => Fark + Telafi;
+
+    /// <summary>Kazanç tepeyi tavanın üstüne çıkarır mı (tepeleri sınırlayıcı tutar).</summary>
+    public bool Sinirli => Uygulandi && Olcum is { } o && Esitleme.SinirlanirMi(o, Hedef, Tavan);
+
+    /// <summary>Sonuç hedefe 0,5 LU'dan uzak mı (ör. çok tepeli seste telafi sınırına gelindi).</summary>
     public bool HedefeUlasilamadi => SonucYukseklik is { } s && Math.Abs(s - Hedef) > Esitleme.Tolerans;
 
     private static string Bir(double d) => Math.Round(d, 1).ToString("0.0", Tr);
 
+    private static string Isaretli(double d) => (Math.Round(d, 1) >= 0 ? "+" : string.Empty) + Bir(d);
+
     private string HedefMetni => Bicim.Sayi(Hedef);
 
-    private string NedenMetni => Neden switch
-    {
-        DinamikNedeni.AniTepeler => "ani tepeler yüzünden",
-        DinamikNedeni.GenisAralik => "ses aralığı geniş",
-        DinamikNedeni.SabitSes => "ses hiç değişmiyor",
-        _ => string.Empty,
-    };
-
-    /// <summary>Kodlarken bilgi satırı: "-25,5 → -14 LUFS (yalnızca yükseltilir)".</summary>
+    /// <summary>Kodlarken bilgi satırı: "-25,5 → -14 LUFS (bütün ses +11,5 dB)".</summary>
     public string BilgiMetni => Karar switch
     {
         EsitlemeKarari.Olculemedi => "ses ölçülemedi, eşitlenmiyor",
         EsitlemeKarari.Hedefte => $"{Bir(Olcum!.Yukseklik)} LUFS · zaten hedefte, dokunulmuyor",
         EsitlemeKarari.ZatenYuksek => $"{Bir(Olcum!.Yukseklik)} LUFS · zaten yüksek, dokunulmuyor",
-        EsitlemeKarari.Dogrusal => $"{Bir(Olcum!.Yukseklik)} → {HedefMetni} LUFS ("
-                                   + (Hedef > Olcum!.Yukseklik ? "yalnızca yükseltilir" : "yalnızca kısılır") + ")",
-        _ => $"{Bir(Olcum!.Yukseklik)} → {HedefMetni} LUFS (dinamik" + (NedenMetni.Length > 0 ? ": " + NedenMetni : string.Empty) + ")",
+        _ => $"{Bir(Olcum!.Yukseklik)} → {HedefMetni} LUFS (bütün ses {Isaretli(Kazanc)} dB"
+             + (Sinirli ? $", tepeler {Bicim.Sayi(Tavan)} dB'de tutulur" : string.Empty) + ")",
     };
 
     /// <summary>Biten satır: "-14,0 LUFS", "-16,0 LUFS (hedefe ulaşılamadı)", "-9,2 LUFS (dokunulmadı)".</summary>
@@ -104,16 +97,19 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, DinamikNedeni Neden, L
                 $"LUFS eşitleme (hedef {HedefMetni} LUFS, tepe en çok {Bicim.Sayi(Tavan)} dB)",
                 $"Ölçülen: {Bir(o.Yukseklik)} LUFS · tepe {Bir(o.Tepe)} dBTP · ses aralığı {Bir(o.Aralik)} LU",
             };
-            var fark = Hedef - o.Yukseklik;
             satirlar.Add(Karar switch
             {
                 EsitlemeKarari.Hedefte => "Karar: zaten hedefte (0,5 LU içinde), sese dokunulmadı.",
                 EsitlemeKarari.ZatenYuksek => "Karar: zaten hedeften yüksek, sese dokunulmadı (yalnızca kısık ses yükseltilir).",
-                EsitlemeKarari.Dogrusal => $"Karar: doğrusal; bütün ses {(fark >= 0 ? "+" : string.Empty)}{Bir(fark)} dB, sesin başka hiçbir yeri değişmedi.",
-                _ => Neden == DinamikNedeni.AniTepeler
-                    ? $"Karar: dinamik; {(fark >= 0 ? "+" : string.Empty)}{Bir(fark)} dB tepeyi {Bir(o.Tepe + fark)} dB'ye çıkarırdı, ses yer yer farklı yükseltildi."
-                    : $"Karar: dinamik ({NedenMetni}); ses yer yer farklı yükseltildi.",
+                _ => $"Karar: bütün ses aynı miktarda {Isaretli(Fark)} dB {(Fark >= 0 ? "yükseltildi" : "kısıldı")}; sesin dengesi değişmedi.",
             });
+
+            if (Sinirli)
+            {
+                satirlar.Add($"Tepe {Bir(o.Tepe + Fark)} dB'ye çıkacaktı: sınırlayıcı {Bicim.Sayi(Tavan)} dB'de tuttu"
+                             + (Telafi > 0 ? $"; kıstığı pay için ses {Isaretli(Telafi)} dB daha yükseltildi" : string.Empty)
+                             + (TelafiSiniri ? $" (telafi en çok {Bicim.Sayi(Esitleme.EnCokTelafi)} dB)" : string.Empty) + ".");
+            }
 
             if (SonucYukseklik is { } s)
             {
@@ -126,23 +122,35 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, DinamikNedeni Neden, L
     }
 }
 
-/// <summary>LUFS eşitlemenin kararı (loudnorm'un kendi kuralıyla) ve sonucun ölçülmesi.</summary>
+/// <summary>LUFS eşitlemenin kararı, sınırlayıcı telafisi ve sonucun ölçülmesi.</summary>
 public static class Esitleme
 {
     /// <summary>Hedefe bu kadar (LU) yakın ses olduğu gibi kalır; sonuç bu kadar uzaksa "hedefe ulaşılamadı".</summary>
     public const double Tolerans = 0.5;
 
-    /// <summary>loudnorm'a verilen yükseklik aralığı hedefi (LU).</summary>
+    /// <summary>Ölçüm komutlarında loudnorm'a verilen yükseklik aralığı (LU); ölçülen değerleri etkilemez.</summary>
     public const double AralikHedefi = 11;
 
+    /// <summary>Sınırlayıcının kıstığı pay en çok bu kadar (dB) telafi edilir; daha fazlası tepeleri aşırı ezerdi.</summary>
+    public const double EnCokTelafi = 6;
+
+    /// <summary>Telafi için en çok bu kadar deneme ölçümü yapılır (yalnızca ses okunur).</summary>
+    public const int EnCokDeneme = 3;
+
+    /// <summary>Deneme ölçümü hedefe bu kadar (LU) yakınsa telafi tamamdır.</summary>
+    public const double TelafiPayi = 0.2;
+
+    /// <summary>Hedefe kazanç, ölçülen gerçek tepeyi tavanın üstüne çıkarır mı.</summary>
+    public static bool SinirlanirMi(LoudnormOlcum o, double hedef, double tavan) => o.Tepe + (hedef - o.Yukseklik) > tavan;
+
     /// <summary>
-    /// Ölçümden sonra karar. Doğrusal / dinamik ayrımı loudnorm'un kendi kuralıdır (libavfilter/af_loudnorm.c):
-    /// ölçülen tepe + kazanç tavanı aşmıyorsa ve ses aralığı 0'dan büyük, aralık hedefinden (11) küçükse doğrusal
-    /// (her örnek aynı sabitle çarpılır); değilse dinamik.
+    /// Ölçümden sonra karar: hedefe 0,5 LU yakınsa dokunulmaz; yüksek ses "yalnızca kısık sesi yükselt" seçiliyse
+    /// dokunulmaz; değilse bütün ses aynı miktarda (sabit kazanç) hedefe getirilir. Ses aralığı (LRA) karara girmez:
+    /// kısık ve yüksek yerler arasındaki fark olduğu gibi kalır.
     /// </summary>
     public static EsitlemeRaporu KararVer(SesAyarlari s, LoudnormOlcum? o)
     {
-        EsitlemeRaporu R(EsitlemeKarari k, DinamikNedeni n = DinamikNedeni.Yok) => new(k, n, o, s.EsitlemeHedef, s.SinirlayiciTavan);
+        EsitlemeRaporu R(EsitlemeKarari k) => new(k, o, s.EsitlemeHedef, s.SinirlayiciTavan);
 
         if (o is null)
         {
@@ -155,17 +163,27 @@ public static class Esitleme
             return R(EsitlemeKarari.Hedefte);
         }
 
-        if (fark < 0 && s.EsitlemeYonu == EsitlemeYonu.YalnizcaYukselt)
+        return fark < 0 && s.EsitlemeYonu == EsitlemeYonu.YalnizcaYukselt
+            ? R(EsitlemeKarari.ZatenYuksek)
+            : R(EsitlemeKarari.Dogrusal);
+    }
+
+    /// <summary>
+    /// Deneme ölçümünden sonra yeni telafi (dB): ölçülen yükseklik hedefin altındaysa eksik kadar artar, üstündeyse azalır;
+    /// 0 ile <see cref="EnCokTelafi"/> arasında kalır. Değişmesi gerekmiyorsa (hedefte ya da sınırda) null.
+    /// </summary>
+    public static (double? Yeni, bool Sinir) TelafiAdimi(double telafi, double olculen, double hedef)
+    {
+        var eksik = hedef - olculen;
+        if (Math.Abs(eksik) <= TelafiPayi)
         {
-            return R(EsitlemeKarari.ZatenYuksek);
+            return (null, false);
         }
 
-        // Ölçülen değerler loudnorm'a 2 basamakla verilir (ArgsBuilder): karar da aynı değerlerle verilir.
-        var neden = o.Tepe + fark > s.SinirlayiciTavan ? DinamikNedeni.AniTepeler
-            : o.Aralik > AralikHedefi ? DinamikNedeni.GenisAralik
-            : o.Aralik == 0 ? DinamikNedeni.SabitSes
-            : DinamikNedeni.Yok;
-        return R(neden == DinamikNedeni.Yok ? EsitlemeKarari.Dogrusal : EsitlemeKarari.Dinamik, neden);
+        var istenen = Math.Max(0, telafi + eksik);
+        var sinir = istenen > EnCokTelafi;
+        var yeni = Math.Round(Math.Min(istenen, EnCokTelafi), 2);
+        return Math.Abs(yeni - telafi) < 0.05 ? (null, sinir) : (yeni, sinir);
     }
 
     /// <summary>

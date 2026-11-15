@@ -191,7 +191,8 @@ public static class ArgsBuilder
         SesSecimi ses,
         string output,
         string? gecisDosyasi = null,
-        LoudnormOlcum? olcum = null)
+        LoudnormOlcum? olcum = null,
+        double telafi = 0)
     {
         var v = a.Video;
         var gecisSayisi = v.Kodlayici == VideoKodlayici.X264
@@ -202,7 +203,7 @@ public static class ArgsBuilder
         var gecisler = new List<IReadOnlyList<string>>();
         if (gecisSayisi == 1)
         {
-            gecisler.Add(Komut(a, media, input, ses, output, gecis: 0, gecisDosyasi, olcum));
+            gecisler.Add(Komut(a, media, input, ses, output, gecis: 0, gecisDosyasi, olcum, telafi));
         }
         else
         {
@@ -213,7 +214,7 @@ public static class ArgsBuilder
                 gecisler.Add(Komut(a, media, input, ses, "-", gecis: 3, gecisDosyasi));
             }
 
-            gecisler.Add(Komut(a, media, input, ses, output, gecis: 2, gecisDosyasi, olcum));
+            gecisler.Add(Komut(a, media, input, ses, output, gecis: 2, gecisDosyasi, olcum, telafi));
         }
 
         return new KomutPlani(gecisler, Uzanti(a));
@@ -230,7 +231,8 @@ public static class ArgsBuilder
         string output,
         int gecis,
         string gecisDosyasi,
-        LoudnormOlcum? olcum = null)
+        LoudnormOlcum? olcum = null,
+        double telafi = 0)
     {
         var v = a.Video;
         var sonGecis = gecis is 0 or 2;
@@ -299,7 +301,7 @@ public static class ArgsBuilder
 
         if (sesVar)
         {
-            Ses(args, a.Ses, harici, ses.Kanal, olcum, ses.OrnekHizi);
+            Ses(args, a.Ses, harici, ses.Kanal, olcum, ses.OrnekHizi, telafi);
         }
 
         args.AddRange(
@@ -1184,42 +1186,41 @@ public static class ArgsBuilder
         }
     }
 
-    private static void Ses(List<string> args, SesAyarlari s, bool harici, int? kaynakKanal = null, LoudnormOlcum? olcum = null, int? kaynakHz = null)
+    /// <summary>
+    /// Sesin filtre zinciri (kodlamada ve telafi ölçümünde aynı). LUFS eşitlemede bütün ses aynı miktarda (sabit
+    /// kazanç: hedef - ölçülen + telafi) hedefe getirilir; sesin dengesi değişmez. Kazanç tepeyi tavanın üstüne
+    /// çıkaracaksa sınırlayıcı (kutu kapalı olsa da) tepeleri tavanda tutar. <paramref name="hedefHz"/>: çıktının
+    /// örnekleme hızı (null: kaynakla aynı ve dönüşüm yok).
+    /// </summary>
+    private static List<string> SesFiltreleri(
+        SesAyarlari s, bool harici, int? kaynakKanal, LoudnormOlcum? olcum, double telafi, int? kaynakHz, out int? hedefHz)
     {
         var esitleme = s.Esitleme && olcum is not null;
         var af = OnSesFiltreleri(s, kaynakKanal, kanalIndir: esitleme);
+        var esitlemeSinirli = false;
         if (esitleme)
         {
-            // İkinci geçiş: ölçülen değerlerle doğrusal (sesin dinamiği değişmeden) hedefe getirilir; doğrusal
-            // kazanç tepeyi tavanın üstüne çıkaracaksa loudnorm kendisi dinamik kipe geçer.
             var o = olcum!;
-            af.Add($"loudnorm=I={Db(s.EsitlemeHedef)}:TP={Db(s.SinirlayiciTavan)}:LRA=11"
-                   + $":measured_I={Db(o.Yukseklik)}:measured_TP={Db(o.Tepe)}:measured_LRA={Db(o.Aralik)}"
-                   + $":measured_thresh={Db(o.Esik)}:offset={Db(o.Ofset)}:linear=true:print_format=none");
+            esitlemeSinirli = Esitleme.SinirlanirMi(o, s.EsitlemeHedef, s.SinirlayiciTavan) || telafi > 0;
+            af.Add($"volume={Db(s.EsitlemeHedef - o.Yukseklik + telafi)}dB");
         }
-
-        var sinirla = s.Sinirlayici && (s.Seviye > 0 || esitleme);
 
         // Sınırlayıcı 192 kHz'te (4 kat örneklemede) çalışır: örneklerin arasındaki gerçek tepeler de tavanda kalır.
         // Kaynağın hızında çalışsaydı yalnızca örnekleri sınırlardı; tiz ya da sıkıştırılmış seste gerçek tepe tavanı
-        // birkaç dB aşabilir, 44,1 kHz kaynak 48 kHz'e çevrilirken tam ölçekte kırpılabilirdi. Eşitlemede loudnorm
-        // zaten 192 kHz verir; yalnızca elle yükseltmede ses önce 192 kHz'e çıkarılır.
-        var yukariOrnekle = sinirla && !esitleme;
+        // birkaç dB aşabilir, 44,1 kHz kaynak 48 kHz'e çevrilirken tam ölçekte kırpılabilirdi.
+        var sinirla = (s.Sinirlayici && s.Seviye > 0) || esitlemeSinirli;
         if (sinirla)
         {
-            if (yukariOrnekle)
-            {
-                af.Add("aresample=192000:" + SoxrAyari(s));
-            }
+            af.Add("aresample=192000:" + SoxrAyari(s));
 
-            // Tepe sınırlayıcı: yalnızca ses yükseltilince. Tavan doğrusal değere çevrilir (-1 dB = 0,891);
-            // otomatik seviye kapalı (sesi kendisi yükseltmez), gecikmesi telafi edilir (senkron kaymaz).
+            // Tavan doğrusal değere çevrilir (-1 dB = 0,891); otomatik seviye kapalı (sesi kendisi yükseltmez),
+            // gecikmesi telafi edilir (senkron kaymaz).
             var tavan = Math.Pow(10, s.SinirlayiciTavan / 20);
             af.Add(string.Create(Inv, $"alimiter=limit={tavan:0.######}:level=0:latency=1"));
         }
 
-        // 192 kHz'ten (loudnorm ya da sınırlayıcı) dönüş: örnekleme hızı "kaynakla aynı" ise kaynağın hızına.
-        var hedefHz = s.OrnekHizi ?? (esitleme || yukariOrnekle ? kaynakHz ?? 48000 : null);
+        // 192 kHz'ten dönüş: örnekleme hızı "kaynakla aynı" ise kaynağın hızına.
+        hedefHz = s.OrnekHizi ?? (sinirla ? kaynakHz ?? 48000 : null);
         var kaliteVar = s.Kalite != DonusumKalitesi.Yuksek || s.Titresim != Titresim.Yok;
         if (hedefHz is not null || kaliteVar)
         {
@@ -1250,6 +1251,36 @@ public static class ArgsBuilder
             af.Add("apad");
         }
 
+        return af;
+    }
+
+    /// <summary>
+    /// LUFS eşitlemede telafi ölçümü: sesin kodlamadaki filtre zinciri (sabit kazanç + sınırlayıcı) uygulanıp yüksekliği
+    /// ölçülür (yalnızca ses okunur). Sınırlayıcı tepeleri kıstıkça yükseklik hedefin altında kalır; eksik kadar telafi
+    /// eklenip yeniden denenir.
+    /// </summary>
+    public static List<string> DenemeOlcumKomutu(
+        SesAyarlari s, string input, SesSecimi ses, double sureSaniye, LoudnormOlcum olcum, double telafi)
+    {
+        var harici = ses.Tur == SesSecimTuru.HariciDosya;
+        var args = new List<string> { "-hide_banner", "-nostdin", "-nostats", "-i", harici ? ses.Dosya! : input };
+        args.AddRange(["-map", harici ? "0:a:0" : "0:a:" + ses.Iz.ToString(Inv), "-vn", "-sn", "-dn"]);
+        if (sureSaniye > 0)
+        {
+            args.AddRange(["-t", sureSaniye.ToString("0.###", Inv)]);
+        }
+
+        var af = SesFiltreleri(s, harici: false, ses.Kanal, olcum, telafi, ses.OrnekHizi, out _);
+        af.Add($"loudnorm=I={Db(s.EsitlemeHedef)}:TP={Db(s.SinirlayiciTavan)}:LRA={Esitleme.AralikHedefi:0}:print_format=json");
+        args.AddRange(["-af", string.Join(',', af), "-f", "null", "-"]);
+        return args;
+    }
+
+    private static void Ses(
+        List<string> args, SesAyarlari s, bool harici, int? kaynakKanal = null, LoudnormOlcum? olcum = null,
+        int? kaynakHz = null, double telafi = 0)
+    {
+        var af = SesFiltreleri(s, harici, kaynakKanal, olcum, telafi, kaynakHz, out var hedefHz);
         if (af.Count > 0)
         {
             args.AddRange(["-af", string.Join(',', af)]);

@@ -116,13 +116,14 @@ try
         r =>
         {
             // Doğrulama ASCII satırları okur (ESITLEME_...): karar, satırda gösterilecek yazı, ölçülen sonuç.
-            Console.WriteLine("ESITLEME_KARAR=" + r.Karar + (r.Neden != DinamikNedeni.Yok ? "/" + r.Neden : string.Empty));
+            Console.WriteLine("ESITLEME_KARAR=" + r.Karar + (r.Sinirli ? "/Sinirli" : string.Empty));
+            Console.WriteLine("ESITLEME_TELAFI=" + r.Telafi.ToString("0.00", CultureInfo.InvariantCulture));
             if (r.SonucYukseklik is { } sy)
             {
                 Console.WriteLine("ESITLEME_SONUC=" + sy.ToString("0.00", CultureInfo.InvariantCulture));
             }
 
-            Console.WriteLine("Eşitleme kararı: " + r.Karar + (r.Neden != DinamikNedeni.Yok ? " (" + r.Neden + ")" : string.Empty));
+            Console.WriteLine("Eşitleme kararı: " + r.Karar + (r.Sinirli ? " (sınırlayıcı, telafi " + r.Telafi.ToString("0.00", CultureInfo.InvariantCulture) + " dB)" : string.Empty));
             Console.WriteLine("Eşitleme satırı: " + (r.SatirMetni ?? "-"));
             if (r.SonucYukseklik is { } y)
             {

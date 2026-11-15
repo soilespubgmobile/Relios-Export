@@ -514,13 +514,32 @@ internal static class BirimKontrol
         var esit = Varsayilanlar.TikTok();
         esit.Ses.Esitleme = true;
         var olcum = new LoudnormOlcum(-21.37, -3.2, 6.4, -31.6, 0.25);
-        Iceriyor("Eşitleme: ölçülen değerlerle doğrusal loudnorm + sınırlayıcı", Komut(esit, olcum),
-            " -af loudnorm=I=-14.0:TP=-1.0:LRA=11:measured_I=-21.37:measured_TP=-3.2:measured_LRA=6.4:measured_thresh=-31.6:offset=0.25:linear=true:print_format=none,alimiter=limit=0.891251:level=0:latency=1,aresample=48000:");
-        Icermiyor("Eşitleme: loudnorm zaten 192 kHz verir, ikinci kez yükseltilmez", Komut(esit, olcum), "aresample=192000");
-        Icermiyor("Eşitleme açık ama ölçüm yok (sessiz ses)", Komut(esit), "loudnorm");
+        // Eşitleme: bütün ses aynı miktarda (sabit kazanç, -14 - (-21,37) = +7,37 dB). Tepe -3,2 + 7,37 = +4,17 > -1:
+        // sınırlayıcı 192 kHz'te tepeleri tutar.
+        Iceriyor("Eşitleme: sabit kazanç +7,37 dB, tepe aşıyor: 192 kHz sınırlayıcı", Komut(esit, olcum),
+            " -af volume=7.37dB,aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.891251:level=0:latency=1,"
+            + "aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a pcm_s16le ");
+        Icermiyor("Eşitleme: ikinci geçişte loudnorm yok (yalnızca sabit kazanç)", Komut(esit, olcum), "loudnorm");
+        Icermiyor("Eşitleme açık ama ölçüm yok (sessiz ses)", Komut(esit), "volume=");
+        var olcumAlcak = new LoudnormOlcum(-21.37, -10, 25, -31.6, 0.25);
+        Iceriyor("Eşitleme: tepe aşmıyor (-10 + 7,37 = -2,63), ses aralığı 25 LU: yalnızca sabit kazanç", Komut(esit, olcumAlcak),
+            " -af volume=7.37dB,aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a pcm_s16le ");
+        Icermiyor("Eşitleme: tepe aşmıyorsa sınırlayıcı yok", Komut(esit, olcumAlcak), "alimiter");
+        var esitKapali = Varsayilanlar.TikTok();
+        esitKapali.Ses.Esitleme = true;
+        esitKapali.Ses.Sinirlayici = false;
+        Iceriyor("Eşitleme: sınırlayıcı kutusu kapalı olsa da tepe aşıyorsa tutulur", Komut(esitKapali, olcum), ",alimiter=limit=0.891251:");
+        Iceriyor("Eşitleme + telafi 2,5 dB: kazanç 9,87 dB", " " + string.Join(' ', ArgsBuilder.Olustur(esit, Kaynak48(), "KAYNAK.mp4",
+            ArgsBuilder.SesSec(esit.Ses, Kaynak48(), "KAYNAK.mp4"), "CIKTI.mov", "GECIS", olcum, 2.5).Gecisler[0]) + " ",
+            " -af volume=9.87dB,aresample=192000:");
+        Iceriyor("Telafi ölçümü: kodlamadaki ses zinciri + ölçüm", " " + string.Join(' ', ArgsBuilder.DenemeOlcumKomutu(esit.Ses, "KAYNAK.mp4",
+            ArgsBuilder.SesSec(esit.Ses, Kaynak48(), "KAYNAK.mp4"), 10, olcum, 2.5)) + " ",
+            " -map 0:a:0 -vn -sn -dn -t 10 -af volume=9.87dB,aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.891251:level=0:latency=1,"
+            + "aresample=48000:resampler=soxr:precision=33:dither_method=triangular,loudnorm=I=-14.0:TP=-1.0:LRA=11:print_format=json -f null - ");
         esit.Ses.OrnekHizi = null;
         Iceriyor("Eşitleme + örnekleme 'kaynakla aynı': 192 kHz'ten kaynağın hızına", Komut(esit, olcum), ",aresample=44100:resampler=soxr");
         Iceriyor("Eşitleme + örnekleme 'kaynakla aynı'", Komut(esit, olcum), " -ar 44100 ");
+        Icermiyor("Eşitleme (sınırlayıcısız) + örnekleme 'kaynakla aynı': hız değişmez", Komut(esit, olcumAlcak), " -ar ");
 
         // Mono çıktı: kanal indirme ölçümden ve eşitlemeden önce (stereo ölçülüp mono'ya inilince sonuç 3–6 dB düşük kalırdı).
         var mono = Varsayilanlar.YouTube();
@@ -528,8 +547,8 @@ internal static class BirimKontrol
         Icermiyor("Mono, eşitleme kapalı: kanal indirme yine -ac 1 ile (eskisi gibi)", Komut(mono), "pan=mono");
         Iceriyor("Mono, eşitleme kapalı", Komut(mono), " -ac 1 ");
         mono.Ses.Esitleme = true;
-        Iceriyor("Mono + eşitleme: önce mono'ya iner (yarım + yarım), sonra loudnorm", Komut(mono, olcum),
-            " -af pan=mono|c0=0.5*c0+0.5*c1,loudnorm=I=-14.0:TP=-1.0:LRA=11:measured_I=-21.37:");
+        Iceriyor("Mono + eşitleme: önce mono'ya iner (yarım + yarım), sonra sabit kazanç", Komut(mono, olcum),
+            " -af pan=mono|c0=0.5*c0+0.5*c1,volume=7.37dB,");
         Iceriyor("Mono + eşitleme: ölçüm de mono", " " + string.Join(' ', ArgsBuilder.LoudnormOlcumKomutu(mono.Ses, "KAYNAK.mp4",
             ArgsBuilder.SesSec(mono.Ses, Kaynak48(), "KAYNAK.mp4"), 10)) + " ",
             " -af pan=mono|c0=0.5*c0+0.5*c1,loudnorm=I=-14.0:TP=-1.0:LRA=11:print_format=json ");
@@ -543,19 +562,20 @@ internal static class BirimKontrol
             Kontrol(ad + ": eşitleme yönü", "YalnizcaYukselt", a.Ses.EsitlemeYonu.ToString());
         }
 
-        // Karar (hedef -14, tavan -1): loudnorm'un kuralı — tepe + kazanç <= tavan ve 0 < aralık <= 11 ise doğrusal.
+        // Karar (hedef -14, tavan -1): kısık ses her zaman bütünüyle aynı miktarda yükseltilir; tepe + kazanç tavanı
+        // aşıyorsa tepeleri sınırlayıcı tutar. Ses aralığı (LRA) karara girmez.
         var ka = Varsayilanlar.YouTube().Ses;
         ka.Esitleme = true;
         string Karar(LoudnormOlcum? o)
         {
             var r = Esitleme.KararVer(ka, o);
-            return r.Karar + (r.Neden != DinamikNedeni.Yok ? "/" + r.Neden : string.Empty);
+            return r.Karar + (r.Sinirli ? "/Sinirli" : string.Empty);
         }
 
-        Kontrol("Kısık, tepe -12 (+11 dB → tam -1): doğrusal", "Dogrusal", Karar(new LoudnormOlcum(-25, -12, 5, -35, 0)));
-        Kontrol("Kısık, tepe -11,9 (+11 dB → -0,9): dinamik", "Dinamik/AniTepeler", Karar(new LoudnormOlcum(-25, -11.9, 5, -35, 0)));
-        Kontrol("Kısık, ses aralığı 12 LU: dinamik", "Dinamik/GenisAralik", Karar(new LoudnormOlcum(-25, -20, 12, -35, 0)));
-        Kontrol("Kısık, ses aralığı 0 (sabit ton): dinamik", "Dinamik/SabitSes", Karar(new LoudnormOlcum(-25, -20, 0, -35, 0)));
+        Kontrol("Kısık, tepe -12 (+11 dB → tam -1): sabit kazanç", "Dogrusal", Karar(new LoudnormOlcum(-25, -12, 5, -35, 0)));
+        Kontrol("Kısık, tepe -11,9 (+11 dB → -0,9): sabit kazanç + sınırlayıcı", "Dogrusal/Sinirli", Karar(new LoudnormOlcum(-25, -11.9, 5, -35, 0)));
+        Kontrol("Kısık, ses aralığı 21 LU (videodaki gibi): sabit kazanç", "Dogrusal", Karar(new LoudnormOlcum(-20.8, -11.18, 21, -34.79, 1.25)));
+        Kontrol("Kısık, ses aralığı 0 (sabit ton): sabit kazanç", "Dogrusal", Karar(new LoudnormOlcum(-25, -20, 0, -35, 0)));
         Kontrol("Hedefe 0,4 LU yakın: dokunulmaz", "Hedefte", Karar(new LoudnormOlcum(-14.4, -3, 5, -24, 0)));
         Kontrol("Hedefe 0,6 LU uzak: doğrusal", "Dogrusal", Karar(new LoudnormOlcum(-14.6, -3, 5, -24, 0)));
         Kontrol("Yüksek (-9), yalnızca yükselt: dokunulmaz", "ZatenYuksek", Karar(new LoudnormOlcum(-9, -3, 5, -19, 0)));
@@ -565,11 +585,28 @@ internal static class BirimKontrol
         ka.EsitlemeYonu = EsitlemeYonu.YalnizcaYukselt;
 
         var rd = Esitleme.KararVer(ka, new LoudnormOlcum(-25, -12, 5, -35, 0));
-        Kontrol("Bilgi satırı (doğrusal)", "-25,0 → -14 LUFS (yalnızca yükseltilir)", rd.BilgiMetni);
+        Kontrol("Bilgi satırı (sabit kazanç)", "-25,0 → -14 LUFS (bütün ses +11,0 dB)", rd.BilgiMetni);
         Kontrol("Biten satır (sonuç -14,02)", "-14,0 LUFS", (rd with { SonucYukseklik = -14.02 }).SatirMetni ?? "yok");
         var rt = Esitleme.KararVer(ka, new LoudnormOlcum(-25.52, -1.59, 2.8, -37.82, 8.68));
-        Kontrol("Bilgi satırı (ani tepeler)", "-25,5 → -14 LUFS (dinamik: ani tepeler yüzünden)", rt.BilgiMetni);
+        Kontrol("Bilgi satırı (tepe aşıyor)", "-25,5 → -14 LUFS (bütün ses +11,5 dB, tepeler -1 dB'de tutulur)", rt.BilgiMetni);
+        Kontrol("Bilgi satırı (telafi 2,3 dB)", "-25,5 → -14 LUFS (bütün ses +13,8 dB, tepeler -1 dB'de tutulur)", (rt with { Telafi = 2.3 }).BilgiMetni);
+        Kontrol("Ayrıntı (telafi)", "True", (rt with { Telafi = 2.3 }).Ayrinti.Contains("kıstığı pay için ses +2,3 dB daha yükseltildi", StringComparison.Ordinal).ToString());
+        Kontrol("Ayrıntı (telafi sınırı)", "True", (rt with { Telafi = 6, TelafiSiniri = true }).Ayrinti.Contains("(telafi en çok 6 dB)", StringComparison.Ordinal).ToString());
         Kontrol("Biten satır (sonuç -16,04)", "-16,0 LUFS (hedefe ulaşılamadı)", (rt with { SonucYukseklik = -16.04 }).SatirMetni ?? "yok");
+
+        // Telafi adımı: deneme ölçümü hedefin altındaysa eksik kadar artar (en çok 6 dB), 0,2 LU içindeyse durur.
+        string Adim(double telafi, double olculen)
+        {
+            var (yeni, sinir) = Esitleme.TelafiAdimi(telafi, olculen, -14);
+            return (yeni?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) ?? "dur") + (sinir ? "/sinir" : string.Empty);
+        }
+
+        Kontrol("Telafi: -17,79 ölçüldü → 3,79", "3.79", Adim(0, -17.79));
+        Kontrol("Telafi: 3,79 ile -14,25 → 4,04", "4.04", Adim(3.79, -14.25));
+        Kontrol("Telafi: -14,15 (0,2 içinde) → dur", "dur", Adim(4.04, -14.15));
+        Kontrol("Telafi: -24 ölçüldü → en çok 6", "6.00/sinir", Adim(0, -24));
+        Kontrol("Telafi: sınırda, yine eksik → dur", "dur/sinir", Adim(6, -15));
+        Kontrol("Telafi: hedefi geçti → azalır", "2.50", Adim(3, -13.5));
         Kontrol("Biten satır (zaten yüksek)", "-9,2 LUFS (dokunulmadı)",
             Esitleme.KararVer(ka, new LoudnormOlcum(-9.2, -3, 5, -19, 0)).SatirMetni ?? "yok");
         Iceriyor("Sonuç ölçüm komutu", " " + string.Join(' ', Esitleme.SonucOlcumKomutu("CIKTI.mov", ka)) + " ",

@@ -203,7 +203,7 @@ public static class Exporter
         if (a.Ses.Esitleme && ses.Tur != SesSecimTuru.Yok)
         {
             // LUFS eşitleme, 1. geçiş: sesin yüksekliği ölçülür (yalnızca ses okunur, kısa sürer); sonra karar:
-            // dokunulmaz / doğrusal (bütün ses aynı miktarda) / dinamik.
+            // dokunulmaz ya da bütün ses aynı miktarda (sabit kazanç) hedefe.
             onInfo?.Invoke(Describe(media, a, ses) + " · ses ölçülüyor");
             var cikti = new List<string>();
             var olcumKomutu = ArgsBuilder.LoudnormOlcumKomutu(a.Ses, input, ses, media.DurationSeconds);
@@ -220,6 +220,47 @@ public static class Exporter
 
             rapor = Esitleme.KararVer(a.Ses, ArgsBuilder.LoudnormOlcumOku(string.Join('\n', cikti)));
             onInfo?.Invoke(Describe(media, a, ses, rapor));
+
+            if (rapor is { Sinirli: true, Olcum: { } o })
+            {
+                // Kazanç tepeyi tavanın üstüne çıkarıyor: tepeleri sınırlayıcı tutar, kıstığı kadar yükseklik eksik kalır.
+                // Kodlamadaki ses zinciriyle deneme ölçümü yapılır (yalnızca ses), eksik kadar telafi eklenir.
+                var telafi = 0.0;
+                var sinir = false;
+                for (var d = 0; d < Esitleme.EnCokDeneme; d++)
+                {
+                    onInfo?.Invoke(Describe(media, a, ses, rapor) + " · sınırlayıcının payı ölçülüyor");
+                    var denemeCikti = new List<string>();
+                    var deneme = ArgsBuilder.DenemeOlcumKomutu(a.Ses, input, ses, media.DurationSeconds, o, telafi);
+                    try
+                    {
+                        await FfmpegRunner.RunAsync(deneme, 0, null, ct, denemeCikti);
+                    }
+                    catch (FfmpegHatasi ex)
+                    {
+                        ex.GunlukDosyasi = HataAciklamasi.GunlukYaz(input, GunlukMetni(ex, input, profile, media, a, ses, rapor, [deneme]));
+                        throw;
+                    }
+
+                    if (ArgsBuilder.LoudnormOlcumOku(string.Join('\n', denemeCikti)) is not { } olculen)
+                    {
+                        break;
+                    }
+
+                    var (yeni, sinirda) = Esitleme.TelafiAdimi(telafi, olculen.Yukseklik, a.Ses.EsitlemeHedef);
+                    sinir = sinirda;
+                    if (yeni is not { } t)
+                    {
+                        break;
+                    }
+
+                    telafi = t;
+                    rapor = rapor with { Telafi = telafi, TelafiSiniri = sinir };
+                }
+
+                rapor = rapor with { Telafi = telafi, TelafiSiniri = sinir };
+                onInfo?.Invoke(Describe(media, a, ses, rapor));
+            }
         }
 
         // Ölçüm yalnızca ses değiştirilecekse komuta girer (dokunulmayan ses olduğu gibi kalır).
@@ -230,7 +271,7 @@ public static class Exporter
         var temp = output + ".part" + ArgsBuilder.Uzanti(a);
         var gecisKlasoru = Path.Combine(Path.GetTempPath(), "Relios Export", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(gecisKlasoru);
-        var plan = ArgsBuilder.Olustur(a, media, input, ses, temp, Path.Combine(gecisKlasoru, "gecis"), olcum);
+        var plan = ArgsBuilder.Olustur(a, media, input, ses, temp, Path.Combine(gecisKlasoru, "gecis"), olcum, rapor?.Telafi ?? 0);
         try
         {
             var n = plan.Gecisler.Count;

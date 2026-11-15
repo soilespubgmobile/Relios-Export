@@ -12,8 +12,8 @@ kirpik:   ses yükseltilmiş, sınırlayıcı kapalı: örnekler tam ölçekte k
 lufs:     LUFS eşitleme: tümleşik yükseklik hedefte (± 0,5 LU), gerçek tepe tavanın altında (+ 0,3 dB pay).
 dogrusal: lufs + ses yalnızca yükseltilmiş / kısılmış olmalı: çıktı = kaynak × sabit kazanç (--kaynak gerekir);
           sabit kazançla açıklanamayan kalan, sesin 60 dB altında olmalı (16 bit titreşim ~ -80 dB).
-tepeli:   kısık + ani tepeli ses (dinamik kip): gerçek tepe tavanın altında, hiç kırpılma yok, yükseklik hedefe
-          doğru yükseltilmiş (hedef - 4 ile hedef + 0,5 arası; ani tepeler hedefe tam ulaşmayı engelleyebilir).
+tepeli:   kısık + ani tepeli ses (sabit kazanç + sınırlayıcı + telafi): yükseklik hedefte (± 0,5 LU), gerçek tepe
+          tavanın altında, hiç kırpılma yok.
 --program: programın satırda gösterdiği sonuç (kendi ölçümü) bu aracın ölçtüğüyle 0,3 LU içinde aynı olmalı.
 """
 import array
@@ -100,14 +100,11 @@ if kip in ("sinir", "kirpik"):
         chk("Tam ölçekte kırpılan örnek (sınırlayıcı kapalı)", "> 100", kirpik, kirpik > 100)
 else:
     yukseklik, tepe = r128(cikti)
+    chk("Tümleşik yükseklik (LUFS)", f"{HEDEF:.1f} ± 0.5", f"{yukseklik:.1f}", abs(yukseklik - HEDEF) <= 0.5)
     if kip == "tepeli":
-        chk("Tümleşik yükseklik (LUFS, yükseltildi)", f"{HEDEF - 4:.1f} … {HEDEF + 0.5:.1f}", f"{yukseklik:.1f}",
-            HEDEF - 4 <= yukseklik <= HEDEF + 0.5)
         s = ornekler(cikti, "s16le")
         kirpik = sum(1 for v in s if v in (32767, -32768))
         chk("Tam ölçekte kırpılan örnek", "0", kirpik, kirpik == 0)
-    else:
-        chk("Tümleşik yükseklik (LUFS)", f"{HEDEF:.1f} ± 0.5", f"{yukseklik:.1f}", abs(yukseklik - HEDEF) <= 0.5)
     chk("Gerçek tepe (dBTP)", f"<= {TAVAN + 0.3:.1f}", f"{tepe:.2f}", tepe <= TAVAN + 0.3)
 
     if kip == "dogrusal":
