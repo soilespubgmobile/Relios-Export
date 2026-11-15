@@ -193,8 +193,8 @@ internal static class UctanUca
         Kontrol("Önceki çıktı silinmedi", "var", ilkCikti, ilkCikti is not null && File.Exists(ilkCikti));
         Kontrol("ses_var: eşitleme sonucu satırda (kısık ses → -14)", "… · -14,0 LUFS", Durum("ses_var.mp4"),
             Regex.IsMatch(Durum("ses_var.mp4"), @" · -1[34],\d LUFS$"));
-        Kontrol("ses_var: ipucunda karar (doğrusal)", "Karar: doğrusal", Satir("ses_var.mp4")?.Detail,
-            Satir("ses_var.mp4")?.Detail?.Contains("Karar: doğrusal", StringComparison.Ordinal) == true);
+        Kontrol("ses_var: ipucunda karar (bütün ses aynı miktarda)", "Karar: bütün ses aynı miktarda", Satir("ses_var.mp4")?.Detail,
+            Satir("ses_var.mp4")?.Detail?.Contains("Karar: bütün ses aynı miktarda", StringComparison.Ordinal) == true);
         Kontrol("harici: yüksek ses (yalnızca kısık yükseltilir) → dokunulmadı", "… LUFS (dokunulmadı)", Durum("harici.mp4"),
             Durum("harici.mp4").EndsWith("LUFS (dokunulmadı)", StringComparison.Ordinal));
         Kontrol("Türkçe ad: aynı adlı kısık WAV -14'e getirildi", "… · -14,0 LUFS", Durum(Tr + ".mp4"),
