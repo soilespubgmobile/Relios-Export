@@ -576,6 +576,10 @@ public sealed class SesAyarlari : Gozlenebilir
     private SesKodlayici _kodlayici = SesKodlayici.FdkAac;
     private FdkAyarlari _fdk = new();
     private WavBitDerinligi _wavBit = WavBitDerinligi.Bit24;
+    private bool _sinirlayici = true;
+    private double _sinirlayiciTavan = -1;
+    private bool _esitleme;
+    private double _esitlemeHedef = -14;
 
     public SesAyarlari()
     {
@@ -605,6 +609,25 @@ public sealed class SesAyarlari : Gozlenebilir
 
     public WavBitDerinligi WavBit { get => _wavBit; set => Set(ref _wavBit, value); }
 
+    /// <summary>
+    /// Tepe sınırlayıcı: ses yükseltildiğinde (seviye artı dB ya da LUFS eşitleme) tepeleri tavanda tutar, taşma
+    /// (cızırtı) olmaz. Ses yükseltilmezse hiç devreye girmez; ses olduğu gibi kalır.
+    /// </summary>
+    public bool Sinirlayici { get => _sinirlayici; set => Set(ref _sinirlayici, value); }
+
+    /// <summary>Sınırlayıcının tavanı (dB, tam ölçeğe göre); LUFS eşitlemede gerçek tepe (dBTP) sınırı da budur.</summary>
+    public double SinirlayiciTavan { get => _sinirlayiciTavan; set => Set(ref _sinirlayiciTavan, Math.Clamp(Math.Round(value, 1), -12, -0.1)); }
+
+    /// <summary>LUFS eşitleme (EBU R128): ses önce ölçülür, sonra hedef yüksekliğe getirilir (iki geçiş).</summary>
+    public bool Esitleme { get => _esitleme; set => Set(ref _esitleme, value); }
+
+    /// <summary>LUFS eşitlemenin hedefi (tümleşik yükseklik, LUFS).</summary>
+    public double EsitlemeHedef { get => _esitlemeHedef; set => Set(ref _esitlemeHedef, Math.Clamp(Math.Round(value, 1), -40, -5)); }
+
+    /// <summary>Sınırlayıcı bu ayarlarla devreye girer mi (açık ve ses yükseltiliyor).</summary>
+    [JsonIgnore]
+    public bool SinirlayiciEtkin => Sinirlayici && (Seviye > 0 || Esitleme);
+
     [JsonIgnore]
     public string KaynakOzeti => Kaynak switch
     {
@@ -617,7 +640,24 @@ public sealed class SesAyarlari : Gozlenebilir
     public string GecikmeOzeti => Gecikme == 0 ? "Yok" : $"{Gecikme} ms";
 
     [JsonIgnore]
-    public string SeviyeOzeti => Seviye == 0 ? "Değişmez (0 dB)" : $"{(Seviye > 0 ? "+" : string.Empty)}{Bicim.Sayi(Seviye)} dB";
+    public string SeviyeOzeti
+    {
+        get
+        {
+            var metin = Seviye == 0 ? "Değişmez (0 dB)" : $"{(Seviye > 0 ? "+" : string.Empty)}{Bicim.Sayi(Seviye)} dB";
+            if (Esitleme)
+            {
+                metin += $" · {Bicim.Sayi(EsitlemeHedef)} LUFS";
+            }
+
+            if (Sinirlayici)
+            {
+                metin += $" · sınırlayıcı {Bicim.Sayi(SinirlayiciTavan)} dB";
+            }
+
+            return metin;
+        }
+    }
 
     [JsonIgnore]
     public string OrnekHiziOzeti => (OrnekHizi is { } hz ? Bicim.Khz(hz) : "Kaynakla aynı") + " · " + KaliteMetni(Kalite)

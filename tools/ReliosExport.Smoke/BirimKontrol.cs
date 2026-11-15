@@ -19,6 +19,8 @@ internal static class BirimKontrol
         AnahtarKareler();
         SesKanallari();
         SesIzleri();
+        SesYuksekligi();
+        Boyutlar();
         Kaplar();
         AyarGecisi();
         Klasorler();
@@ -452,6 +454,94 @@ internal static class BirimKontrol
         k = Komut(1, kaynakKanal);
         Icermiyor("Kanal 'kaynakla aynı' (mono kalır)", k, "pan=");
         Icermiyor("Kanal 'kaynakla aynı' (mono kalır)", k, " -ac ");
+    }
+
+    private static void SesYuksekligi()
+    {
+        Console.WriteLine();
+        Console.WriteLine("--- Tepe sınırlayıcı ve LUFS eşitleme (varsayılan: sınırlayıcı açık -1 dB, eşitleme kapalı -14 LUFS)");
+        static MediaInfo Kaynak48() => new(1920, 1080, 1, 1, 0, 10, true, 30, "bt709", "bt709", "tv")
+        {
+            VideoCodec = "h264",
+            VideoProfil = "High",
+            VideoSeviye = 40,
+            SesAkislari = [new SesAkisi(1, "pcm_s16le", 44100, 2, 16, null)],
+        };
+
+        string Komut(ProfilAyarlari a, LoudnormOlcum? olcum = null)
+        {
+            var m = Kaynak48();
+            var ses = ArgsBuilder.SesSec(a.Ses, m, "KAYNAK.mp4");
+            var plan = ArgsBuilder.Olustur(a, m, "KAYNAK.mp4", ses, "CIKTI.mov", "GECIS", olcum);
+            return " " + string.Join(' ', plan.Gecisler[0]) + " ";
+        }
+
+        foreach (var (ad, a) in new[] { ("TikTok", Varsayilanlar.TikTok()), ("YouTube", Varsayilanlar.YouTube()) })
+        {
+            Kontrol(ad + ": sınırlayıcı açık", "True", a.Ses.Sinirlayici.ToString());
+            Kontrol(ad + ": sınırlayıcı tavanı", "-1", a.Ses.SinirlayiciTavan.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Kontrol(ad + ": LUFS eşitleme kapalı", "False", a.Ses.Esitleme.ToString());
+            Kontrol(ad + ": LUFS hedefi", "-14", a.Ses.EsitlemeHedef.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            var k = Komut(a);
+            Icermiyor(ad + " varsayılanı (ses yükseltilmiyor)", k, "alimiter");
+            Icermiyor(ad + " varsayılanı", k, "loudnorm");
+            Iceriyor(ad + " varsayılanı: ses filtresi değişmedi", k, " -af aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a pcm_s16le ");
+        }
+
+        var arti = Varsayilanlar.YouTube();
+        arti.Ses.Seviye = 6;
+        Iceriyor("+6 dB: seviye, sonra sınırlayıcı (-1 dB = 0,891251)", Komut(arti),
+            " -af volume=6dB,alimiter=limit=0.891251:level=0:latency=1,aresample=48000:");
+        arti.Ses.Sinirlayici = false;
+        Icermiyor("+6 dB, sınırlayıcı kapalı", Komut(arti), "alimiter");
+        var eksi = Varsayilanlar.YouTube();
+        eksi.Ses.Seviye = -6;
+        Icermiyor("-6 dB (kısılıyor)", Komut(eksi), "alimiter");
+
+        var esit = Varsayilanlar.TikTok();
+        esit.Ses.Esitleme = true;
+        var olcum = new LoudnormOlcum(-21.37, -3.2, 6.4, -31.6, 0.25);
+        Iceriyor("Eşitleme: ölçülen değerlerle doğrusal loudnorm + sınırlayıcı", Komut(esit, olcum),
+            " -af loudnorm=I=-14.0:TP=-1.0:LRA=11:measured_I=-21.37:measured_TP=-3.2:measured_LRA=6.4:measured_thresh=-31.6:offset=0.25:linear=true:print_format=none,alimiter=limit=0.891251:level=0:latency=1,aresample=48000:");
+        Icermiyor("Eşitleme açık ama ölçüm yok (sessiz ses)", Komut(esit), "loudnorm");
+        esit.Ses.OrnekHizi = null;
+        Iceriyor("Eşitleme + örnekleme 'kaynakla aynı': 192 kHz'ten kaynağın hızına", Komut(esit, olcum), ",aresample=44100:resampler=soxr");
+        Iceriyor("Eşitleme + örnekleme 'kaynakla aynı'", Komut(esit, olcum), " -ar 44100 ");
+
+        var olc = ArgsBuilder.LoudnormOlcumKomutu(esit.Ses, "KAYNAK.mp4", ArgsBuilder.SesSec(esit.Ses, Kaynak48(), "KAYNAK.mp4"), 10);
+        Iceriyor("Ölçüm komutu", " " + string.Join(' ', olc) + " ", " -map 0:a:0 -vn -sn -dn -t 10 -af loudnorm=I=-14.0:TP=-1.0:LRA=11:print_format=json -f null - ");
+
+        const string json = "[Parsed_loudnorm_0 @ 0x1]\n{\n\t\"input_i\" : \"-21.37\",\n\t\"input_tp\" : \"-3.20\",\n\t\"input_lra\" : \"6.40\",\n\t\"input_thresh\" : \"-31.60\",\n\t\"output_i\" : \"-14.02\",\n\t\"target_offset\" : \"0.25\"\n}";
+        var oku = ArgsBuilder.LoudnormOlcumOku(json);
+        Kontrol("Ölçüm JSON'u okunur", "-21.37/-3.2/6.4/-31.6/0.25",
+            oku is null ? "yok" : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{oku.Yukseklik}/{oku.Tepe}/{oku.Aralik}/{oku.Esik}/{oku.Ofset}"));
+        Kontrol("Sessiz ses (-inf): eşitleme yapılmaz", "yok",
+            ArgsBuilder.LoudnormOlcumOku(json.Replace("\"-21.37\"", "\"-inf\"")) is null ? "yok" : "var");
+    }
+
+    private static void Boyutlar()
+    {
+        Console.WriteLine();
+        Console.WriteLine("--- Tahmini dosya boyutu: (video + ses bit hızı) × süre");
+        var m = new MediaInfo(1080, 1920, 1, 1, 0, 60, true, 30, "bt709", "bt709", "tv")
+        {
+            SesAkislari = [new SesAkisi(1, "aac", 44100, 2, null, 128)],
+        };
+        var tt = Varsayilanlar.TikTok();
+        var ses = ArgsBuilder.SesSec(tt.Ses, m, "YOK.mp4");
+        // (34375 + 48000 × 16 × 2 / 1000) kb/s × 60 s = 269 332 500 bayt = 256,9 MB
+        Kontrol("TikTok 60 sn (CBR 34375 + WAV 16 bit 48 kHz stereo)", "tahmini 257 MB", BoyutTahmini.Hesapla(tt, m, ses)?.Metin ?? "yok");
+        var yt = Varsayilanlar.YouTube();
+        Kontrol("YouTube 60 sn (CRF 18, en yüksek 34375)", "en çok 257 MB", BoyutTahmini.Hesapla(yt, m, ses)?.Metin ?? "yok");
+        yt.Video.X264.VbvMaks = null;
+        Kontrol("CRF, üst sınır yok: tahmin yapılmaz", "yok", BoyutTahmini.Hesapla(yt, m, ses)?.Metin ?? "yok");
+        var sessiz = Varsayilanlar.TikTok();
+        sessiz.Ses.Kaynak = SesKaynagi.Sessiz;
+        Kontrol("Sessiz (yalnızca video)", "tahmini 246 MB",
+            BoyutTahmini.Hesapla(sessiz, m, ArgsBuilder.SesSec(sessiz.Ses, m, "YOK.mp4"))?.Metin ?? "yok");
+        Kontrol("Biçim: 1,5 GB", "1,5 GB", BoyutTahmini.Yaz(1610612736));
+        Kontrol("Biçim: 12,3 MB", "12,3 MB", BoyutTahmini.Yaz(12897484));
+        Kontrol("Biçim: 850 KB", "850 KB", BoyutTahmini.Yaz(870400));
     }
 
     private static void SesIzleri()

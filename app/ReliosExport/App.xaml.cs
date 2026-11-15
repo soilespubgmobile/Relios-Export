@@ -118,6 +118,14 @@ public partial class App : Application
         var arka = (Brush)w.FindResource("BgSurface");
         w.KontrolIcinDoldur();
         EkranGoruntusu.Bekle(w.Dispatcher);
+        // Bekleyen örnek: 60 sn, TikTok CBR 34375 kb/s + WAV 16 bit 48 kHz stereo = 257 MB.
+        var ilk = w.KontrolIlkSatir;
+        rapor.AppendLine("Tahmini boyut: " + ilk);
+        if (!ilk.Contains("tahmini 257 MB", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Bekleyen satırda tahmini boyut yok: " + ilk);
+        }
+
         if (ekran is not null)
         {
             EkranGoruntusu.Pencere(w, Path.Combine(ekran, "01-ana-pencere-tiktok.png"));

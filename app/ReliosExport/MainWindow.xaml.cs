@@ -91,6 +91,14 @@ public sealed class FileItem : INotifyPropertyChanged
     /// <summary>Bittiğinde oluşan dosya.</summary>
     public string? OutputPath { get; set; }
 
+    /// <summary>Kaynağın ffprobe bilgisi (eklenince arka planda okunur; tahmini dosya boyutu için).</summary>
+    public MediaInfo? Medya { get; set; }
+
+    /// <summary>Aynı adlı ses dosyasının bilgisi (örnekleme hızı, kanal) ve hangi dosyaya ait olduğu.</summary>
+    public SesAkisi? HariciAkis { get; set; }
+
+    public string? HariciAkisYolu { get; set; }
+
     public ItemState State
     {
         get => _state;
@@ -530,20 +538,81 @@ public partial class MainWindow : Window
 
     private void BekliyorYaz(FileItem item)
     {
+        var tahmin = TahminMetni(item, _ayarlar) is { } t ? " · " + t : string.Empty;
         switch (_ayarlar.Ses.Kaynak)
         {
             case SesKaynagi.Sessiz:
-                item.Status = "Bekliyor · Ses yok (sessiz)";
+                item.Status = "Bekliyor · Ses yok (sessiz)" + tahmin;
                 item.Detail = null;
                 break;
             case SesKaynagi.AyniAdliDosyaOncelikli when item.HariciSes is { } ses:
-                item.Status = "Bekliyor · Ses: " + Path.GetFileName(ses);
+                item.Status = "Bekliyor · Ses: " + Path.GetFileName(ses) + tahmin;
                 item.Detail = "Videonun kendi sesi yerine kullanılacak ses:\n" + ses;
                 break;
             default:
-                item.Status = "Bekliyor";
+                item.Status = "Bekliyor" + tahmin;
                 item.Detail = null;
                 break;
+        }
+
+        if (tahmin.Length > 0)
+        {
+            item.Detail = (item.Detail is null ? string.Empty : item.Detail + "\n\n")
+                          + "Tahmini dosya boyutu: (video + ses bit hızı) × süre. "
+                          + "\"En çok\": bit hızının yalnızca üst sınırı belli (ör. CRF + en yüksek bit hızı); gerçek dosya genelde daha küçüktür.";
+        }
+    }
+
+    /// <summary>Bekleyen videonun tahmini çıktı boyutu ("tahmini 245 MB" / "en çok 1,2 GB"); bilinmiyorsa null.</summary>
+    private static string? TahminMetni(FileItem item, ProfilAyarlari a)
+    {
+        if (item.Medya is not { } m)
+        {
+            return null;
+        }
+
+        var ses = a.Ses.Kaynak == SesKaynagi.AyniAdliDosyaOncelikli && item.HariciSes is { } dosya
+            ? new SesSecimi(SesSecimTuru.HariciDosya, dosya, AyniYol(item.HariciAkisYolu, dosya) ? item.HariciAkis?.Kanal : null)
+            {
+                OrnekHizi = AyniYol(item.HariciAkisYolu, dosya) ? item.HariciAkis?.OrnekHizi : null,
+            }
+            : ArgsBuilder.SesSec(a.Ses, m, item.Path);
+        return BoyutTahmini.Hesapla(a, m, ses)?.Metin;
+    }
+
+    // Aynı anda en fazla iki ffprobe (çok video birden eklenince bilgisayar yorulmasın).
+    private readonly SemaphoreSlim _inceleme = new(2);
+
+    /// <summary>Videoyu (ve aynı adlı sesi) arka planda inceler; bitince bekleyen satırın tahmini boyutu yazılır.</summary>
+    private async Task InceleAsync(FileItem item)
+    {
+        if (!Tools.Available)
+        {
+            return;
+        }
+
+        await _inceleme.WaitAsync();
+        try
+        {
+            item.Medya ??= await MediaProbe.ProbeAsync(Tools.Ffprobe, item.Path, CancellationToken.None);
+            if (item.HariciSes is { } dosya && !AyniYol(item.HariciAkisYolu, dosya))
+            {
+                item.HariciAkis = await MediaProbe.ProbeAudioAsync(Tools.Ffprobe, dosya, CancellationToken.None);
+                item.HariciAkisYolu = dosya;
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // Okunamayan dosya: tahmin yazılmaz; kodlarken ffmpeg asıl hatayı söyler.
+        }
+        finally
+        {
+            _inceleme.Release();
+        }
+
+        if (item.State == ItemState.Waiting && _files.Contains(item))
+        {
+            BekliyorYaz(item);
         }
     }
 
@@ -556,6 +625,10 @@ public partial class MainWindow : Window
             {
                 item.HariciSes = HariciSes.Bul(item.Path);
                 BekliyorYaz(item);
+                if (item.HariciSes is { } dosya && !AyniYol(item.HariciAkisYolu, dosya))
+                {
+                    _ = InceleAsync(item);
+                }
             }
         }
     }
@@ -640,6 +713,7 @@ public partial class MainWindow : Window
             var item = new FileItem(path) { HariciSes = HariciSes.Bul(path) };
             BekliyorYaz(item);
             _files.Add(item);
+            _ = InceleAsync(item);
         }
 
         var eslesmeyen = sesler.Count(s => !_files.Any(f => AyniYol(f.HariciSes, s)));
@@ -846,7 +920,8 @@ public partial class MainWindow : Window
                     item.Progress = 1;
                     item.State = ItemState.Done;
                     item.Status = "Hazır · " + Path.GetFileName(output)
-                                  + (item.Gecen is { } sure ? " · " + FileItem.SureMetni(sure) : string.Empty);
+                                  + (item.Gecen is { } sure ? " · " + FileItem.SureMetni(sure) : string.Empty)
+                                  + DosyaBoyutu(output);
                     item.Detail = output;
                     ok++;
                 }
@@ -880,6 +955,19 @@ public partial class MainWindow : Window
         if (_closeWhenDone)
         {
             Close();
+        }
+    }
+
+    /// <summary>Oluşan dosyanın gerçek boyutu (" · 245 MB"); okunamazsa boş.</summary>
+    private static string DosyaBoyutu(string yol)
+    {
+        try
+        {
+            return " · " + BoyutTahmini.Yaz(new FileInfo(yol).Length);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return string.Empty;
         }
     }
 
@@ -983,7 +1071,12 @@ public partial class MainWindow : Window
     internal void KontrolIcinDoldur()
     {
         var klasor = Path.Combine(Path.GetTempPath(), "Relios Export örnek");
-        var bekleyen = new FileItem(Path.Combine(klasor, "edit1.mp4")) { HariciSes = Path.Combine(klasor, "edit1.wav") };
+        var bekleyen = new FileItem(Path.Combine(klasor, "edit1.mp4"))
+        {
+            HariciSes = Path.Combine(klasor, "edit1.wav"),
+            // 60 saniyelik 1080×1920 video: tahmini boyut satırda görünsün (TikTok CBR 34375 kb/s + WAV 16 bit 48 kHz).
+            Medya = new MediaInfo(1080, 1920, 1, 1, 0, 60, true, 30, "bt709", "bt709", "tv") { VideoCodec = "h264", VideoProfil = "High", VideoSeviye = 41 },
+        };
         BekliyorYaz(bekleyen);
         var calisan = new FileItem(Path.Combine(klasor, "Türkçe ğüşıöç İsim.mov"))
         {
@@ -994,7 +1087,7 @@ public partial class MainWindow : Window
         var biten = new FileItem(Path.Combine(klasor, "klip.mp4"))
         {
             State = ItemState.Done,
-            Status = "Hazır · klip_TikTok.mp4",
+            Status = "Hazır · klip_TikTok.mp4 · 1 dk 05 sn · 128 MB",
             Progress = 1,
         };
         var hatali = new FileItem(Path.Combine(klasor, "bozuk.mkv"))
@@ -1048,6 +1141,9 @@ public partial class MainWindow : Window
             exp.IsExpanded = true;
         }
     }
+
+    /// <summary>Yalnızca pencere kontrolü için: ilk satırın durum yazısı (tahmini boyut görünüyor mu).</summary>
+    internal string KontrolIlkSatir => _files.Count > 0 ? _files[0].Status : string.Empty;
 
     internal ProfilAyarlari KontrolAyarlari => _ayarlar;
 

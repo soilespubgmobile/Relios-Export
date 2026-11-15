@@ -354,6 +354,58 @@ jobs:
           "`n24 bit kaynak 16 bit'e ucgen titresimle indirildi; 16 bit 48 kHz kaynagin sesi bit bit ayni kaldi."
           exit 0
 
+      - name: Ses yuksekligi denemesi (tepe sinirlayici -1 dB, LUFS esitleme -14)
+        if: always()
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          # Ilk 1 sn sessiz, sonra ses. Yuksek kaynak: 0,9 genlik (+12 dB ile tasar). Kisik kaynak: ~-29 LUFS.
+          $yuksek = 'aevalsrc=if(gte(t\,1)\,0.9*sin(2*PI*440*t)\,0)|if(gte(t\,1)\,0.9*sin(2*PI*660*t)\,0):s=48000:d=4'
+          $kisik = 'aevalsrc=if(gte(t\,1)\,0.05*sin(2*PI*440*t)+0.02*sin(2*PI*3000*t)\,0)|if(gte(t\,1)\,0.05*sin(2*PI*550*t)\,0):s={0}:d=9'
+          $ky = Join-Path $PWD 'yuksek_48k.mov'
+          $kk = Join-Path $PWD 'kisik_48k.mov'
+          $kk44 = Join-Path $PWD 'kisik_44k.mov'
+          foreach ($k in @(@($ky, $yuksek, 4), @($kk, ($kisik -f 48000), 9), @($kk44, ($kisik -f 44100), 9))) {
+            ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i $k[1] -t $k[2] -pix_fmt yuv420p -c:v libx264 -preset veryfast -c:a pcm_s24le -y $k[0]
+            "$([IO.Path]::GetFileName($k[0])): " + (ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,sample_rate,channels -of csv=p=0 $k[0])
+          }
+          $durumlar = @(
+            @{ ad = 'Ses +12 dB, sinirlayici acik (varsayilan, -1 dB)'; src = $ky; arg = @('--profil', 'youtube', '--ayarla', 'Ses.Seviye=12'); kip = @('sinir') },
+            @{ ad = 'Ses +12 dB, sinirlayici kapali (kirpilir)'; src = $ky; arg = @('--profil', 'youtube', '--ayarla', 'Ses.Seviye=12', '--ayarla', 'Ses.Sinirlayici=false'); kip = @('kirpik') },
+            @{ ad = 'LUFS esitleme -14 (YouTube, kisik kaynak)'; src = $kk; arg = @('--profil', 'youtube', '--ayarla', 'Ses.Esitleme=true'); kip = @('lufs') },
+            @{ ad = 'LUFS esitleme -14 (TikTok sesi, video x264)'; src = $kk; arg = @('--ayarla', 'Video.Kodlayici=X264', '--ayarla', 'Ses.Esitleme=true'); kip = @('lufs') },
+            @{ ad = 'LUFS esitleme -14, ornekleme kaynakla ayni (44,1 kHz kalir)'; src = $kk44; arg = @('--profil', 'youtube', '--ayarla', 'Ses.Esitleme=true', '--ayarla', 'Ses.OrnekHizi=null'); kip = @('lufs', '--hz', '44100') }
+          )
+          $satirlar = @(); $hatali = 0; $i = 0
+          foreach ($d in $durumlar) {
+            $i++
+            $dir = Join-Path $PWD "yukseklik/$i"
+            Write-Host "::group::$i. $($d.ad)"
+            $log = & ./smoke/ReliosExport.Smoke.exe $d.src $dir @($d.arg) 2>&1 | ForEach-Object { "$_" }
+            $rc = $LASTEXITCODE
+            $log | ForEach-Object { Write-Host $_ }
+            $sonuc = 'OK'; $ozet = ''
+            if ($rc -ne 0) { $sonuc = "HATA (kod $rc)" }
+            else {
+              $out = (Get-ChildItem -LiteralPath $dir | Where-Object { $_.Extension -in '.mp4', '.mov' } | Select-Object -First 1).FullName
+              $c = & python -X utf8 -I tools/ses_yukseklik_kontrol.py $out @($d.kip) 2>&1 | ForEach-Object { "$_" }
+              $crc = $LASTEXITCODE
+              $c | ForEach-Object { Write-Host $_ }
+              $ozet = (($c | Where-Object { $_ -match '^(OK|FARK) ' -and $_ -notmatch 'codec|Örnekleme' }) -replace '^\S+ +(.*?) +hedef: .*çıktı: (.*)$', '$1: $2') -join ' · '
+              $ozet += ' · ' + (($c | Where-Object { $_ -like 'Ses yüksekliği:*' }) -join '')
+              if ($crc -ne 0) { $sonuc = 'FARK' }
+            }
+            if ($sonuc -ne 'OK') { $hatali++ }
+            Write-Host "::endgroup::"
+            $satirlar += "| $i | $($d.ad) | $ozet | $sonuc |"
+          }
+          $tablo = @("", "| # | Ses yuksekligi | Kontroller | Sonuc |", "|---|---|---|---|") + $satirlar
+          "`n===== SES YUKSEKLIGI ====="
+          $tablo | ForEach-Object { $_ }
+          $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          if ($hatali) { "`n$hatali ses yuksekligi denemesinde sorun var."; exit 1 }
+          "`nSinirlayici tepeyi -1 dB'de tuttu, gecikme yok; LUFS esitleme -14'e getirdi."
+          exit 0
+
       - name: x264 seviye denemesi (programin sectigi seviyede x264 uyarmamali, bir alt seviyede uyarmali)
         if: always()
         run: |

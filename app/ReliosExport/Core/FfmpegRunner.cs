@@ -53,7 +53,8 @@ public sealed class FfmpegRunner
         IReadOnlyList<string> args,
         double durationSeconds,
         IProgress<double>? onProgress,
-        CancellationToken ct)
+        CancellationToken ct,
+        List<string>? tumCikti = null)
     {
         var psi = new ProcessStartInfo(Tools.Ffmpeg)
         {
@@ -84,6 +85,7 @@ public sealed class FfmpegRunner
 
             lock (errTail)
             {
+                tumCikti?.Add(e.Data);
                 if (errHead.Count < 200)
                 {
                     errHead.Add(e.Data);
@@ -195,12 +197,23 @@ public static class Exporter
         var media = await MediaProbe.ProbeAsync(Tools.Ffprobe, input, ct);
         var ses = await ArgsBuilder.SesSecAsync(Tools.Ffprobe, a.Ses, media, input, ct);
         onInfo?.Invoke(Describe(media, a, ses));
+        LoudnormOlcum? olcum = null;
+        if (a.Ses.Esitleme && ses.Tur != SesSecimTuru.Yok)
+        {
+            // LUFS eşitleme, 1. geçiş: sesin yüksekliği ölçülür (yalnızca ses okunur, kısa sürer).
+            onInfo?.Invoke(Describe(media, a, ses) + " · ses ölçülüyor");
+            var cikti = new List<string>();
+            await FfmpegRunner.RunAsync(ArgsBuilder.LoudnormOlcumKomutu(a.Ses, input, ses, media.DurationSeconds), 0, null, ct, cikti);
+            olcum = ArgsBuilder.LoudnormOlcumOku(string.Join('\n', cikti));
+            onInfo?.Invoke(Describe(media, a, ses, olcum));
+        }
+
         Directory.CreateDirectory(outputFolder);
         var output = OutputPathFor(input, outputFolder, profile, ArgsBuilder.Uzanti(a));
         var temp = output + ".part" + ArgsBuilder.Uzanti(a);
         var gecisKlasoru = Path.Combine(Path.GetTempPath(), "Relios Export", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(gecisKlasoru);
-        var plan = ArgsBuilder.Olustur(a, media, input, ses, temp, Path.Combine(gecisKlasoru, "gecis"));
+        var plan = ArgsBuilder.Olustur(a, media, input, ses, temp, Path.Combine(gecisKlasoru, "gecis"), olcum);
         try
         {
             var n = plan.Gecisler.Count;
@@ -220,7 +233,7 @@ public static class Exporter
             sb.AppendLine("Relios Export · hata günlüğü · " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
             sb.AppendLine("Kaynak : " + input);
             sb.AppendLine("Profil : " + profile.DisplayName);
-            sb.AppendLine("Bilgi  : " + Describe(media, a, ses));
+            sb.AppendLine("Bilgi  : " + Describe(media, a, ses, olcum));
             sb.AppendLine("Açıklama: " + ex.Message);
             sb.AppendLine();
             for (var i = 0; i < plan.Gecisler.Count; i++)
@@ -274,7 +287,7 @@ public static class Exporter
     }
 
     /// <summary>Kaynağın kısa Türkçe özeti: çözünürlük, kare hızı, kırpma ve hangi sesin kullanılacağı.</summary>
-    public static string Describe(MediaInfo media, ProfilAyarlari a, SesSecimi ses)
+    public static string Describe(MediaInfo media, ProfilAyarlari a, SesSecimi ses, LoudnormOlcum? olcum = null)
     {
         var tr = CultureInfo.GetCultureInfo("tr-TR");
         var text = $"{media.DisplayWidth}×{media.DisplayHeight}";
@@ -318,6 +331,12 @@ public static class Exporter
         }
 
         text += " · Ses: " + ses.Aciklama;
+        if (olcum is not null)
+        {
+            // Ör. "-21,3 → -14 LUFS"
+            text += " · " + Bicim.Sayi(Math.Round(olcum.Yukseklik, 1)) + " → " + Bicim.Sayi(a.Ses.EsitlemeHedef) + " LUFS";
+        }
+
         return text;
     }
 }

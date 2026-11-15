@@ -473,10 +473,24 @@
                             </Expander>
 
                             <Expander Header="Ses seviyesi" Tag="{Binding Ses.SeviyeOzeti}" Style="{StaticResource AyarSatiri}">
-                                <DockPanel Style="{StaticResource FormSatiri}">
-                                    <TextBlock Text="Değişim (dB)" Width="130" Style="{StaticResource AlanEtiketi}"/>
-                                    <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Text="{Binding Ses.Seviye, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
-                                </DockPanel>
+                                <StackPanel>
+                                    <DockPanel Style="{StaticResource FormSatiri}">
+                                        <TextBlock Text="Değişim (dB)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Text="{Binding Ses.Seviye, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                    </DockPanel>
+                                    <CheckBox Content="LUFS eşitleme (EBU R128)" IsChecked="{Binding Ses.Esitleme}" Margin="0,2,0,8"/>
+                                    <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Ses.Esitleme, Converter={StaticResource DogruysaGorunur}}">
+                                        <TextBlock Text="Hedef (LUFS)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Text="{Binding Ses.EsitlemeHedef, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                    </DockPanel>
+                                    <CheckBox Content="Tepe sınırlayıcı (taşmayı önler)" IsChecked="{Binding Ses.Sinirlayici}" Margin="0,2,0,8"/>
+                                    <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Ses.Sinirlayici, Converter={StaticResource DogruysaGorunur}}">
+                                        <TextBlock Text="Tavan (dB)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                        <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Text="{Binding Ses.SinirlayiciTavan, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                    </DockPanel>
+                                    <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8"
+                                               Text="LUFS eşitleme sesi önce ölçer, sonra hedef yüksekliğe getirir (TikTok ve YouTube: -14). Sınırlayıcı yalnızca ses yükseltildiğinde (artı dB ya da eşitleme) devreye girer ve tepeleri tavanda tutar; ses yükseltilmezse sese dokunmaz."/>
+                                </StackPanel>
                             </Expander>
 
                             <Expander Header="Örnekleme hızı" Tag="{Binding Ses.OrnekHiziOzeti}" Style="{StaticResource AyarSatiri}">

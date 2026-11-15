@@ -17,6 +17,9 @@ public enum SesSecimTuru { Yok, Video, HariciDosya }
 /// </summary>
 public sealed record SesSecimi(SesSecimTuru Tur, string? Dosya = null, int? Kanal = null, int Iz = 0, string? IzOzeti = null)
 {
+    /// <summary>Seçilen sesin örnekleme hızı (Hz; bilinmiyorsa null). LUFS eşitlemeden sonra "kaynakla aynı" hız için.</summary>
+    public int? OrnekHizi { get; init; }
+
     public static readonly SesSecimi Yok = new(SesSecimTuru.Yok);
 
     public string Aciklama => Tur switch
@@ -26,6 +29,12 @@ public sealed record SesSecimi(SesSecimTuru Tur, string? Dosya = null, int? Kana
         _ => "ses yok",
     };
 }
+
+/// <summary>
+/// LUFS eşitlemenin ilk geçişinde (ölçüm) loudnorm'un ölçtüğü değerler: tümleşik yükseklik (LUFS), gerçek tepe (dBTP),
+/// yükseklik aralığı (LU), eşik (LUFS) ve hedefe göre kalan fark (LU). İkinci geçişte loudnorm'a aynen verilir.
+/// </summary>
+public sealed record LoudnormOlcum(double Yukseklik, double Tepe, double Aralik, double Esik, double Ofset);
 
 /// <summary>Bir dışa aktarmanın ffmpeg komutları (2 / 3 geçişte birden fazla) ve çıktı uzantısı.</summary>
 public sealed record KomutPlani(IReadOnlyList<IReadOnlyList<string>> Gecisler, string Uzanti);
@@ -116,7 +125,10 @@ public static class ArgsBuilder
                     null,
                     akis is { Kanal: > 0 } ? akis.Kanal : null,
                     iz,
-                    izler.Count > 1 && akis is not null ? $"{iz + 1}. iz · {akis.Ozet}" : null);
+                    izler.Count > 1 && akis is not null ? $"{iz + 1}. iz · {akis.Ozet}" : null)
+                {
+                    OrnekHizi = akis is { OrnekHizi: > 0 } ? akis.OrnekHizi : null,
+                };
         }
     }
 
@@ -154,9 +166,13 @@ public static class ArgsBuilder
         {
             try
             {
-                if (await MediaProbe.ProbeAudioAsync(ffprobe, dosya, ct) is { Kanal: > 0 } akis)
+                if (await MediaProbe.ProbeAudioAsync(ffprobe, dosya, ct) is { } akis)
                 {
-                    ses = ses with { Kanal = akis.Kanal };
+                    ses = ses with
+                    {
+                        Kanal = akis.Kanal > 0 ? akis.Kanal : null,
+                        OrnekHizi = akis.OrnekHizi > 0 ? akis.OrnekHizi : null,
+                    };
                 }
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
@@ -174,7 +190,8 @@ public static class ArgsBuilder
         string input,
         SesSecimi ses,
         string output,
-        string? gecisDosyasi = null)
+        string? gecisDosyasi = null,
+        LoudnormOlcum? olcum = null)
     {
         var v = a.Video;
         var gecisSayisi = v.Kodlayici == VideoKodlayici.X264
@@ -185,7 +202,7 @@ public static class ArgsBuilder
         var gecisler = new List<IReadOnlyList<string>>();
         if (gecisSayisi == 1)
         {
-            gecisler.Add(Komut(a, media, input, ses, output, gecis: 0, gecisDosyasi));
+            gecisler.Add(Komut(a, media, input, ses, output, gecis: 0, gecisDosyasi, olcum));
         }
         else
         {
@@ -196,7 +213,7 @@ public static class ArgsBuilder
                 gecisler.Add(Komut(a, media, input, ses, "-", gecis: 3, gecisDosyasi));
             }
 
-            gecisler.Add(Komut(a, media, input, ses, output, gecis: 2, gecisDosyasi));
+            gecisler.Add(Komut(a, media, input, ses, output, gecis: 2, gecisDosyasi, olcum));
         }
 
         return new KomutPlani(gecisler, Uzanti(a));
@@ -212,7 +229,8 @@ public static class ArgsBuilder
         SesSecimi ses,
         string output,
         int gecis,
-        string gecisDosyasi)
+        string gecisDosyasi,
+        LoudnormOlcum? olcum = null)
     {
         var v = a.Video;
         var sonGecis = gecis is 0 or 2;
@@ -281,7 +299,7 @@ public static class ArgsBuilder
 
         if (sesVar)
         {
-            Ses(args, a.Ses, harici, ses.Kanal);
+            Ses(args, a.Ses, harici, ses.Kanal, olcum, ses.OrnekHizi);
         }
 
         args.AddRange(
@@ -1054,7 +1072,11 @@ public static class ArgsBuilder
 
     // --------------------------------------------------------------------------- Ses
 
-    private static void Ses(List<string> args, SesAyarlari s, bool harici, int? kaynakKanal = null)
+    /// <summary>
+    /// Sesin yüksekliğini değiştirmeden önceki filtreler: gecikme, seviye, mono → stereo. LUFS eşitlemede ölçüm de
+    /// bunlardan sonraki sese yapılır (ikinci geçişte loudnorm aynı yerde durur).
+    /// </summary>
+    private static List<string> OnSesFiltreleri(SesAyarlari s, int? kaynakKanal)
     {
         var af = new List<string>();
         if (s.Gecikme > 0)
@@ -1078,11 +1100,99 @@ public static class ArgsBuilder
             af.Add("pan=stereo|c0=c0|c1=c0");
         }
 
+        return af;
+    }
+
+    private static string Db(double d) => d.ToString("0.0#", Inv);
+
+    /// <summary>
+    /// LUFS eşitlemenin ölçüm geçişi: sesi yalnızca okur (görüntü yok), loudnorm ölçtüğü değerleri JSON olarak
+    /// ffmpeg çıktısına yazar. Süre videonunkiyle sınırlanır (harici ses videodan uzunsa sonu çıktıda kesilir).
+    /// </summary>
+    public static List<string> LoudnormOlcumKomutu(SesAyarlari s, string input, SesSecimi ses, double sureSaniye)
+    {
+        var harici = ses.Tur == SesSecimTuru.HariciDosya;
+        var args = new List<string> { "-hide_banner", "-nostdin", "-nostats", "-i", harici ? ses.Dosya! : input };
+        args.AddRange(["-map", harici ? "0:a:0" : "0:a:" + ses.Iz.ToString(Inv), "-vn", "-sn", "-dn"]);
+        if (sureSaniye > 0)
+        {
+            args.AddRange(["-t", sureSaniye.ToString("0.###", Inv)]);
+        }
+
+        var af = OnSesFiltreleri(s, ses.Kanal);
+        af.Add($"loudnorm=I={Db(s.EsitlemeHedef)}:TP={Db(s.SinirlayiciTavan)}:LRA=11:print_format=json");
+        args.AddRange(["-af", string.Join(',', af), "-f", "null", "-"]);
+        return args;
+    }
+
+    /// <summary>
+    /// loudnorm'un ölçüm çıktısından (ffmpeg günlüğünün sonundaki JSON) değerleri okur. Ses sessizse ya da okunamazsa
+    /// null: eşitleme yapılmaz (sessiz sesi yükseltmeye çalışmak hata verir).
+    /// </summary>
+    public static LoudnormOlcum? LoudnormOlcumOku(string gunluk)
+    {
+        var bas = gunluk.LastIndexOf('{');
+        var son = gunluk.LastIndexOf('}');
+        if (bas < 0 || son < bas)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(gunluk[bas..(son + 1)]);
+            var r = doc.RootElement;
+            double? Oku(string ad) =>
+                r.TryGetProperty(ad, out var v)
+                && double.TryParse(v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : v.GetRawText(),
+                    NumberStyles.Float, Inv, out var d)
+                && double.IsFinite(d)
+                    ? d
+                    : null;
+
+            if (Oku("input_i") is not { } i || i < -70 || Oku("input_tp") is not { } tp || Oku("input_lra") is not { } lra
+                || Oku("input_thresh") is not { } esik || Oku("target_offset") is not { } ofset)
+            {
+                return null;
+            }
+
+            return new LoudnormOlcum(i, tp, lra, esik, ofset);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static void Ses(List<string> args, SesAyarlari s, bool harici, int? kaynakKanal = null, LoudnormOlcum? olcum = null, int? kaynakHz = null)
+    {
+        var af = OnSesFiltreleri(s, kaynakKanal);
+        var esitleme = s.Esitleme && olcum is not null;
+        if (esitleme)
+        {
+            // İkinci geçiş: ölçülen değerlerle doğrusal (sesin dinamiği değişmeden) hedefe getirilir; doğrusal
+            // kazanç tepeyi tavanın üstüne çıkaracaksa loudnorm kendisi dinamik kipe geçer.
+            var o = olcum!;
+            af.Add($"loudnorm=I={Db(s.EsitlemeHedef)}:TP={Db(s.SinirlayiciTavan)}:LRA=11"
+                   + $":measured_I={Db(o.Yukseklik)}:measured_TP={Db(o.Tepe)}:measured_LRA={Db(o.Aralik)}"
+                   + $":measured_thresh={Db(o.Esik)}:offset={Db(o.Ofset)}:linear=true:print_format=none");
+        }
+
+        if (s.Sinirlayici && (s.Seviye > 0 || esitleme))
+        {
+            // Tepe sınırlayıcı: yalnızca ses yükseltilince. Tavan doğrusal değere çevrilir (-1 dB = 0,891);
+            // otomatik seviye kapalı (sesi kendisi yükseltmez), gecikmesi telafi edilir (senkron kaymaz).
+            var tavan = Math.Pow(10, s.SinirlayiciTavan / 20);
+            af.Add(string.Create(Inv, $"alimiter=limit={tavan:0.######}:level=0:latency=1"));
+        }
+
+        // loudnorm çıktısı 192 kHz'tir: örnekleme hızı "kaynakla aynı" ise kaynağın hızına geri döner.
+        var hedefHz = s.OrnekHizi ?? (esitleme ? kaynakHz ?? 48000 : null);
         var kaliteVar = s.Kalite != DonusumKalitesi.Yuksek || s.Titresim != Titresim.Yok;
-        if (s.OrnekHizi is not null || kaliteVar)
+        if (hedefHz is not null || kaliteVar)
         {
             var r = new List<string>();
-            if (s.OrnekHizi is { } hz)
+            if (hedefHz is { } hz)
             {
                 r.Add(hz.ToString(Inv));
             }
@@ -1170,7 +1280,7 @@ public static class ArgsBuilder
             }]);
         }
 
-        if (s.OrnekHizi is { } ar)
+        if (hedefHz is { } ar)
         {
             args.AddRange(["-ar", ar.ToString(Inv)]);
         }
