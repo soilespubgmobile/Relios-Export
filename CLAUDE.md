@@ -11,7 +11,7 @@ Bu dosya önceki Claude sohbetinin özetidir. Yeni oturum buradan devam eder.
 ## Program
 - Tek exe WPF (.NET 11) video dışa aktarıcı: FFmpeg 9.0.2 + FDK AAC (nonfree derleme — yalnızca kişisel kullanım, dağıtılmaz).
 - Profiller: **TikTok** ve **YouTube** (Instagram yok). Kaynak her formatta okunur, çıktı yalnızca H.264 (x264 core 165 r3223 0480cb0 veya NVENC).
-- Sürüm: **0.8.9** (`app/ReliosExport/ReliosExport.csproj`). Ayar sürümü `ProfilAyarlari.GuncelSurum = 9`.
+- Sürüm: **0.8.9** (`app/ReliosExport/ReliosExport.csproj`). Ayar sürümü `ProfilAyarlari.GuncelSurum = 10`.
 
 ## Kalıcı kurallar (asla bozma)
 - XviD4PSP.exe'ye ve ayarlarına/ön ayarlarına dokunma (imza değişirse lisans iptal).
@@ -26,11 +26,11 @@ Bu dosya önceki Claude sohbetinin özetidir. Yeni oturum buradan devam eder.
 ## Varsayılanlar (0.8.9)
 - **TikTok:** NVENC CBR 34375 kb/s, tampon boş (= bit hızı); çözünürlük/fps/profil/seviye kaynakla aynı; B-kare 0, ref 3, GOP 30 kare, scenecut 0; MOV.
 - **YouTube:** x264 CRF 18, VBV 34375 / 55000; çözünürlük/fps/profil/seviye kaynakla aynı (seviye gerekirse yükseltilir); anahtar kare 30 fps'e göre 50/26 (60 fps'e uyarlanır); MOV.
-- **Ses (ikisinde de):** WAV (PCM) 16 bit, 48 kHz, stereo; dönüşüm soxr 33 bit (En yüksek), titreşim Üçgen (triangular). 24/32 bit/float kaynak 16 bite titreşimle iner; 16 bit 48 kHz kaynak bit bit aynı kalır.
+- **Ses (ikisinde de):** WAV (PCM) 16 bit, 48 kHz, stereo; dönüşüm soxr 33 bit (En yüksek), titreşim Üçgen (triangular). 24/32 bit/float kaynak 16 bite titreşimle iner; 16 bit 48 kHz kaynak bit bit aynı kalır (eşitleme açıkken: ses zaten -14 ya da daha yüksekse; kısıksa -14'e yükseltilir).
 - Encoded date / Tagged date = dışa aktarma anı (`-metadata creation_time=now`, UTC).
 - Varsayılan çıktı klasörü: İndirilenler.
 - x264 threads 8.
-- **Ses yüksekliği (ikisinde de):** tepe sınırlayıcı açık, -1 dB (alimiter; yalnızca ses yükseltilince — artı dB ya da LUFS eşitleme — devreye girer, yoksa sese dokunmaz). LUFS eşitleme kapalı, hedef -14, yön "yalnızca kısık sesi yükselt" (loudnorm iki geçiş; ±0,5 LU hedefteyse ya da yüksekse dokunulmaz; tepe + kazanç ≤ -1 ve 0 < LRA ≤ 11 ise doğrusal = sabit kazanç, değilse dinamik; bitince çıktı ölçülüp satıra yazılır). TikTok -14 kullanıcının kararı (TikTok resmi değer yayınlamıyor).
+- **Ses yüksekliği (ikisinde de):** tepe sınırlayıcı açık, -1 dB (alimiter; yalnızca ses yükseltilince — artı dB ya da LUFS eşitleme — devreye girer, yoksa sese dokunmaz). LUFS eşitleme **açık** (16 Kasım, kullanıcı isteği; sürüm 10 geçişi kayıtlı profil ayarlarını da açar, ön ayarlar kaydedildiği gibi kalır, Dikey 9:16 hedef ayarı eşitlemesiz), hedef -14, yön "yalnızca kısık sesi yükselt" (loudnorm iki geçiş; ±0,5 LU hedefteyse ya da yüksekse dokunulmaz; tepe + kazanç ≤ -1 ve 0 < LRA ≤ 11 ise doğrusal = sabit kazanç, değilse dinamik; bitince çıktı ölçülüp satıra yazılır). TikTok -14 kullanıcının kararı (TikTok resmi değer yayınlamıyor).
 - Tekrar işle: bütün videolar bitince Başlat düğmesi "Tekrar işle" olur, hepsini o anki ayarlarla yeniden işler. Bekleyen satırda tahmini dosya boyutu, biten satırda gerçek boyut.
 - Ayar geçişleri `app/ReliosExport/Core/AppSettings.cs` içinde (`Yukselt`); ses geçişi ön ayarlara uygulanmaz.
 

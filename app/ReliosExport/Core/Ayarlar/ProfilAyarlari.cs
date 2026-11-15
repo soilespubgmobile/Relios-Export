@@ -77,7 +77,7 @@ public sealed class ProfilAyarlari : Gozlenebilir
     /// 8: TikTok NVENC tamponu yine boş (bit hızı kadar); YouTube x264 VBV 34375 kb/s, tampon 55000 kb.
     /// 9: TikTok ve YouTube sesi WAV 16 bit 48 kHz, en yüksek dönüşüm kalitesi (soxr 33 bit), üçgen titreşim.
     /// </summary>
-    public const int GuncelSurum = 9;
+    public const int GuncelSurum = 10;
 
     public VideoAyarlari Video { get => _video; set => Bagla(ref _video, value); }
 
@@ -625,7 +625,11 @@ public sealed class SesAyarlari : Gozlenebilir
     /// <summary>Sınırlayıcının tavanı (dB, tam ölçeğe göre); LUFS eşitlemede gerçek tepe (dBTP) sınırı da budur.</summary>
     public double SinirlayiciTavan { get => _sinirlayiciTavan; set => Set(ref _sinirlayiciTavan, Math.Clamp(Math.Round(value, 1), -12, -0.1)); }
 
-    /// <summary>LUFS eşitleme (EBU R128): ses önce ölçülür, sonra hedef yüksekliğe getirilir (iki geçiş).</summary>
+    /// <summary>
+    /// LUFS eşitleme (EBU R128): ses önce ölçülür, sonra hedef yüksekliğe getirilir (iki geçiş). TikTok ve YouTube
+    /// varsayılanında açık (<see cref="Varsayilanlar.PlatformSesi"/>); burada kapalı başlar ki eşitlemeden önce
+    /// kaydedilmiş ön ayarlar (alanı yok) kaydedildiği gibi, eşitlemesiz yüklensin.
+    /// </summary>
     public bool Esitleme { get => _esitleme; set => Set(ref _esitleme, value); }
 
     /// <summary>LUFS eşitlemenin hedefi (tümleşik yükseklik, LUFS).</summary>

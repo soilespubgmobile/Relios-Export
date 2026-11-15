@@ -480,7 +480,7 @@ internal static class BirimKontrol
         {
             Kontrol(ad + ": sınırlayıcı açık", "True", a.Ses.Sinirlayici.ToString());
             Kontrol(ad + ": sınırlayıcı tavanı", "-1", a.Ses.SinirlayiciTavan.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            Kontrol(ad + ": LUFS eşitleme kapalı", "False", a.Ses.Esitleme.ToString());
+            Kontrol(ad + ": LUFS eşitleme açık (varsayılan)", "True", a.Ses.Esitleme.ToString());
             Kontrol(ad + ": LUFS hedefi", "-14", a.Ses.EsitlemeHedef.ToString(System.Globalization.CultureInfo.InvariantCulture));
             var k = Komut(a);
             Icermiyor(ad + " varsayılanı (ses yükseltilmiyor)", k, "alimiter");
@@ -746,7 +746,7 @@ internal static class BirimKontrol
         EskiSes(onAyar.Ses);
         var ayarlarOn = new AppSettings();
         var yuklenen = ayarlarOn.OnAyariYukle(ExportProfileId.YouTube, onAyar);
-        Kontrol("Ön ayar (sürüm 8) yüklenince sesi korunur", "FdkAac 128 Yuksek Yok 9",
+        Kontrol("Ön ayar (sürüm 8) yüklenince sesi korunur", "FdkAac 128 Yuksek Yok " + ProfilAyarlari.GuncelSurum,
             $"{yuklenen.Ses.Kodlayici} {yuklenen.Ses.Fdk.BitHizi} {yuklenen.Ses.Kalite} {yuklenen.Ses.Titresim} {yuklenen.Surum}");
         var sonra = ayarlarOn.ProfilAyari(ExportProfileId.YouTube).Ses;
         Kontrol("Ön ayardan sonra yeniden açılınca da korunur", "FdkAac 128", $"{sonra.Kodlayici} {sonra.Fdk.BitHizi}");
@@ -760,6 +760,30 @@ internal static class BirimKontrol
         var yuklenen7 = new AppSettings().OnAyariYukle(ExportProfileId.YouTube, onAyar7);
         Kontrol("Ön ayar (sürüm 7): VBV 34375 / 55000 olur, ses FDK AAC kalır", "34375/55000 FdkAac",
             $"{yuklenen7.Video.X264.VbvMaks}/{yuklenen7.Video.X264.VbvTampon} {yuklenen7.Ses.Kodlayici}");
+
+        // Sürüm 10: LUFS eşitleme varsayılan açık. Kayıtlı profil ayarında (sürüm 9, kapalı) açılır; ön ayar
+        // kaydedildiği gibi kalır; eşitlemeden önceki ön ayarda (alan yok = kapalı) eşitleme yapılmaz.
+        Kontrol("Ayar sınıfının kendi başlangıcı (eski ön ayarda alan yok)", "False", new SesAyarlari().Esitleme.ToString());
+        Kontrol("Dikey 9:16 (GitHub hedef ayarı) eşitlemesiz", "False", Varsayilanlar.Dikey916().Ses.Esitleme.ToString());
+        foreach (var pid in new[] { ExportProfileId.TikTok, ExportProfileId.YouTube })
+        {
+            var eski9 = Varsayilanlar.For(pid);
+            eski9.Surum = 9;
+            eski9.Ses.Esitleme = false;
+            var ayar9 = new AppSettings();
+            ayar9.Profiller[pid] = eski9;
+            Kontrol(pid + " 9 → 10: LUFS eşitleme açılır", "True", ayar9.ProfilAyari(pid).Ses.Esitleme.ToString());
+            var on9 = Varsayilanlar.For(pid);
+            on9.Surum = 9;
+            on9.Ses.Esitleme = false;
+            Kontrol(pid + " ön ayar (sürüm 9, eşitleme kapalı) kaydedildiği gibi", "False",
+                new AppSettings().OnAyariYukle(pid, on9).Ses.Esitleme.ToString());
+            var on8 = Varsayilanlar.For(pid);
+            on8.Surum = 8;
+            on8.Ses.Esitleme = false;
+            Kontrol(pid + " ön ayar (sürüm 8, eşitleme yoktu) eşitlemesiz", "False",
+                new AppSettings().OnAyariYukle(pid, on8).Ses.Esitleme.ToString());
+        }
 
         var tt8 = Varsayilanlar.TikTok();
         tt8.Video.Nvenc.Tampon = 55000;

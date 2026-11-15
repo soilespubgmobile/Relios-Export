@@ -73,6 +73,7 @@ internal static class UctanUca
         await Task.Delay(200);
         w.KontrolCiktiKlasoru(cikti);
         Esit("YouTube kodlayıcısı (varsayılan)", VideoKodlayici.X264, w.KontrolAyarlari.Video.Kodlayici);
+        Esit("YouTube: LUFS eşitleme varsayılan açık", true, w.KontrolAyarlari.Ses.Esitleme);
         Esit("Liste boşken Başlat etkin değil", false, w.BtnStart.IsEnabled);
 
         const string Tr = "Türkçe ğüşıöç İsim (1)";
@@ -238,6 +239,7 @@ internal static class UctanUca
         Kontrol("Satır yazısı yeniden \"Bekliyor\"", "Bekliyor …", Durum("ses_var.mp4"),
             Durum("ses_var.mp4").StartsWith("Bekliyor", StringComparison.Ordinal));
         Esit("TikTok kodlayıcısı (varsayılan)", VideoKodlayici.Nvenc, w.KontrolAyarlari.Video.Kodlayici);
+        Esit("TikTok: LUFS eşitleme varsayılan açık", true, w.KontrolAyarlari.Ses.Esitleme);
         Esit("Düğme", "Başlat", Dugme());
         if (await Tikla(w.BtnStart, "Başlat"))
         {

@@ -110,6 +110,13 @@ public sealed class AppSettings
                 Varsayilanlar.PlatformSesi(a.Ses);
             }
 
+            if (!onAyar && a.Surum < 10)
+            {
+                // 0.8.9'da LUFS eşitleme varsayılan kapalıydı; artık TikTok ve YouTube'da açık. Ön ayarlar
+                // kaydedildiği gibi kalır.
+                a.Ses.Esitleme = true;
+            }
+
             if (id == ExportProfileId.YouTube && a.Surum < 8
                 && a.Video.X264 is { VbvMaks: 14000, VbvTampon: 28000 })
             {

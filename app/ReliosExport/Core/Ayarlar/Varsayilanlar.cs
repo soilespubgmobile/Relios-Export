@@ -61,6 +61,9 @@ public static class Varsayilanlar
         s.Kanal = KanalModu.Stereo;
         s.Kalite = DonusumKalitesi.EnYuksek;
         s.Titresim = Titresim.Ucgen;
+
+        // LUFS eşitleme açık (-14, yalnızca kısık ses yükseltilir): TikTok ve YouTube'da varsayılan.
+        s.Esitleme = true;
     }
 
     /// <summary>
