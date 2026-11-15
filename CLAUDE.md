@@ -37,7 +37,7 @@ Bu dosya önceki Claude sohbetinin özetidir. Yeni oturum buradan devam eder.
 ## Doğrulama (her değişiklikte)
 1. Push → `app-build.yml` çalışır (ekran görüntüleri log'da base64, `EKRAN|ad|...` satırları).
 2. `gh api -X POST repos/soilespubgmobile/Relios-Export/actions/workflows/ffmpeg-dogrula.yml/dispatches -f ref=main -f inputs[run_id]=43369861243`
-3. Bakılacaklar: birim kontrol (`--birim-kontrol`, son: 195 kontrol 0 fark), 19 deneme videosu, Diğer ayarlar, Ses dönüşümü, x264 seviye tabloları, Ses yüksekliği (8 deneme) — hepsi 0 fark.
+3. Bakılacaklar: birim kontrol (`--birim-kontrol`, son: 212 kontrol 0 fark), 19 deneme videosu, Diğer ayarlar, Ses dönüşümü, x264 seviye tabloları, Ses yüksekliği (8 deneme) — hepsi 0 fark.
 - Yardımcılar: `tools/hedef_kontrol.py` (`--ses pcm16`, `--vbv`, `--kap`), `tools/ayar_kontrol.py`, `tools/saglamlik_kontrol.py`, `tools/ses_donusum_kontrol.py`.
 - Commit mesajlarında Co-Authored-By satırı kullanılıyor.
 
