@@ -701,6 +701,23 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Tekrar işle: biten video yeniden sıraya alınır; Başlat'a basınca paneldeki o anki ayarlarla yeniden kodlanır.
+    /// Önceki çıktı silinmez; yeni dosya ayrı adla (ör. klip_TikTok_2.mov) kaydedilir.
+    /// </summary>
+    private void OnRedoItem(object sender, RoutedEventArgs e)
+    {
+        if (IsBusy || (sender as FrameworkElement)?.DataContext is not FileItem { State: ItemState.Done } item)
+        {
+            return;
+        }
+
+        item.Reset();
+        item.HariciSes = HariciSes.Bul(item.Path);
+        BekliyorYaz(item);
+        OnListChanged();
+    }
+
     private void OnShowItem(object sender, RoutedEventArgs e)
     {
         switch ((sender as FrameworkElement)?.DataContext)
@@ -873,9 +890,8 @@ public partial class MainWindow : Window
     private void ShowOverall(int index, int count, double current, TimeSpan? kalan)
     {
         var overall = count == 0 ? 0 : Math.Clamp((index + current) / count, 0, 1);
-        OverallBar.Value = overall;
         Taskbar.ProgressValue = overall;
-        // Yazı yalnızca videonun satırında (yüzde, kalan süre); alt çubukta yalnızca ince ilerleme şeridi.
+        // İlerleme yalnızca videonun satırında (çizgi, yüzde, kalan süre); pencerede ikinci bir çizgi yok.
         if (_cts is { IsCancellationRequested: false })
         {
             StatusText.Text = string.Empty;
@@ -919,8 +935,6 @@ public partial class MainWindow : Window
         RbTikTok.IsEnabled = !busy;
         RbYouTube.IsEnabled = !busy;
         BtnClear.IsEnabled = !busy && _files.Count > 0;
-        OverallBar.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
-        OverallBar.Value = 0;
         Taskbar.ProgressValue = 0;
         Taskbar.ProgressState = busy ? TaskbarItemProgressState.Normal : TaskbarItemProgressState.None;
         ProfilAdiniYaz();
