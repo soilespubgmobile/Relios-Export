@@ -31,10 +31,11 @@ public sealed record SesSecimi(SesSecimTuru Tur, string? Dosya = null, int? Kana
 }
 
 /// <summary>
-/// LUFS eşitlemenin ilk geçişinde (ölçüm) loudnorm'un ölçtüğü değerler: tümleşik yükseklik (LUFS), gerçek tepe (dBTP),
-/// yükseklik aralığı (LU), eşik (LUFS) ve hedefe göre kalan fark (LU). İkinci geçişte loudnorm'a aynen verilir.
+/// LUFS eşitlemede sesin ölçülen değerleri (ITU-R BS.1770-4 / EBU R128; FFmpeg'in ebur128 ölçeri, bkz.
+/// <see cref="Esitleme.OlcumFiltresi"/>): tümleşik yükseklik (LUFS, 0,001 hassasiyetle), gerçek tepe (dBTP) ve
+/// yükseklik aralığı (LU) (bu ikisi ölçerin özetinden, 0,1 hassasiyetle).
 /// </summary>
-public sealed record LoudnormOlcum(double Yukseklik, double Tepe, double Aralik, double Esik, double Ofset);
+public sealed record SesOlcum(double Yukseklik, double Tepe, double Aralik);
 
 /// <summary>Bir dışa aktarmanın ffmpeg komutları (2 / 3 geçişte birden fazla) ve çıktı uzantısı.</summary>
 public sealed record KomutPlani(IReadOnlyList<IReadOnlyList<string>> Gecisler, string Uzanti);
@@ -191,7 +192,7 @@ public static class ArgsBuilder
         SesSecimi ses,
         string output,
         string? gecisDosyasi = null,
-        LoudnormOlcum? olcum = null,
+        SesOlcum? olcum = null,
         double telafi = 0)
     {
         var v = a.Video;
@@ -231,7 +232,7 @@ public static class ArgsBuilder
         string output,
         int gecis,
         string gecisDosyasi,
-        LoudnormOlcum? olcum = null,
+        SesOlcum? olcum = null,
         double telafi = 0)
     {
         var v = a.Video;
@@ -1076,7 +1077,7 @@ public static class ArgsBuilder
 
     /// <summary>
     /// Sesin yüksekliğini değiştirmeden önceki filtreler: gecikme, seviye, mono → stereo. LUFS eşitlemede ölçüm de
-    /// bunlardan sonraki sese yapılır (ikinci geçişte loudnorm aynı yerde durur).
+    /// bunlardan sonraki sese yapılır (kodlamada sabit kazanç aynı yerde durur).
     /// <paramref name="kanalIndir"/>: LUFS eşitlemede çıktının kanal sayısına (mono / stereo) burada inilir; yükseklik
     /// çıktıdaki kanallarla ölçülmeli (stereo ölçülüp sonra mono'ya inilince sonuç hedefin 3–6 dB altında kalır).
     /// </summary>
@@ -1128,10 +1129,10 @@ public static class ArgsBuilder
     };
 
     /// <summary>
-    /// LUFS eşitlemenin ölçüm geçişi: sesi yalnızca okur (görüntü yok), loudnorm ölçtüğü değerleri JSON olarak
-    /// ffmpeg çıktısına yazar. Süre videonunkiyle sınırlanır (harici ses videodan uzunsa sonu çıktıda kesilir).
+    /// LUFS eşitlemenin ölçüm geçişi: sesi yalnızca okur (görüntü yok); ölçer değerleri ffmpeg çıktısına yazar
+    /// (okumak için <see cref="OlcumOku"/>). Süre videonunkiyle sınırlanır (harici ses videodan uzunsa sonu çıktıda kesilir).
     /// </summary>
-    public static List<string> LoudnormOlcumKomutu(SesAyarlari s, string input, SesSecimi ses, double sureSaniye)
+    public static List<string> OlcumKomutu(SesAyarlari s, string input, SesSecimi ses, double sureSaniye)
     {
         var harici = ses.Tur == SesSecimTuru.HariciDosya;
         var args = new List<string> { "-hide_banner", "-nostdin", "-nostats", "-i", harici ? ses.Dosya! : input };
@@ -1142,48 +1143,39 @@ public static class ArgsBuilder
         }
 
         var af = OnSesFiltreleri(s, ses.Kanal, kanalIndir: true);
-        af.Add($"loudnorm=I={Db(s.EsitlemeHedef)}:TP={Db(s.SinirlayiciTavan)}:LRA=11:print_format=json");
+        af.Add(Esitleme.OlcumFiltresi);
         args.AddRange(["-af", string.Join(',', af), "-f", "null", "-"]);
         return args;
     }
 
     /// <summary>
-    /// loudnorm'un ölçüm çıktısından (ffmpeg günlüğünün sonundaki JSON) değerleri okur. Ses sessizse ya da okunamazsa
-    /// null: eşitleme yapılmaz (sessiz sesi yükseltmeye çalışmak hata verir).
+    /// Ölçerin ffmpeg çıktısından değerleri okur: tümleşik yükseklik son "lavfi.r128.I=" satırından (her 100 ms'de
+    /// yazılır; sonuncusu bütün sesin değeri), gerçek tepe ve yükseklik aralığı en sondaki özetten ("Summary:").
+    /// Ses sessizse ya da 0,4 saniyeden kısaysa ölçer -70 LUFS yazar; o zaman ya da okunamazsa null: eşitleme
+    /// yapılmaz (sessiz sesi yükseltmeye çalışmak hata verir).
     /// </summary>
-    public static LoudnormOlcum? LoudnormOlcumOku(string gunluk)
+    public static SesOlcum? OlcumOku(string gunluk)
     {
-        var bas = gunluk.LastIndexOf('{');
-        var son = gunluk.LastIndexOf('}');
-        if (bas < 0 || son < bas)
+        static double? Sayi(string metin) =>
+            double.TryParse(metin, NumberStyles.Float, Inv, out var d) && double.IsFinite(d) ? d : null;
+
+        var iler = System.Text.RegularExpressions.Regex.Matches(gunluk, @"lavfi\.r128\.I=(\S+)");
+        var ozet = gunluk.LastIndexOf("Summary:", StringComparison.Ordinal);
+        if (iler.Count == 0 || ozet < 0)
         {
             return null;
         }
 
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(gunluk[bas..(son + 1)]);
-            var r = doc.RootElement;
-            double? Oku(string ad) =>
-                r.TryGetProperty(ad, out var v)
-                && double.TryParse(v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : v.GetRawText(),
-                    NumberStyles.Float, Inv, out var d)
-                && double.IsFinite(d)
-                    ? d
-                    : null;
-
-            if (Oku("input_i") is not { } i || i < -70 || Oku("input_tp") is not { } tp || Oku("input_lra") is not { } lra
-                || Oku("input_thresh") is not { } esik || Oku("target_offset") is not { } ofset)
-            {
-                return null;
-            }
-
-            return new LoudnormOlcum(i, tp, lra, esik, ofset);
-        }
-        catch (System.Text.Json.JsonException)
+        var aralik = System.Text.RegularExpressions.Regex.Match(gunluk[ozet..], @"LRA:\s+(\S+) LU");
+        var tepe = System.Text.RegularExpressions.Regex.Match(gunluk[ozet..], @"True peak:\s+Peak:\s+(\S+) dBFS");
+        if (Sayi(iler[^1].Groups[1].Value) is not { } i || i <= Esitleme.MutlakKapi
+            || !tepe.Success || Sayi(tepe.Groups[1].Value) is not { } tp
+            || !aralik.Success || Sayi(aralik.Groups[1].Value) is not { } lra)
         {
             return null;
         }
+
+        return new SesOlcum(i, tp, lra);
     }
 
     /// <summary>
@@ -1193,7 +1185,7 @@ public static class ArgsBuilder
     /// örnekleme hızı (null: kaynakla aynı ve dönüşüm yok).
     /// </summary>
     private static List<string> SesFiltreleri(
-        SesAyarlari s, bool harici, int? kaynakKanal, LoudnormOlcum? olcum, double telafi, int? kaynakHz, out int? hedefHz)
+        SesAyarlari s, bool harici, int? kaynakKanal, SesOlcum? olcum, double telafi, int? kaynakHz, out int? hedefHz)
     {
         var esitleme = s.Esitleme && olcum is not null;
         var af = OnSesFiltreleri(s, kaynakKanal, kanalIndir: esitleme);
@@ -1260,7 +1252,7 @@ public static class ArgsBuilder
     /// eklenip yeniden denenir.
     /// </summary>
     public static List<string> DenemeOlcumKomutu(
-        SesAyarlari s, string input, SesSecimi ses, double sureSaniye, LoudnormOlcum olcum, double telafi)
+        SesAyarlari s, string input, SesSecimi ses, double sureSaniye, SesOlcum olcum, double telafi)
     {
         var harici = ses.Tur == SesSecimTuru.HariciDosya;
         var args = new List<string> { "-hide_banner", "-nostdin", "-nostats", "-i", harici ? ses.Dosya! : input };
@@ -1271,13 +1263,13 @@ public static class ArgsBuilder
         }
 
         var af = SesFiltreleri(s, harici: false, ses.Kanal, olcum, telafi, ses.OrnekHizi, out _);
-        af.Add($"loudnorm=I={Db(s.EsitlemeHedef)}:TP={Db(s.SinirlayiciTavan)}:LRA={Esitleme.AralikHedefi:0}:print_format=json");
+        af.Add(Esitleme.OlcumFiltresi);
         args.AddRange(["-af", string.Join(',', af), "-f", "null", "-"]);
         return args;
     }
 
     private static void Ses(
-        List<string> args, SesAyarlari s, bool harici, int? kaynakKanal = null, LoudnormOlcum? olcum = null,
+        List<string> args, SesAyarlari s, bool harici, int? kaynakKanal = null, SesOlcum? olcum = null,
         int? kaynakHz = null, double telafi = 0)
     {
         var af = SesFiltreleri(s, harici, kaynakKanal, olcum, telafi, kaynakHz, out var hedefHz);

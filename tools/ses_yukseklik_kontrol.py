@@ -9,12 +9,15 @@ sinir:    ses yükseltilmiş, sınırlayıcı açık: en büyük örnek tavanın
           örneklerin arasındaki gerçek tepe de tavanın altında (+ 0,3 dB pay; sınırlayıcı 192 kHz'te çalışır),
           ses kaynaktaki yerinde başlar (sınırlayıcının gecikmesi telafi edilmiş: 1,000 sn ± 1 ms).
 kirpik:   ses yükseltilmiş, sınırlayıcı kapalı: örnekler tam ölçekte kırpılır (sınırlayıcının işe yaradığının karşılığı).
-lufs:     LUFS eşitleme: tümleşik yükseklik hedefte (± 0,5 LU), gerçek tepe tavanın altında (+ 0,3 dB pay).
+lufs:     LUFS eşitleme: tümleşik yükseklik hedefte (± 0,1 LU), gerçek tepe tavanın altında (+ 0,3 dB pay).
 dogrusal: lufs + ses yalnızca yükseltilmiş / kısılmış olmalı: çıktı = kaynak × sabit kazanç (--kaynak gerekir);
           sabit kazançla açıklanamayan kalan, sesin 60 dB altında olmalı (16 bit titreşim ~ -80 dB).
-tepeli:   kısık + ani tepeli ses (sabit kazanç + sınırlayıcı + telafi): yükseklik hedefte (± 0,5 LU), gerçek tepe
-          tavanın altında, hiç kırpılma yok.
---program: programın satırda gösterdiği sonuç (kendi ölçümü) bu aracın ölçtüğüyle 0,3 LU içinde aynı olmalı.
+tepeli:   kısık + ani tepeli ses (sabit kazanç + sınırlayıcı + telafi): yükseklik hedefte (± 0,25 LU: telafi 0,2 LU
+          içinde durur), gerçek tepe tavanın altında, hiç kırpılma yok.
+--program: programın satırda gösterdiği sonuç (kendi ölçümü) bu aracın ölçtüğüyle 0,05 LU içinde aynı olmalı.
+
+Yükseklik ITU-R BS.1770-4 ölçeriyle (FFmpeg ebur128) ölçülür: tümleşik yükseklik çerçeve bilgisinden 0,001
+hassasiyetle (özette yalnızca 0,1), gerçek tepe özetten.
 """
 import array
 import json
@@ -68,13 +71,14 @@ def db(x):
 
 
 def r128(yol):
+    # Tümleşik yükseklik her 100 ms'de çerçeve bilgisine yazılır (0,001); sonuncusu bütün sesin değeri.
     r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-i", yol, "-map", "0:a:0",
-                        "-af", "ebur128=peak=true", "-f", "null", "-"], capture_output=True, text=True,
-                       encoding="utf-8", errors="replace")
+                        "-af", "ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I",
+                        "-f", "null", "-"], capture_output=True, text=True, encoding="utf-8", errors="replace")
     ozet = r.stderr[r.stderr.rfind("Summary:"):]
-    i = re.search(r"I:\s+(-?[\d.]+) LUFS", ozet)
+    iler = re.findall(r"lavfi\.r128\.I=(-?[\d.]+)", r.stderr)
     tp = re.search(r"True peak:\s+Peak:\s+(-?[\d.]+|-inf) dBFS", ozet)
-    return (float(i.group(1)) if i else -200.0,
+    return (float(iler[-1]) if iler else -200.0,
             float(tp.group(1)) if tp and tp.group(1) != "-inf" else -200.0)
 
 
@@ -100,7 +104,8 @@ if kip in ("sinir", "kirpik"):
         chk("Tam ölçekte kırpılan örnek (sınırlayıcı kapalı)", "> 100", kirpik, kirpik > 100)
 else:
     yukseklik, tepe = r128(cikti)
-    chk("Tümleşik yükseklik (LUFS)", f"{HEDEF:.1f} ± 0.5", f"{yukseklik:.1f}", abs(yukseklik - HEDEF) <= 0.5)
+    pay = 0.25 if kip == "tepeli" else 0.1
+    chk("Tümleşik yükseklik (LUFS)", f"{HEDEF:.2f} ± {pay}", f"{yukseklik:.3f}", abs(yukseklik - HEDEF) <= pay)
     if kip == "tepeli":
         s = ornekler(cikti, "s16le")
         kirpik = sum(1 for v in s if v in (32767, -32768))
@@ -123,7 +128,7 @@ else:
 
     if PROGRAM is not None:
         p = float(PROGRAM)
-        chk("Programın gösterdiği sonuç (LUFS)", f"{yukseklik:.1f} ± 0.3", f"{p:.2f}", abs(p - yukseklik) <= 0.3)
+        chk("Programın gösterdiği sonuç (LUFS)", f"{yukseklik:.3f} ± 0.05", f"{p:.3f}", abs(p - yukseklik) <= 0.05)
 
 for r in rows:
     print(f"{r[0]:<5} {r[1]:<44} hedef: {r[2]:<16} çıktı: {r[3]}")

@@ -130,17 +130,17 @@ internal static class UctanUca
 
         var sesVar = await Incele(Satir("ses_var.mp4")?.OutputPath);
         Esit("ses_var: video codec", "h264", sesVar?.VideoCodec);
-        Esit("ses_var: ses (WAV 16 bit, 48 kHz, stereo)", "pcm_s16le 48000 2",
+        Esit("ses_var: ses (YouTube: FDK AAC, 48 kHz, stereo)", "aac 48000 2",
             sesVar?.SesAkislari is [var a1] ? $"{a1.Codec} {a1.OrnekHizi} {a1.Kanal}" : "ses izi sayısı " + sesVar?.SesAkislari.Count);
         Kontrol("ses_var: süre (12 sn)", "12 ± 0,2", sesVar?.DurationSeconds, sesVar is { } sv && Math.Abs(sv.DurationSeconds - 12) <= 0.2);
         var sessiz = await Incele(Satir("sessiz.mov")?.OutputPath);
         Esit("sessiz: çıktıda ses yok", 0, sessiz?.SesAkislari.Count);
         var harici = await Incele(Satir("harici.mp4")?.OutputPath);
-        Esit("harici: sesi aynı adlı WAV'dan (video sessizdi)", "pcm_s16le 48000 2",
+        Esit("harici: sesi aynı adlı WAV'dan (video sessizdi)", "aac 48000 2",
             harici?.SesAkislari is [var a2] ? $"{a2.Codec} {a2.OrnekHizi} {a2.Kanal}" : "ses izi sayısı " + harici?.SesAkislari.Count);
 
         var turkce = await Incele(Satir(Tr + ".mp4")?.OutputPath);
-        Esit("Türkçe ad: dikey boyut ve aynı adlı WAV'ın sesi", "1080×1920 pcm_s16le 48000 2",
+        Esit("Türkçe ad: dikey boyut ve aynı adlı WAV'ın sesi", "1080×1920 aac 48000 2",
             turkce is null ? "çıktı okunamadı" : $"{turkce.DisplayWidth}×{turkce.DisplayHeight} "
             + (turkce.SesAkislari is [var a4] ? $"{a4.Codec} {a4.OrnekHizi} {a4.Kanal}" : "ses izi sayısı " + turkce.SesAkislari.Count));
 
@@ -191,18 +191,18 @@ internal static class UctanUca
         }
 
         Kontrol("Önceki çıktı silinmedi", "var", ilkCikti, ilkCikti is not null && File.Exists(ilkCikti));
-        Kontrol("ses_var: eşitleme sonucu satırda (kısık ses → -14)", "… · -14,0 LUFS", Durum("ses_var.mp4"),
-            Regex.IsMatch(Durum("ses_var.mp4"), @" · -1[34],\d LUFS$"));
+        Kontrol("ses_var: eşitleme sonucu satırda (kısık ses → -14 ± 0,2)", "… · -14,0 LUFS", Durum("ses_var.mp4"),
+            Regex.IsMatch(Durum("ses_var.mp4"), @" · (-14,[0-2]|-13,[89]) LUFS$"));
         Kontrol("ses_var: ipucunda karar (bütün ses aynı miktarda)", "Karar: bütün ses aynı miktarda", Satir("ses_var.mp4")?.Detail,
             Satir("ses_var.mp4")?.Detail?.Contains("Karar: bütün ses aynı miktarda", StringComparison.Ordinal) == true);
         Kontrol("harici: yüksek ses (yalnızca kısık yükseltilir) → dokunulmadı", "… LUFS (dokunulmadı)", Durum("harici.mp4"),
             Durum("harici.mp4").EndsWith("LUFS (dokunulmadı)", StringComparison.Ordinal));
-        Kontrol("Türkçe ad: aynı adlı kısık WAV -14'e getirildi", "… · -14,0 LUFS", Durum(Tr + ".mp4"),
-            Regex.IsMatch(Durum(Tr + ".mp4"), @" · -1[34],\d LUFS$"));
+        Kontrol("Türkçe ad: aynı adlı kısık WAV -14'e getirildi (± 0,2)", "… · -14,0 LUFS", Durum(Tr + ".mp4"),
+            Regex.IsMatch(Durum(Tr + ".mp4"), @" · (-14,[0-2]|-13,[89]) LUFS$"));
         Kontrol("sessiz: sesi olmayan videoda eşitleme yazısı yok", "LUFS yok", Durum("sessiz.mov"),
             !Durum("sessiz.mov").Contains("LUFS", StringComparison.Ordinal));
         var esitlenmis = await Incele(Satir("ses_var.mp4")?.OutputPath);
-        Esit("ses_var (_2): ses yine WAV 16 bit 48 kHz stereo", "pcm_s16le 48000 2",
+        Esit("ses_var (_2): ses yine FDK AAC 48 kHz stereo", "aac 48000 2",
             esitlenmis?.SesAkislari is [var a3] ? $"{a3.Codec} {a3.OrnekHizi} {a3.Kanal}" : "ses izi sayısı " + esitlenmis?.SesAkislari.Count);
         Esit("Durum yazısı", "4 video hazır", w.KontrolDurum);
         w.KontrolAyarlari.Ses.Esitleme = false;

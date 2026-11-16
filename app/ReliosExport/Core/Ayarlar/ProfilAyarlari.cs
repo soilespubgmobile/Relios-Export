@@ -76,8 +76,10 @@ public sealed class ProfilAyarlari : Gozlenebilir
     /// 7: (yalnızca 0.8.6) TikTok NVENC tamponu 55000 kb; 8'de geri alındı.
     /// 8: TikTok NVENC tamponu yine boş (bit hızı kadar); YouTube x264 VBV 34375 kb/s, tampon 55000 kb.
     /// 9: TikTok ve YouTube sesi WAV 16 bit 48 kHz, en yüksek dönüşüm kalitesi (soxr 33 bit), üçgen titreşim.
+    /// 10: TikTok ve YouTube'da LUFS eşitleme varsayılan açık (-14, yalnızca kısık ses yükseltilir).
+    /// 11: YouTube sesi FDK AAC 128 kb/s 48 kHz, en yüksek dönüşüm kalitesi, üçgen titreşim (TikTok WAV 16 bit kalır).
     /// </summary>
-    public const int GuncelSurum = 10;
+    public const int GuncelSurum = 11;
 
     public VideoAyarlari Video { get => _video; set => Bagla(ref _video, value); }
 

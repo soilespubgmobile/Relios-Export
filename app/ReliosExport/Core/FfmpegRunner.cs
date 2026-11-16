@@ -206,7 +206,7 @@ public static class Exporter
             // dokunulmaz ya da bütün ses aynı miktarda (sabit kazanç) hedefe.
             onInfo?.Invoke(Describe(media, a, ses) + " · ses ölçülüyor");
             var cikti = new List<string>();
-            var olcumKomutu = ArgsBuilder.LoudnormOlcumKomutu(a.Ses, input, ses, media.DurationSeconds);
+            var olcumKomutu = ArgsBuilder.OlcumKomutu(a.Ses, input, ses, media.DurationSeconds);
             try
             {
                 await FfmpegRunner.RunAsync(olcumKomutu, 0, null, ct, cikti);
@@ -218,7 +218,7 @@ public static class Exporter
                 throw;
             }
 
-            rapor = Esitleme.KararVer(a.Ses, ArgsBuilder.LoudnormOlcumOku(string.Join('\n', cikti)));
+            rapor = Esitleme.KararVer(a.Ses, ArgsBuilder.OlcumOku(string.Join('\n', cikti)));
             onInfo?.Invoke(Describe(media, a, ses, rapor));
 
             if (rapor is { Sinirli: true, Olcum: { } o })
@@ -242,7 +242,7 @@ public static class Exporter
                         throw;
                     }
 
-                    if (ArgsBuilder.LoudnormOlcumOku(string.Join('\n', denemeCikti)) is not { } olculen)
+                    if (ArgsBuilder.OlcumOku(string.Join('\n', denemeCikti)) is not { } olculen)
                     {
                         break;
                     }
@@ -310,8 +310,8 @@ public static class Exporter
             try
             {
                 var cikti = new List<string>();
-                await FfmpegRunner.RunAsync(Esitleme.SonucOlcumKomutu(output, a.Ses), 0, null, ct, cikti);
-                if (ArgsBuilder.LoudnormOlcumOku(string.Join('\n', cikti)) is { } sonuc)
+                await FfmpegRunner.RunAsync(Esitleme.SonucOlcumKomutu(output), 0, null, ct, cikti);
+                if (ArgsBuilder.OlcumOku(string.Join('\n', cikti)) is { } sonuc)
                 {
                     rapor = rapor with { SonucYukseklik = sonuc.Yukseklik, SonucTepe = sonuc.Tepe };
                 }

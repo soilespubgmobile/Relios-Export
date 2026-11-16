@@ -436,19 +436,26 @@ internal static class BirimKontrol
 
         var k = Komut(1, Varsayilanlar.YouTube());
         Iceriyor("Mono kaynak (YouTube)", k, " -af pan=stereo|c0=c0|c1=c0,aresample=48000:resampler=soxr:precision=33:dither_method=triangular ");
-        Iceriyor("Mono kaynak (YouTube)", k, " -c:a pcm_s16le -ar 48000 -ac 2 ");
+        Iceriyor("Mono kaynak (YouTube)", k, " -c:a libfdk_aac -profile:a aac_low -b:a 128k -ar 48000 -ac 2 ");
         k = Komut(1, Varsayilanlar.TikTok());
         Iceriyor("Mono kaynak (TikTok)", k, " -af pan=stereo|c0=c0|c1=c0,aresample=48000:resampler=soxr:precision=33:dither_method=triangular ");
         Iceriyor("Mono kaynak (TikTok)", k, " -c:a pcm_s16le -ar 48000 -ac 2 ");
         k = Komut(2, Varsayilanlar.YouTube());
         Icermiyor("Stereo kaynak", k, "pan=");
-        Iceriyor("Stereo kaynak", k, " -af aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a pcm_s16le ");
+        Iceriyor("Stereo kaynak", k, " -af aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac ");
 
-        // FDK AAC seçilirse de aynı dönüşüm (en yüksek kalite, üçgen titreşim) kullanılır.
-        var fdk = Varsayilanlar.YouTube();
+        // YouTube varsayılanı: FDK AAC-LC 128 kb/s CBR, 48 kHz stereo; dönüşüm en yüksek kalitede (soxr 33 bit), 24 bit
+        // kaynak 16 bite üçgen titreşimle iner; afterburner açık (ffmpeg'in varsayılanı: bayrak yazılmaz).
+        Iceriyor("YouTube varsayılanı: FDK AAC 128 kb/s, 48 kHz, en yüksek dönüşüm, üçgen titreşim", k,
+            " -af aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac -profile:a aac_low -b:a 128k -ar 48000 -ac 2 -metadata:s:a:0 language=eng ");
+        Icermiyor("YouTube varsayılanı: afterburner açık", k, "-afterburner");
+        Icermiyor("YouTube varsayılanı: PCM yok", k, "pcm_");
+
+        // TikTok'ta FDK AAC seçilirse de aynı dönüşüm (en yüksek kalite, üçgen titreşim) kullanılır.
+        var fdk = Varsayilanlar.TikTok();
         fdk.Ses.Kodlayici = SesKodlayici.FdkAac;
         k = Komut(2, fdk);
-        Iceriyor("YouTube'da FDK AAC seçilirse", k, " -af aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac -profile:a aac_low -b:a 128k ");
+        Iceriyor("TikTok'ta FDK AAC seçilirse", k, " -af aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac -profile:a aac_low -b:a 128k ");
         var kaynakKanal = Varsayilanlar.YouTube();
         kaynakKanal.Ses.Kanal = KanalModu.Kaynak;
         k = Komut(1, kaynakKanal);
@@ -459,7 +466,7 @@ internal static class BirimKontrol
     private static void SesYuksekligi()
     {
         Console.WriteLine();
-        Console.WriteLine("--- Tepe sınırlayıcı ve LUFS eşitleme (varsayılan: sınırlayıcı açık -1 dB, eşitleme kapalı -14 LUFS)");
+        Console.WriteLine("--- Tepe sınırlayıcı ve LUFS eşitleme (varsayılan: sınırlayıcı açık -1 dB, eşitleme açık -14 LUFS; ölçer BS.1770 ebur128)");
         static MediaInfo Kaynak48() => new(1920, 1080, 1, 1, 0, 10, true, 30, "bt709", "bt709", "tv")
         {
             VideoCodec = "h264",
@@ -468,7 +475,7 @@ internal static class BirimKontrol
             SesAkislari = [new SesAkisi(1, "pcm_s16le", 44100, 2, 16, null)],
         };
 
-        string Komut(ProfilAyarlari a, LoudnormOlcum? olcum = null)
+        string Komut(ProfilAyarlari a, SesOlcum? olcum = null)
         {
             var m = Kaynak48();
             var ses = ArgsBuilder.SesSec(a.Ses, m, "KAYNAK.mp4");
@@ -485,14 +492,16 @@ internal static class BirimKontrol
             var k = Komut(a);
             Icermiyor(ad + " varsayılanı (ses yükseltilmiyor)", k, "alimiter");
             Icermiyor(ad + " varsayılanı", k, "loudnorm");
-            Iceriyor(ad + " varsayılanı: ses filtresi değişmedi", k, " -af aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a pcm_s16le ");
+            Icermiyor(ad + " varsayılanı", k, "ebur128");
+            Iceriyor(ad + " varsayılanı: ses filtresi değişmedi", k, " -af aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a "
+                + (ad == "TikTok" ? "pcm_s16le " : "libfdk_aac "));
         }
 
         var arti = Varsayilanlar.YouTube();
         arti.Ses.Seviye = 6;
         Iceriyor("+6 dB: seviye, 192 kHz, sınırlayıcı (-1 dB = 0,891251), 48 kHz'e dönüş", Komut(arti),
             " -af volume=6dB,aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.891251:level=0:latency=1,"
-            + "aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a pcm_s16le ");
+            + "aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac ");
         var artiKaynak = Varsayilanlar.YouTube();
         artiKaynak.Ses.Seviye = 6;
         artiKaynak.Ses.OrnekHizi = null;
@@ -513,7 +522,7 @@ internal static class BirimKontrol
 
         var esit = Varsayilanlar.TikTok();
         esit.Ses.Esitleme = true;
-        var olcum = new LoudnormOlcum(-21.37, -3.2, 6.4, -31.6, 0.25);
+        var olcum = new SesOlcum(-21.37, -3.2, 6.4);
         // Eşitleme: bütün ses aynı miktarda (sabit kazanç, -14 - (-21,37) = +7,37 dB). Tepe -3,2 + 7,37 = +4,17 > -1:
         // sınırlayıcı 192 kHz'te tepeleri tutar.
         Iceriyor("Eşitleme: sabit kazanç +7,37 dB, tepe aşıyor: 192 kHz sınırlayıcı", Komut(esit, olcum),
@@ -521,7 +530,7 @@ internal static class BirimKontrol
             + "aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a pcm_s16le ");
         Icermiyor("Eşitleme: ikinci geçişte loudnorm yok (yalnızca sabit kazanç)", Komut(esit, olcum), "loudnorm");
         Icermiyor("Eşitleme açık ama ölçüm yok (sessiz ses)", Komut(esit), "volume=");
-        var olcumAlcak = new LoudnormOlcum(-21.37, -10, 25, -31.6, 0.25);
+        var olcumAlcak = new SesOlcum(-21.37, -10, 25);
         Iceriyor("Eşitleme: tepe aşmıyor (-10 + 7,37 = -2,63), ses aralığı 25 LU: yalnızca sabit kazanç", Komut(esit, olcumAlcak),
             " -af volume=7.37dB,aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a pcm_s16le ");
         Icermiyor("Eşitleme: tepe aşmıyorsa sınırlayıcı yok", Komut(esit, olcumAlcak), "alimiter");
@@ -535,7 +544,7 @@ internal static class BirimKontrol
         Iceriyor("Telafi ölçümü: kodlamadaki ses zinciri + ölçüm", " " + string.Join(' ', ArgsBuilder.DenemeOlcumKomutu(esit.Ses, "KAYNAK.mp4",
             ArgsBuilder.SesSec(esit.Ses, Kaynak48(), "KAYNAK.mp4"), 10, olcum, 2.5)) + " ",
             " -map 0:a:0 -vn -sn -dn -t 10 -af volume=9.87dB,aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.891251:level=0:latency=1,"
-            + "aresample=48000:resampler=soxr:precision=33:dither_method=triangular,loudnorm=I=-14.0:TP=-1.0:LRA=11:print_format=json -f null - ");
+            + "aresample=48000:resampler=soxr:precision=33:dither_method=triangular,ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I -f null - ");
         esit.Ses.OrnekHizi = null;
         Iceriyor("Eşitleme + örnekleme 'kaynakla aynı': 192 kHz'ten kaynağın hızına", Komut(esit, olcum), ",aresample=44100:resampler=soxr");
         Iceriyor("Eşitleme + örnekleme 'kaynakla aynı'", Komut(esit, olcum), " -ar 44100 ");
@@ -549,13 +558,15 @@ internal static class BirimKontrol
         mono.Ses.Esitleme = true;
         Iceriyor("Mono + eşitleme: önce mono'ya iner (yarım + yarım), sonra sabit kazanç", Komut(mono, olcum),
             " -af pan=mono|c0=0.5*c0+0.5*c1,volume=7.37dB,");
-        Iceriyor("Mono + eşitleme: ölçüm de mono", " " + string.Join(' ', ArgsBuilder.LoudnormOlcumKomutu(mono.Ses, "KAYNAK.mp4",
+        Iceriyor("Mono + eşitleme: ölçüm de mono", " " + string.Join(' ', ArgsBuilder.OlcumKomutu(mono.Ses, "KAYNAK.mp4",
             ArgsBuilder.SesSec(mono.Ses, Kaynak48(), "KAYNAK.mp4"), 10)) + " ",
-            " -af pan=mono|c0=0.5*c0+0.5*c1,loudnorm=I=-14.0:TP=-1.0:LRA=11:print_format=json ");
+            " -af pan=mono|c0=0.5*c0+0.5*c1,ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I ");
         Icermiyor("Mono + eşitleme, ses dokunulmadı (ölçüm yok): indirme yine -ac 1 ile", Komut(mono), "pan=mono");
 
-        var olc = ArgsBuilder.LoudnormOlcumKomutu(esit.Ses, "KAYNAK.mp4", ArgsBuilder.SesSec(esit.Ses, Kaynak48(), "KAYNAK.mp4"), 10);
-        Iceriyor("Ölçüm komutu", " " + string.Join(' ', olc) + " ", " -map 0:a:0 -vn -sn -dn -t 10 -af loudnorm=I=-14.0:TP=-1.0:LRA=11:print_format=json -f null - ");
+        var olc = ArgsBuilder.OlcumKomutu(esit.Ses, "KAYNAK.mp4", ArgsBuilder.SesSec(esit.Ses, Kaynak48(), "KAYNAK.mp4"), 10);
+        Iceriyor("Ölçüm komutu (BS.1770 ölçeri, loudnorm değil)", " " + string.Join(' ', olc) + " ",
+            " -map 0:a:0 -vn -sn -dn -t 10 -af ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I -f null - ");
+        Icermiyor("Ölçüm komutunda loudnorm yok (sesin son ~2,9 sn'sini iki kez sayar)", " " + string.Join(' ', olc) + " ", "loudnorm");
 
         foreach (var (ad, a) in new[] { ("TikTok", Varsayilanlar.TikTok()), ("YouTube", Varsayilanlar.YouTube()) })
         {
@@ -566,28 +577,29 @@ internal static class BirimKontrol
         // aşıyorsa tepeleri sınırlayıcı tutar. Ses aralığı (LRA) karara girmez.
         var ka = Varsayilanlar.YouTube().Ses;
         ka.Esitleme = true;
-        string Karar(LoudnormOlcum? o)
+        string Karar(SesOlcum? o)
         {
             var r = Esitleme.KararVer(ka, o);
             return r.Karar + (r.Sinirli ? "/Sinirli" : string.Empty);
         }
 
-        Kontrol("Kısık, tepe -12 (+11 dB → tam -1): sabit kazanç", "Dogrusal", Karar(new LoudnormOlcum(-25, -12, 5, -35, 0)));
-        Kontrol("Kısık, tepe -11,9 (+11 dB → -0,9): sabit kazanç + sınırlayıcı", "Dogrusal/Sinirli", Karar(new LoudnormOlcum(-25, -11.9, 5, -35, 0)));
-        Kontrol("Kısık, ses aralığı 21 LU (videodaki gibi): sabit kazanç", "Dogrusal", Karar(new LoudnormOlcum(-20.8, -11.18, 21, -34.79, 1.25)));
-        Kontrol("Kısık, ses aralığı 0 (sabit ton): sabit kazanç", "Dogrusal", Karar(new LoudnormOlcum(-25, -20, 0, -35, 0)));
-        Kontrol("Hedefe 0,4 LU yakın: dokunulmaz", "Hedefte", Karar(new LoudnormOlcum(-14.4, -3, 5, -24, 0)));
-        Kontrol("Hedefe 0,6 LU uzak: doğrusal", "Dogrusal", Karar(new LoudnormOlcum(-14.6, -3, 5, -24, 0)));
-        Kontrol("Yüksek (-9), yalnızca yükselt: dokunulmaz", "ZatenYuksek", Karar(new LoudnormOlcum(-9, -3, 5, -19, 0)));
+        Kontrol("Kısık, tepe -12,1 (+11 dB → -1,1): sabit kazanç", "Dogrusal", Karar(new SesOlcum(-25, -12.1, 5)));
+        Kontrol("Kısık, tepe -12 (+11 dB → -1; tepe 0,1 dB'ye yuvarlı, pay 0,05): sabit kazanç + sınırlayıcı", "Dogrusal/Sinirli", Karar(new SesOlcum(-25, -12, 5)));
+        Kontrol("Kısık, tepe -11,9 (+11 dB → -0,9): sabit kazanç + sınırlayıcı", "Dogrusal/Sinirli", Karar(new SesOlcum(-25, -11.9, 5)));
+        Kontrol("Kısık, ses aralığı 20,6 LU (kullanıcının OBS kaydı): sabit kazanç", "Dogrusal", Karar(new SesOlcum(-20.363, -11.2, 20.6)));
+        Kontrol("Kısık, ses aralığı 0 (sabit ton): sabit kazanç", "Dogrusal", Karar(new SesOlcum(-25, -20, 0)));
+        Kontrol("Hedefe 0,4 LU yakın: dokunulmaz", "Hedefte", Karar(new SesOlcum(-14.4, -3, 5)));
+        Kontrol("Hedefe 0,6 LU uzak: doğrusal", "Dogrusal", Karar(new SesOlcum(-14.6, -3, 5)));
+        Kontrol("Yüksek (-9), yalnızca yükselt: dokunulmaz", "ZatenYuksek", Karar(new SesOlcum(-9, -3, 5)));
         Kontrol("Ölçülemedi (sessiz)", "Olculemedi", Karar(null));
         ka.EsitlemeYonu = EsitlemeYonu.IkiYon;
-        Kontrol("Yüksek (-9), iki yön: doğrusal (kısılır)", "Dogrusal", Karar(new LoudnormOlcum(-9, -3, 5, -19, 0)));
+        Kontrol("Yüksek (-9), iki yön: doğrusal (kısılır)", "Dogrusal", Karar(new SesOlcum(-9, -3, 5)));
         ka.EsitlemeYonu = EsitlemeYonu.YalnizcaYukselt;
 
-        var rd = Esitleme.KararVer(ka, new LoudnormOlcum(-25, -12, 5, -35, 0));
+        var rd = Esitleme.KararVer(ka, new SesOlcum(-25, -12.1, 5));
         Kontrol("Bilgi satırı (sabit kazanç)", "-25,0 → -14 LUFS (bütün ses +11,0 dB)", rd.BilgiMetni);
         Kontrol("Biten satır (sonuç -14,02)", "-14,0 LUFS", (rd with { SonucYukseklik = -14.02 }).SatirMetni ?? "yok");
-        var rt = Esitleme.KararVer(ka, new LoudnormOlcum(-25.52, -1.59, 2.8, -37.82, 8.68));
+        var rt = Esitleme.KararVer(ka, new SesOlcum(-25.52, -1.59, 2.8));
         Kontrol("Bilgi satırı (tepe aşıyor)", "-25,5 → -14 LUFS (bütün ses +11,5 dB, tepeler -1 dB'de tutulur)", rt.BilgiMetni);
         Kontrol("Bilgi satırı (telafi 2,3 dB)", "-25,5 → -14 LUFS (bütün ses +13,8 dB, tepeler -1 dB'de tutulur)", (rt with { Telafi = 2.3 }).BilgiMetni);
         Kontrol("Ayrıntı (telafi)", "True", (rt with { Telafi = 2.3 }).Ayrinti.Contains("kıstığı pay için ses +2,3 dB daha yükseltildi", StringComparison.Ordinal).ToString());
@@ -608,16 +620,31 @@ internal static class BirimKontrol
         Kontrol("Telafi: sınırda, yine eksik → dur", "dur/sinir", Adim(6, -15));
         Kontrol("Telafi: hedefi geçti → azalır", "2.50", Adim(3, -13.5));
         Kontrol("Biten satır (zaten yüksek)", "-9,2 LUFS (dokunulmadı)",
-            Esitleme.KararVer(ka, new LoudnormOlcum(-9.2, -3, 5, -19, 0)).SatirMetni ?? "yok");
-        Iceriyor("Sonuç ölçüm komutu", " " + string.Join(' ', Esitleme.SonucOlcumKomutu("CIKTI.mov", ka)) + " ",
-            " -i CIKTI.mov -map 0:a:0 -vn -sn -dn -af loudnorm=I=-14.0:TP=-1.0:LRA=11:print_format=json -f null - ");
+            Esitleme.KararVer(ka, new SesOlcum(-9.2, -3, 5)).SatirMetni ?? "yok");
+        Iceriyor("Sonuç ölçüm komutu (ölçümle aynı ölçer)", " " + string.Join(' ', Esitleme.SonucOlcumKomutu("CIKTI.mov")) + " ",
+            " -i CIKTI.mov -map 0:a:0 -vn -sn -dn -af ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I -f null - ");
 
-        const string json = "[Parsed_loudnorm_0 @ 0x1]\n{\n\t\"input_i\" : \"-21.37\",\n\t\"input_tp\" : \"-3.20\",\n\t\"input_lra\" : \"6.40\",\n\t\"input_thresh\" : \"-31.60\",\n\t\"output_i\" : \"-14.02\",\n\t\"target_offset\" : \"0.25\"\n}";
-        var oku = ArgsBuilder.LoudnormOlcumOku(json);
-        Kontrol("Ölçüm JSON'u okunur", "-21.37/-3.2/6.4/-31.6/0.25",
-            oku is null ? "yok" : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{oku.Yukseklik}/{oku.Tepe}/{oku.Aralik}/{oku.Esik}/{oku.Ofset}"));
-        Kontrol("Sessiz ses (-inf): eşitleme yapılmaz", "yok",
-            ArgsBuilder.LoudnormOlcumOku(json.Replace("\"-21.37\"", "\"-inf\"")) is null ? "yok" : "var");
+        // Ölçerin gerçek çıktısı (FFmpeg ebur128 + ametadata): yükseklik son "lavfi.r128.I=" satırından (0,001),
+        // gerçek tepe ve aralık en sondaki özetten.
+        const string olcer = "[Parsed_ametadata_1 @ 0x1] frame:248  pts:1190400 pts_time:24.8\n"
+            + "[Parsed_ametadata_1 @ 0x1] lavfi.r128.I=-20.401\n"
+            + "[Parsed_ametadata_1 @ 0x1] frame:249  pts:1195200 pts_time:24.9\n"
+            + "[Parsed_ametadata_1 @ 0x1] lavfi.r128.I=-20.363\n"
+            + "[out#0/null @ 0x2] video:0kB audio:9375kB subtitle:0kB other streams:0kB global headers:0kB muxing overhead: unknown\n"
+            + "size=N/A time=00:00:25.04 bitrate=N/A speed= 120x\n"
+            + "[Parsed_ebur128_0 @ 0x3] Summary:\n\n  Integrated loudness:\n    I:         -20.4 LUFS\n    Threshold: -30.4 LUFS\n\n"
+            + "  Loudness range:\n    LRA:        20.6 LU\n    Threshold: -40.4 LUFS\n    LRA low:   -41.2 LUFS\n    LRA high:  -20.6 LUFS\n\n"
+            + "  True peak:\n    Peak:      -11.2 dBFS";
+        var oku = ArgsBuilder.OlcumOku(olcer);
+        Kontrol("Ölçüm okunur (yükseklik 0,001, tepe ve aralık özetten)", "-20.363/-11.2/20.6",
+            oku is null ? "yok" : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{oku.Yukseklik}/{oku.Tepe}/{oku.Aralik}"));
+        Kontrol("Sessiz ses (-70, tepe -inf): eşitleme yapılmaz", "yok",
+            ArgsBuilder.OlcumOku(olcer.Replace("I=-20.363", "I=-70.000").Replace("-11.2 dBFS", " -inf dBFS")) is null ? "yok" : "var");
+        Kontrol("0,4 sn'den kısa ses (ölçer -70 yazar): eşitleme yapılmaz", "yok",
+            ArgsBuilder.OlcumOku(olcer.Replace("I=-20.401", "I=-70.000").Replace("I=-20.363", "I=-70.000")) is null ? "yok" : "var");
+        Kontrol("Özet yoksa (ölçüm yarıda kaldı) okunmaz", "yok",
+            ArgsBuilder.OlcumOku(olcer[..olcer.IndexOf("[Parsed_ebur128_0", StringComparison.Ordinal)]) is null ? "yok" : "var");
+        Kontrol("Yükseklik satırı yoksa okunmaz", "yok", ArgsBuilder.OlcumOku(olcer.Replace("lavfi.r128.I=", "lavfi.r128.M=")) is null ? "yok" : "var");
     }
 
     private static void Boyutlar()
@@ -633,11 +660,12 @@ internal static class BirimKontrol
         // (34375 + 48000 × 16 × 2 / 1000) kb/s × 60 s = 269 332 500 bayt = 256,9 MB
         Kontrol("TikTok 60 sn (CBR 34375 + WAV 16 bit 48 kHz stereo)", "tahmini 257 MB", BoyutTahmini.Hesapla(tt, m, ses)?.Metin ?? "yok");
         var yt = Varsayilanlar.YouTube();
-        // + tampon payı: 55000 kbit × 0,9 (x264 vbv-init varsayılanı) = 6 187 500 bayt → 275 520 000 bayt = 262,8 MB
-        Kontrol("YouTube 60 sn (CRF 18, en yüksek 34375, tampon 55000)", "en çok 263 MB", BoyutTahmini.Hesapla(yt, m, ses)?.Metin ?? "yok");
+        // (34375 + 128 FDK AAC) × 60 = 2 070 180 kbit + tampon payı: 55000 kbit × 0,9 (x264 vbv-init varsayılanı)
+        // = 49 500 kbit → 2 119 680 kbit = 264 960 000 bayt = 252,7 MB
+        Kontrol("YouTube 60 sn (CRF 18, en yüksek 34375, tampon 55000, AAC 128)", "en çok 253 MB", BoyutTahmini.Hesapla(yt, m, ses)?.Metin ?? "yok");
         var kisa = m with { DurationSeconds = 5 };
-        // 5 sn: (34375 + 1536) × 5 + 49500 = 229 055 kbit = 28 631 875 bayt = 27,3 MB (tamponsuz 21,4 MB idi)
-        Kontrol("YouTube 5 sn: tampon payı kısa videoda büyük", "en çok 27,3 MB", BoyutTahmini.Hesapla(yt, kisa, ses)?.Metin ?? "yok");
+        // 5 sn: (34375 + 128) × 5 + 49500 = 222 015 kbit = 27 751 875 bayt = 26,5 MB
+        Kontrol("YouTube 5 sn: tampon payı kısa videoda büyük", "en çok 26,5 MB", BoyutTahmini.Hesapla(yt, kisa, ses)?.Metin ?? "yok");
         yt.Video.X264.VbvMaks = null;
         Kontrol("CRF, üst sınır yok: tahmin yapılmaz", "yok", BoyutTahmini.Hesapla(yt, m, ses)?.Metin ?? "yok");
         var sessiz = Varsayilanlar.TikTok();
@@ -723,7 +751,9 @@ internal static class BirimKontrol
         }
 
         static string SesOzeti(SesAyarlari s) => $"{s.Kodlayici} {s.WavBit} {s.OrnekHizi} {s.Kalite} {s.Titresim}";
+        static string FdkOzeti(FdkAyarlari f) => $"{f.Profil} {f.Mod} {f.BitHizi} {f.Afterburner}";
         const string YeniSes = "Wav Bit16 48000 EnYuksek Ucgen";
+        const string YouTubeSes = "FdkAac Bit16 48000 EnYuksek Ucgen";
 
         var eskiYt = Varsayilanlar.YouTube();
         eskiYt.Surum = 4;
@@ -751,10 +781,43 @@ internal static class BirimKontrol
         Kontrol("TikTok 5 → 9: dosya biçimi", "Mov", tt.Video.Kap.ToString());
         Kontrol("TikTok 5 → 9: NVENC kalır", "Nvenc", tt.Video.Kodlayici.ToString());
         Kontrol("TikTok 5 → 9: tampon boş (bit hızı kadar)", "boş", tt.Video.Nvenc.Tampon?.ToString() ?? "boş");
-        Kontrol("TikTok 5 → 9: ses WAV 16 bit, en yüksek kalite, üçgen titreşim", YeniSes, SesOzeti(tt.Ses));
-        Kontrol("YouTube 4 → 9: ses WAV 16 bit, en yüksek kalite, üçgen titreşim", YeniSes, SesOzeti(yt.Ses));
+        Kontrol("TikTok 5 → 11: ses WAV 16 bit, en yüksek kalite, üçgen titreşim", YeniSes, SesOzeti(tt.Ses));
+        Kontrol("YouTube 4 → 11: ses FDK AAC 128 kb/s, en yüksek kalite, üçgen titreşim", YouTubeSes + " 128",
+            SesOzeti(yt.Ses) + " " + yt.Ses.Fdk.BitHizi);
         Kontrol("TikTok varsayılanı: ses", YeniSes, SesOzeti(Varsayilanlar.TikTok().Ses));
-        Kontrol("YouTube varsayılanı: ses", YeniSes, SesOzeti(Varsayilanlar.YouTube().Ses));
+        Kontrol("YouTube varsayılanı: ses FDK AAC 128 kb/s CBR, afterburner açık", YouTubeSes + " aac_low Cbr 128 True",
+            SesOzeti(Varsayilanlar.YouTube().Ses) + " " + FdkOzeti(Varsayilanlar.YouTube().Ses.Fdk));
+
+        // Sürüm 11: YouTube sesi FDK AAC 128 kb/s. 0.8.9'un YouTube sesi (WAV 16 bit) yeni varsayılana geçer; LUFS
+        // eşitleme seçimi kalır; kullanıcının değiştirdiği ses, TikTok ve ön ayar olduğu gibi kalır.
+        var yt10 = Varsayilanlar.YouTube();
+        yt10.Surum = 10;
+        Varsayilanlar.PlatformSesi(yt10.Ses);
+        yt10.Ses.Esitleme = false;
+        var ayar10 = new AppSettings();
+        ayar10.Profiller[ExportProfileId.YouTube] = yt10;
+        var ses10 = ayar10.ProfilAyari(ExportProfileId.YouTube).Ses;
+        Kontrol("YouTube 10 → 11: 0.8.9'un sesi (WAV 16 bit) FDK AAC 128 kb/s olur", YouTubeSes + " aac_low Cbr 128 True",
+            SesOzeti(ses10) + " " + FdkOzeti(ses10.Fdk));
+        Kontrol("YouTube 10 → 11: kapatılmış LUFS eşitleme kapalı kalır", "False", ses10.Esitleme.ToString());
+        var yt10Kendi = Varsayilanlar.YouTube();
+        yt10Kendi.Surum = 10;
+        Varsayilanlar.PlatformSesi(yt10Kendi.Ses);
+        yt10Kendi.Ses.WavBit = WavBitDerinligi.Bit24;
+        var ayar10Kendi = new AppSettings();
+        ayar10Kendi.Profiller[ExportProfileId.YouTube] = yt10Kendi;
+        Kontrol("YouTube 10 → 11: kendi ses ayarı (WAV 24 bit) korunur", "Wav Bit24 48000 EnYuksek Ucgen",
+            SesOzeti(ayar10Kendi.ProfilAyari(ExportProfileId.YouTube).Ses));
+        var tt10 = Varsayilanlar.TikTok();
+        tt10.Surum = 10;
+        var ayarTt10 = new AppSettings();
+        ayarTt10.Profiller[ExportProfileId.TikTok] = tt10;
+        Kontrol("TikTok 10 → 11: ses WAV 16 bit kalır", YeniSes, SesOzeti(ayarTt10.ProfilAyari(ExportProfileId.TikTok).Ses));
+        var onYt10 = Varsayilanlar.YouTube();
+        onYt10.Surum = 10;
+        Varsayilanlar.PlatformSesi(onYt10.Ses);
+        Kontrol("YouTube ön ayarı (sürüm 10, WAV 16 bit) kaydedildiği gibi kalır", YeniSes,
+            SesOzeti(new AppSettings().OnAyariYukle(ExportProfileId.YouTube, onYt10).Ses));
 
         // 0.8.6'nın (sürüm 7) kendiliğinden yazdığı 55000 kb geri alınır; kullanıcının kendi VBV'si ve
         // yeni sürümde elle girilen tampon korunur.

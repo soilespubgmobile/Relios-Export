@@ -26,7 +26,7 @@ public enum EsitlemeKarari
 /// Bir videonun LUFS eşitleme raporu: ölçüm, karar ve (eşitlendiyse) çıktının ölçülen yüksekliği / tepesi.
 /// Kodlarken bilgi satırına, bitince videonun satırına ve ipucuna yazılır.
 /// </summary>
-public sealed record EsitlemeRaporu(EsitlemeKarari Karar, LoudnormOlcum? Olcum, double Hedef, double Tavan)
+public sealed record EsitlemeRaporu(EsitlemeKarari Karar, SesOlcum? Olcum, double Hedef, double Tavan)
 {
     private static readonly CultureInfo Tr = CultureInfo.GetCultureInfo("tr-TR");
 
@@ -128,8 +128,20 @@ public static class Esitleme
     /// <summary>Hedefe bu kadar (LU) yakın ses olduğu gibi kalır; sonuç bu kadar uzaksa "hedefe ulaşılamadı".</summary>
     public const double Tolerans = 0.5;
 
-    /// <summary>Ölçüm komutlarında loudnorm'a verilen yükseklik aralığı (LU); ölçülen değerleri etkilemez.</summary>
-    public const double AralikHedefi = 11;
+    /// <summary>
+    /// Ses yüksekliği ölçeri: FFmpeg'in ebur128 filtresi (ITU-R BS.1770-4 / EBU R128 ölçerinin kendisi; gerçek tepe 4 kat
+    /// örneklemede). Tümleşik yükseklik her 100 ms'de çerçeve bilgisine yazılır, ametadata onu 0,001 hassasiyetle basar
+    /// (sondaki özette yalnızca 0,1). loudnorm'un kendi ölçümü kullanılmaz: sesin son ~2,9 saniyesini iki kez sayar
+    /// (FFmpeg af_loudnorm.c, flush_frame); sonu sesin geri kalanından kısık ya da yüksek olan kısa videoda sonuç kayar
+    /// (25 saniyelik bir OBS kaydında 0,44 LU).
+    /// </summary>
+    public const string OlcumFiltresi = "ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I";
+
+    /// <summary>Ölçerin sessizlik eşiği (LUFS): sessiz ya da 0,4 saniyeden kısa seste tümleşik yükseklik bu kalır.</summary>
+    public const double MutlakKapi = -70;
+
+    /// <summary>Ölçerin özetindeki gerçek tepe 0,1 dB'ye yuvarlıdır: sınırlayıcı kararında bu kadar (dB) pay bırakılır.</summary>
+    public const double TepePayi = 0.05;
 
     /// <summary>Sınırlayıcının kıstığı pay en çok bu kadar (dB) telafi edilir; daha fazlası tepeleri aşırı ezerdi.</summary>
     public const double EnCokTelafi = 6;
@@ -140,15 +152,19 @@ public static class Esitleme
     /// <summary>Deneme ölçümü hedefe bu kadar (LU) yakınsa telafi tamamdır.</summary>
     public const double TelafiPayi = 0.2;
 
-    /// <summary>Hedefe kazanç, ölçülen gerçek tepeyi tavanın üstüne çıkarır mı.</summary>
-    public static bool SinirlanirMi(LoudnormOlcum o, double hedef, double tavan) => o.Tepe + (hedef - o.Yukseklik) > tavan;
+    /// <summary>
+    /// Hedefe kazanç, ölçülen gerçek tepeyi tavanın üstüne çıkarır mı (tepe 0,1 dB'ye yuvarlı ölçüldüğü için
+    /// <see cref="TepePayi"/> kadar pay bırakılır: tavanı geçebilecek tepe her zaman sınırlanır).
+    /// </summary>
+    public static bool SinirlanirMi(SesOlcum o, double hedef, double tavan) =>
+        o.Tepe + TepePayi + (hedef - o.Yukseklik) > tavan;
 
     /// <summary>
     /// Ölçümden sonra karar: hedefe 0,5 LU yakınsa dokunulmaz; yüksek ses "yalnızca kısık sesi yükselt" seçiliyse
     /// dokunulmaz; değilse bütün ses aynı miktarda (sabit kazanç) hedefe getirilir. Ses aralığı (LRA) karara girmez:
     /// kısık ve yüksek yerler arasındaki fark olduğu gibi kalır.
     /// </summary>
-    public static EsitlemeRaporu KararVer(SesAyarlari s, LoudnormOlcum? o)
+    public static EsitlemeRaporu KararVer(SesAyarlari s, SesOlcum? o)
     {
         EsitlemeRaporu R(EsitlemeKarari k) => new(k, o, s.EsitlemeHedef, s.SinirlayiciTavan);
 
@@ -187,14 +203,12 @@ public static class Esitleme
     }
 
     /// <summary>
-    /// Çıktının sesini ölçen komut (yalnızca ses okunur): loudnorm ölçtüğü tümleşik yüksekliği ve gerçek tepeyi
-    /// JSON olarak yazar (ölçüm geçişiyle aynı yöntem; okumak için <see cref="ArgsBuilder.LoudnormOlcumOku"/>).
+    /// Çıktının sesini ölçen komut (yalnızca ses okunur): ölçüm geçişiyle aynı ölçer (<see cref="OlcumFiltresi"/>;
+    /// okumak için <see cref="ArgsBuilder.OlcumOku"/>).
     /// </summary>
-    public static List<string> SonucOlcumKomutu(string dosya, SesAyarlari s) =>
+    public static List<string> SonucOlcumKomutu(string dosya) =>
     [
         "-hide_banner", "-nostdin", "-nostats", "-i", dosya, "-map", "0:a:0", "-vn", "-sn", "-dn",
-        "-af", string.Create(CultureInfo.InvariantCulture,
-            $"loudnorm=I={s.EsitlemeHedef:0.0#}:TP={s.SinirlayiciTavan:0.0#}:LRA={AralikHedefi:0}:print_format=json"),
-        "-f", "null", "-",
+        "-af", OlcumFiltresi, "-f", "null", "-",
     ];
 }

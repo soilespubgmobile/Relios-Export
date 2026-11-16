@@ -117,6 +117,19 @@ public sealed class AppSettings
                 a.Ses.Esitleme = true;
             }
 
+            if (!onAyar && id == ExportProfileId.YouTube && a.Surum < 11
+                && a.Ses is
+                {
+                    Kodlayici: SesKodlayici.Wav, WavBit: WavBitDerinligi.Bit16, OrnekHizi: 48000, Kanal: KanalModu.Stereo,
+                    Kalite: DonusumKalitesi.EnYuksek, Titresim: Titresim.Ucgen,
+                })
+            {
+                // 0.8.9'un YouTube sesi (WAV 16 bit 48 kHz): artık FDK AAC 128 kb/s 48 kHz, en yüksek dönüşüm kalitesi,
+                // üçgen titreşim. LUFS eşitleme seçimi, kullanıcının değiştirdiği ses ayarı, TikTok ve ön ayarlar
+                // olduğu gibi kalır.
+                Varsayilanlar.YouTubeSesi(a.Ses);
+            }
+
             if (id == ExportProfileId.YouTube && a.Surum < 8
                 && a.Video.X264 is { VbvMaks: 14000, VbvTampon: 28000 })
             {

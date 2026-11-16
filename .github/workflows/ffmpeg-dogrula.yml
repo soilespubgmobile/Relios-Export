@@ -9,8 +9,10 @@ name: FFmpeg dogrulama (Windows)
 #    Programin urettigi komut, XviD4PSP ile dogrulanan 0.3.0'in komutuyla harf harf karsilastirilir.
 # 3) Diger ayarlar da denenir: YouTube varsayilani, 2 / 3 gecisli x264, WAV sesli MOV, siyah kenar,
 #    sessiz, ses seviyesi / gecikme, HE-AAC, NVENC komutu (tools/ayar_kontrol.py).
-# 4) Ses donusumu: TikTok ve YouTube varsayilani (WAV 16 bit 48 kHz) 24 bit kaynagi ucgen titresimle 16 bit'e
-#    indirmeli, 16 bit 48 kHz kaynagin sesine hic dokunmamali (tools/ses_donusum_kontrol.py).
+# 4) Ses donusumu: TikTok varsayilani (WAV 16 bit 48 kHz) 24 bit kaynagi ucgen titresimle 16 bit'e indirmeli,
+#    16 bit 48 kHz kaynagin sesine hic dokunmamali (tools/ses_donusum_kontrol.py). YouTube sesi FDK AAC 128 kb/s
+#    (ayni donusum zinciri; hedef_kontrol.py --ses aac).
+# 5) Ses yuksekligi: sinirlayici ve LUFS esitleme; cikti BS.1770 olceriyle (ebur128) olculur, hedef -14 +- 0,1.
 on:
   workflow_run:
     workflows: ["Relios FFmpeg (win64, nonfree, en son kararli surumler)"]
@@ -207,15 +209,15 @@ jobs:
           $yt = @('--profil', 'youtube')
           $testler = @(
             @{ ad = 'YouTube varsayilani: 1080p60 yatay H.264 (XviD4PSP ayarlari; boyut, fps, profil, seviye kaynak)'; k = '01_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               hedef = @('--boyut', '1920x1080', '--fps', '60/1', '--gop', '100/51', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'pcm16'); ayar = @('kap=mov', 'acodec=pcm_s16le', 'ar=48000', 'ac=2') },
+               hedef = @('--boyut', '1920x1080', '--fps', '60/1', '--gop', '100/51', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'aac'); ayar = @('kap=mov', 'acodec=aac', 'aprofil=LC', 'abit=128000±5%', 'ar=48000', 'ac=2') },
             @{ ad = 'YouTube varsayilani: telefon (dondurulmus HEVC 10 bit)'; k = '03_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               hedef = @('--boyut', '1080x1920', '--fps', '30/1', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'pcm16'); ayar = @('kap=mov', 'acodec=pcm_s16le', 'ar=48000', 'ac=2') },
+               hedef = @('--boyut', '1080x1920', '--fps', '30/1', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'aac'); ayar = @('kap=mov', 'acodec=aac', 'aprofil=LC', 'abit=128000±5%', 'ar=48000', 'ac=2') },
             @{ ad = 'YouTube varsayilani: 1080x2400 uzun dikey'; k = '13_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               hedef = @('--boyut', '1080x2400', '--fps', '30/1', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'pcm16'); ayar = @('kap=mov', 'acodec=pcm_s16le', 'ar=48000', 'ac=2') },
+               hedef = @('--boyut', '1080x2400', '--fps', '30/1', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'aac'); ayar = @('kap=mov', 'acodec=aac', 'aprofil=LC', 'abit=128000±5%', 'ar=48000', 'ac=2') },
             @{ ad = 'YouTube varsayilani: 32 bit float WAV sesli 4K50 ProRes'; k = '06_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               hedef = @('--boyut', '3840x2160', '--fps', '50/1', '--gop', '83/42', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'pcm16'); ayar = @('kap=mov', 'acodec=pcm_s16le', 'ar=48000', 'ac=2') },
+               hedef = @('--boyut', '3840x2160', '--fps', '50/1', '--gop', '83/42', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'aac'); ayar = @('kap=mov', 'acodec=aac', 'aprofil=LC', 'abit=128000±5%', 'ar=48000', 'ac=2') },
             @{ ad = 'YouTube varsayilani: 1080x1920 29.97 fps H.264 High@4.0 (34375 kb/s 4.0 sinirini asar: seviye 4.1)'; k = '02_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               hedef = @('--boyut', '1080x1920', '--fps', '30000/1001', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'pcm16'); ayar = @('kap=mov', 'acodec=pcm_s16le', 'ar=48000', 'ac=2') },
+               hedef = @('--boyut', '1080x1920', '--fps', '30000/1001', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'aac'); ayar = @('kap=mov', 'acodec=aac', 'aprofil=LC', 'abit=128000±5%', 'ar=48000', 'ac=2') },
             @{ ad = 'YouTube varsayilani: 1080x1080 sessiz H.264 High@3.2 (seviye 4.1)'; k = '07_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
                hedef = @('--boyut', '1080x1080', '--fps', '30/1', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov'); ayar = @('kap=mov') },
             @{ ad = 'x264 2 gecis 4000 kb/s'; k = '12_'; arg = @('--profil', 'tiktok-916', '--ayarla', 'Video.X264.Mod=IkiGecis', '--ayarla', 'Video.X264.BitHizi=4000'); sag = @()
@@ -319,8 +321,8 @@ jobs:
             "$([IO.Path]::GetFileName($k[0])): " + (ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,sample_rate,channels -of csv=p=0 $k[0])
           }
           $durumlar = @(
-            @{ ad = 'YouTube varsayilani, 24 bit 48 kHz kaynak (16 bit, ucgen titresim)'; src = $k24; arg = @('--profil', 'youtube'); kip = 'titresim' },
-            @{ ad = 'YouTube varsayilani, 16 bit 48 kHz kaynak (bit bit ayni)'; src = $k16; arg = @('--profil', 'youtube'); kip = 'ayni' },
+            @{ ad = 'YouTube, ses WAV secilirse (16 bit), 24 bit 48 kHz kaynak (ucgen titresim)'; src = $k24; arg = @('--profil', 'youtube', '--ayarla', 'Ses.Kodlayici=Wav'); kip = 'titresim' },
+            @{ ad = 'YouTube, ses WAV secilirse (16 bit), 16 bit 48 kHz kaynak (bit bit ayni)'; src = $k16; arg = @('--profil', 'youtube', '--ayarla', 'Ses.Kodlayici=Wav'); kip = 'ayni' },
             @{ ad = 'TikTok varsayilani sesi (video x264), 24 bit 48 kHz kaynak'; src = $k24; arg = @('--ayarla', 'Video.Kodlayici=X264'); kip = 'titresim' },
             @{ ad = 'TikTok varsayilani sesi (video x264), 16 bit 48 kHz kaynak'; src = $k16; arg = @('--ayarla', 'Video.Kodlayici=X264'); kip = 'ayni' }
           )
@@ -363,6 +365,8 @@ jobs:
           # Tepeli: kisik degisken + 2 sn'de bir 10 ms'lik yuksek vurus (sabit kazanc tepeyi asar: sinirlayici + telafi).
           # Sabit ton: hic degismeyen (LRA 0). Genis aralik: ilk 4 sn 18 dB kisik (LRA > 11; eskiden dinamikti, hedefte kalmiyordu).
           # Yuksek degisken: ~-7 LUFS, 16 bit 48 kHz (yalnizca yukselt: dokunulmamali, bit bit ayni).
+          # Sonu kisik / sonu yuksek: son 3 sn sesin geri kalanindan 6 dB kisik / yuksek. loudnorm'un olcumu sesin son
+          # ~2,9 sn'sini iki kez sayar: bu seslerde cikti -13,4 / -15,0 olurdu; BS.1770 olceriyle tam -14 olmali.
           $deg = '(0.03+0.015*sin(2*PI*0.1*t))'
           $kaynaklar = @(
             @{ ad = 'yuksek_ton'; ses = 'aevalsrc=if(gte(t\,1)\,0.9*sin(2*PI*440*t)\,0)|if(gte(t\,1)\,0.9*sin(2*PI*660*t)\,0):s=48000:d=4'; d = 4; c = 'pcm_s24le' },
@@ -372,7 +376,9 @@ jobs:
             @{ ad = 'tepeli'; ses = "aevalsrc=$deg*sin(2*PI*440*t)+if(lt(mod(t\,2)\,0.01)\,0.8*sin(2*PI*1000*t)\,0)|$deg*sin(2*PI*550*t):s=48000:d=12"; d = 12; c = 'pcm_s24le' },
             @{ ad = 'sabit_ton'; ses = 'aevalsrc=0.05*sin(2*PI*440*t)+0.02*sin(2*PI*3000*t)|0.05*sin(2*PI*550*t):s=48000:d=9'; d = 9; c = 'pcm_s24le' },
             @{ ad = 'genis_aralik'; ses = 'aevalsrc=if(lt(t\,4)\,0.0076\,0.06)*sin(2*PI*440*t)|if(lt(t\,4)\,0.0076\,0.06)*sin(2*PI*550*t):s=48000:d=12'; d = 12; c = 'pcm_s24le' },
-            @{ ad = 'yuksek_degisken'; ses = 'aevalsrc=(0.40+0.12*sin(2*PI*0.1*t))*sin(2*PI*1000*t)|(0.40+0.12*sin(2*PI*0.1*t))*sin(2*PI*1250*t):s=48000:d=12'; d = 12; c = 'pcm_s16le' }
+            @{ ad = 'yuksek_degisken'; ses = 'aevalsrc=(0.40+0.12*sin(2*PI*0.1*t))*sin(2*PI*1000*t)|(0.40+0.12*sin(2*PI*0.1*t))*sin(2*PI*1250*t):s=48000:d=12'; d = 12; c = 'pcm_s16le' },
+            @{ ad = 'kisik_son'; ses = 'aevalsrc=if(lt(t\,9)\,0.03\,0.015)*sin(2*PI*440*t)|if(lt(t\,9)\,0.03\,0.015)*sin(2*PI*550*t):s=48000:d=12'; d = 12; c = 'pcm_s24le' },
+            @{ ad = 'yuksek_son'; ses = 'aevalsrc=if(lt(t\,9)\,0.015\,0.03)*sin(2*PI*440*t)|if(lt(t\,9)\,0.015\,0.03)*sin(2*PI*550*t):s=48000:d=12'; d = 12; c = 'pcm_s24le' }
           )
           $Kay = @{}  # (PowerShell degisken adlarinda buyuk / kucuk harf ayirmaz: $k ile ayni olmasin)
           foreach ($k in $kaynaklar) {
@@ -391,7 +397,8 @@ jobs:
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i 'aevalsrc=0.5*sin(2*PI*1000*t):s=48000' -f lavfi -i "aevalsrc=$deg*sin(2*PI*440*t)|$deg*sin(2*PI*550*t):s=48000" -map 0:v -map 1:a -map 2:a -t 12 -pix_fmt yuv420p -c:v libx264 -preset veryfast -c:a:0 aac -c:a:1 pcm_s24le -y $ci
           $Kay['cok_izli'] = $ci
           "cok_izli.mov: " + ((ffprobe -v error -show_entries stream=codec_name -select_streams a -of csv=p=0 $ci) -join ' + ')
-          $yt = @('--profil', 'youtube')
+          # YouTube (x264) + ses WAV 16 bit: ses ornekleri bit bit denetlenebilsin. YouTube'un kendi sesi (FDK AAC 128) ayrica denenir.
+          $yt = @('--profil', 'youtube', '--ayarla', 'Ses.Kodlayici=Wav')
           $esit = @('--ayarla', 'Ses.Esitleme=true')
           $durumlar = @(
             @{ ad = 'Ses +12 dB, sinirlayici acik (varsayilan, -1 dB)'; src = $Kay.yuksek_ton; arg = $yt + @('--ayarla', 'Ses.Seviye=12'); arac = 'yukseklik'; kip = @('sinir'); karar = $null },
@@ -406,7 +413,9 @@ jobs:
             @{ ad = 'Esitleme: kisik ses, mono cikti -> once mono, sonra -14'; src = $Kay.kisik_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.Kanal=Mono'); arac = 'yukseklik'; kip = @('lufs'); karar = 'Dogrusal' },
             @{ ad = 'Esitleme + ayni adli WAV (kisik) -> olcum WAV''dan, dogrusal'; src = $Kay.harici_kisik; arg = $yt + $esit; arac = 'yukseklik'; kip = @('lufs'); karar = 'Dogrusal' },
             @{ ad = 'Esitleme + iki ses izli video -> kayipsiz (kisik) iz olculur, dogrusal'; src = $Kay.cok_izli; arg = $yt + $esit; arac = 'yukseklik'; kip = @('lufs'); karar = 'Dogrusal' },
-            @{ ad = 'Esitleme + FDK AAC'; src = $Kay.kisik_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.Kodlayici=FdkAac'); arac = 'yukseklik'; kip = @('lufs', '--codec', 'aac'); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme + YouTube varsayilani (FDK AAC 128 kb/s)'; src = $Kay.kisik_degisken; arg = @('--profil', 'youtube'); arac = 'yukseklik'; kip = @('lufs', '--codec', 'aac'); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme: sonu kisik ses (son 3 sn -6 dB) -> tam -14 (loudnorm olcumuyle -13,4 olurdu)'; src = $Kay.kisik_son; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.kisik_son); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme: sonu yuksek ses (son 3 sn +6 dB) -> tam -14 (loudnorm olcumuyle -15,0 olurdu)'; src = $Kay.yuksek_son; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.yuksek_son); karar = 'Dogrusal' },
             @{ ad = 'Esitleme + x264 2 gecis (4000 kb/s) -> yalnizca yukseltildi'; src = $Kay.kisik_degisken; arg = $yt + $esit + @('--ayarla', 'Video.X264.Mod=IkiGecis', '--ayarla', 'Video.X264.BitHizi=4000'); arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.kisik_degisken); karar = 'Dogrusal' },
             @{ ad = 'Esitleme + ses gecikmesi +250 ms'; src = $Kay.kisik_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.Gecikme=250'); arac = 'yukseklik'; kip = @('lufs'); karar = 'Dogrusal' },
             @{ ad = 'Esitleme: yuksek ses (-7), iki yon -> dogrusal, yalnizca kisildi'; src = $Kay.yuksek_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.EsitlemeYonu=IkiYon'); arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.yuksek_degisken); karar = 'Dogrusal' }
@@ -462,8 +471,8 @@ jobs:
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=1920x1080:rate=30 -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 30 -pix_fmt yuv420p -c:v libx264 -preset veryfast -crf 18 -c:a aac -ac 2 -y $src
           $yt = @('--profil', 'youtube')
           $durumlar = @(
-            @{ ad = 'x264 CBR 8000 kb/s (tampon 2 sn) + WAV 16 bit'; arg = $yt + @('--ayarla', 'Video.X264.Mod=Cbr', '--ayarla', 'Video.X264.BitHizi=8000', '--ayarla', 'Video.X264.VbvTampon=null'); tur = 'Yaklasik'; pay = 0.05 },
-            @{ ad = 'x264 2 gecis 5000 kb/s + WAV 16 bit'; arg = $yt + @('--ayarla', 'Video.X264.Mod=IkiGecis', '--ayarla', 'Video.X264.BitHizi=5000'); tur = 'Yaklasik'; pay = 0.10 },
+            @{ ad = 'x264 CBR 8000 kb/s (tampon 2 sn) + WAV 16 bit'; arg = $yt + @('--ayarla', 'Ses.Kodlayici=Wav', '--ayarla', 'Video.X264.Mod=Cbr', '--ayarla', 'Video.X264.BitHizi=8000', '--ayarla', 'Video.X264.VbvTampon=null'); tur = 'Yaklasik'; pay = 0.05 },
+            @{ ad = 'x264 2 gecis 5000 kb/s + FDK AAC 128 kb/s (YouTube sesi)'; arg = $yt + @('--ayarla', 'Video.X264.Mod=IkiGecis', '--ayarla', 'Video.X264.BitHizi=5000'); tur = 'Yaklasik'; pay = 0.10 },
             @{ ad = 'x264 CBR 6000 kb/s (tampon 2 sn) + FDK AAC 192 kb/s'; arg = $yt + @('--ayarla', 'Video.X264.Mod=Cbr', '--ayarla', 'Video.X264.BitHizi=6000', '--ayarla', 'Video.X264.VbvTampon=null', '--ayarla', 'Ses.Kodlayici=FdkAac', '--ayarla', 'Ses.Fdk.BitHizi=192'); tur = 'Yaklasik'; pay = 0.05 },
             @{ ad = 'YouTube varsayilani (CRF 18, en yuksek 34375 kb/s): en cok'; arg = $yt; tur = 'EnCok'; pay = 0.01 }
           )
