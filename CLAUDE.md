@@ -11,7 +11,7 @@ Bu dosya önceki Claude sohbetinin özetidir. Yeni oturum buradan devam eder.
 ## Program
 - Tek exe WPF (.NET 11) video dışa aktarıcı: FFmpeg 9.0.2 + FDK AAC (nonfree derleme — yalnızca kişisel kullanım, dağıtılmaz).
 - Profiller: **TikTok** ve **YouTube** (Instagram yok). Kaynak her formatta okunur, çıktı yalnızca H.264 (x264 core 165 r3223 0480cb0 veya NVENC).
-- Sürüm: **0.8.9** (`app/ReliosExport/ReliosExport.csproj`). Ayar sürümü `ProfilAyarlari.GuncelSurum = 10`.
+- Sürüm: **0.8.9** (`app/ReliosExport/ReliosExport.csproj`). Ayar sürümü `ProfilAyarlari.GuncelSurum = 11`.
 
 ## Kalıcı kurallar (asla bozma)
 - XviD4PSP.exe'ye ve ayarlarına/ön ayarlarına dokunma (imza değişirse lisans iptal).
@@ -26,18 +26,20 @@ Bu dosya önceki Claude sohbetinin özetidir. Yeni oturum buradan devam eder.
 ## Varsayılanlar (0.8.9)
 - **TikTok:** NVENC CBR 34375 kb/s, tampon boş (= bit hızı); çözünürlük/fps/profil/seviye kaynakla aynı; B-kare 0, ref 3, GOP 30 kare, scenecut 0; MOV.
 - **YouTube:** x264 CRF 18, VBV 34375 / 55000; çözünürlük/fps/profil/seviye kaynakla aynı (seviye gerekirse yükseltilir); anahtar kare 30 fps'e göre 50/26 (60 fps'e uyarlanır); MOV.
-- **Ses (ikisinde de):** WAV (PCM) 16 bit, 48 kHz, stereo; dönüşüm soxr 33 bit (En yüksek), titreşim Üçgen (triangular). 24/32 bit/float kaynak 16 bite titreşimle iner; 16 bit 48 kHz kaynak bit bit aynı kalır (eşitleme açıkken: ses zaten -14 ya da daha yüksekse; kısıksa -14'e yükseltilir).
+- **TikTok sesi:** WAV (PCM) 16 bit, 48 kHz, stereo; dönüşüm soxr 33 bit (En yüksek), titreşim Üçgen (triangular). 24/32 bit/float kaynak 16 bite titreşimle iner; 16 bit 48 kHz kaynak bit bit aynı kalır (eşitleme açıkken: ses zaten -14 ya da daha yüksekse; kısıksa -14'e yükseltilir).
+- **YouTube sesi (16 Kasım, kullanıcı isteği, ayar sürümü 11):** FDK AAC-LC **128 kb/s CBR**, 48 kHz, stereo, afterburner açık; dönüşüm soxr 33 bit, titreşim Üçgen; WAV seçilirse 16 bit (`Varsayilanlar.YouTubeSesi`). Sürüm 11 geçişi: kayıtlı YouTube ayarında ses tam 0.8.9 varsayılanıysa (WAV 16 48k stereo En yüksek Üçgen) FDK 128'e geçer; eşitleme seçimi, kullanıcının değiştirdiği ses, TikTok ve ön ayarlar olduğu gibi kalır.
 - Encoded date / Tagged date = dışa aktarma anı (`-metadata creation_time=now`, UTC).
 - Varsayılan çıktı klasörü: İndirilenler.
 - x264 threads 8.
-- **Ses yüksekliği (ikisinde de):** tepe sınırlayıcı açık, -1 dB (alimiter; yalnızca ses yükseltilince — artı dB ya da LUFS eşitleme — devreye girer, yoksa sese dokunmaz). Sınırlayıcı **192 kHz'te** çalışır (gerçek tepe, örnekler arası dahil): elle yükseltmede ses önce soxr ile 192 kHz'e çıkar, sonra hedef hıza döner; eşitlemede loudnorm zaten 192 kHz verir (16 Kasım). LUFS eşitleme **açık** (16 Kasım, kullanıcı isteği; sürüm 10 geçişi kayıtlı profil ayarlarını da açar, ön ayarlar kaydedildiği gibi kalır, Dikey 9:16 hedef ayarı eşitlemesiz), hedef -14, yön "yalnızca kısık sesi yükselt". **16 Kasım'dan beri dinamik kip yok:** ölçüm (loudnorm) sonrası kısık ses her zaman bütünüyle **sabit kazançla** (`volume=hedef-ölçülen`) -14'e getirilir, ses aralığı (LRA) karara girmez; ±0,5 LU hedefteyse ya da yüksekse dokunulmaz. Kazanç tepeyi -1'in üstüne çıkaracaksa 192 kHz sınırlayıcı tutar (kutusu kapalı olsa da) ve kıstığı pay yalnızca ses okuyan deneme ölçümleriyle telafi edilir (en çok 3 deneme, en çok 6 dB; `Esitleme.TelafiAdimi`, `ArgsBuilder.DenemeOlcumKomutu`). Bitince çıktı ölçülüp satıra yazılır. TikTok -14 kullanıcının kararı (TikTok resmi değer yayınlamıyor).
+- **Ses yüksekliği (ikisinde de):** tepe sınırlayıcı açık, -1 dB (alimiter; yalnızca ses yükseltilince — artı dB ya da LUFS eşitleme — devreye girer, yoksa sese dokunmaz). Sınırlayıcı **192 kHz'te** çalışır (gerçek tepe, örnekler arası dahil): ses önce soxr ile 192 kHz'e çıkar, sonra hedef hıza döner (16 Kasım). LUFS eşitleme **açık** (16 Kasım, kullanıcı isteği; sürüm 10 geçişi kayıtlı profil ayarlarını da açar, ön ayarlar kaydedildiği gibi kalır, Dikey 9:16 hedef ayarı eşitlemesiz), hedef -14, yön "yalnızca kısık sesi yükselt". **16 Kasım'dan beri dinamik kip yok:** ölçüm sonrası kısık ses her zaman bütünüyle **sabit kazançla** (`volume=hedef-ölçülen`) -14'e getirilir, ses aralığı (LRA) karara girmez; ±0,5 LU hedefteyse ya da yüksekse dokunulmaz. Kazanç tepeyi -1'in üstüne çıkaracaksa (tepe + 0,05 dB pay, `Esitleme.TepePayi`) 192 kHz sınırlayıcı tutar (kutusu kapalı olsa da) ve kıstığı pay yalnızca ses okuyan deneme ölçümleriyle telafi edilir (en çok 3 deneme, en çok 6 dB; `Esitleme.TelafiAdimi`, `ArgsBuilder.DenemeOlcumKomutu`). Bitince çıktı ölçülüp satıra yazılır.
+- **Ölçer (16 Kasım, commit 66020e0):** ölçüm, deneme ve sonuç ölçümü **ebur128** (BS.1770-4; `Esitleme.OlcumFiltresi` = `ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I`): tümleşik yükseklik son `lavfi.r128.I=` satırından (0,001), gerçek tepe ve LRA özetten (0,1); -70 = sessiz/0,4 sn'den kısa → ölçülemedi (`ArgsBuilder.OlcumOku`, kayıt `SesOlcum`). **loudnorm ölçümü kullanılmaz:** af_loudnorm.c `flush_frame` sesin son ~2,9 sn'sini r128_in'e ikinci kez ekliyor; kullanıcının OBS kaydında -14,0 diye yazılan çıktı standarda göre -13,56 idi (simülasyonla kanıtlandı: son 2,9 sn iki kez sayılınca tam loudnorm'un değerleri çıkıyor). TikTok -14 kullanıcının kararı (TikTok resmi değer yayınlamıyor).
 - Tekrar işle: bütün videolar bitince Başlat düğmesi "Tekrar işle" olur, hepsini o anki ayarlarla yeniden işler. Bekleyen satırda tahmini dosya boyutu, biten satırda gerçek boyut.
 - Ayar geçişleri `app/ReliosExport/Core/AppSettings.cs` içinde (`Yukselt`); ses geçişi ön ayarlara uygulanmaz.
 
 ## Doğrulama (her değişiklikte)
 1. Push → `app-build.yml` çalışır (ekran görüntüleri log'da base64, `EKRAN|ad|...` satırları).
 2. `gh api -X POST repos/soilespubgmobile/Relios-Export/actions/workflows/ffmpeg-dogrula.yml/dispatches -f ref=main -f inputs[run_id]=43369861243`
-3. Bakılacaklar: birim kontrol (`--birim-kontrol`, son: 245 kontrol 0 fark), 19 deneme videosu, Diğer ayarlar, Ses dönüşümü, x264 seviye tabloları, Ses yüksekliği (16 deneme; karar adları Dogrusal / Dogrusal/Sinirli / Hedefte / ZatenYuksek), Tahmini boyut (4 deneme) — hepsi 0 fark.
+3. Bakılacaklar: birim kontrol (`--birim-kontrol`, son: 260 kontrol 0 fark), 19 deneme videosu, Diğer ayarlar (18), Ses dönüşümü (4), x264 seviye tabloları, Ses yüksekliği (18 deneme; hedef -14 ± 0,1, tepeli ± 0,25, program sonucu ± 0,05; ses örnekleri bit bit denetlensin diye YouTube + `Ses.Kodlayici=Wav`; karar adları Dogrusal / Dogrusal/Sinirli / Hedefte / ZatenYuksek), Tahmini boyut (4 deneme) — hepsi 0 fark. Son yeşil: ffmpeg-dogrula 43825835988, app-build 43825829271 (commit 66020e0).
 - `app-build.yml` ayrıca **uçtan uca arayüz denemesi** çalıştırır (`--uctan-uca`, `Arayuz/UctanUca.cs`): gerçek pencereyle ekle / Başlat / yalnızca hatalıyı yeniden / çıkar / Tekrar işle + eşitleme / iptal / TikTok-NVENC hatası + günlük / Türkçe dosya adı / temizle / ayar dosyası — son: 101 kontrol 0 fark. GitHub'da ekran kartı yok: NVENC kodlaması yalnızca kullanıcının bilgisayarında denenebilir.
 - Exe bu oturumdan indirilemiyor (artifact deposu engelli): kullanıcıya Actions sayfasındaki Artifacts bağlantısı verilir.
 - Yardımcılar: `tools/hedef_kontrol.py` (`--ses pcm16`, `--vbv`, `--kap`), `tools/ayar_kontrol.py`, `tools/saglamlik_kontrol.py`, `tools/ses_donusum_kontrol.py`.
@@ -64,24 +66,12 @@ Bu dosya önceki Claude sohbetinin özetidir. Yeni oturum buradan devam eder.
 - Başlangıç/bitiş kesme; bitince bildirim sesi ya da bilgisayarı kapatma; "kaynağın yanına kaydet" seçeneği.
 - Sürüm yükseltme (0.8.9 → 0.9.0): kullanıcıya soruldu, cevap gelmedi; sürüm hâlâ 0.8.9.
 
-### Yapılmayanlar / sıradaki iş
-- **Bilgisayar testleri yapılmadı.** Kullanıcının bilgisayarına bağlanıldı:
-  - Windows, cihaz `desktop-jdnkoph`, kullanıcı klasörü `C:\Users\relio`.
-  - İndirilenler klasörüne erişim verildi.
-  - Bilgisayar kullanımı: File Explorer yalnızca "click" düzeyinde verilebiliyor. Çalışırken Chrome ve Discord pencereleri gizleniyor.
-  - `Relios Export` kurulu bir uygulama olmadığı (taşınabilir exe) için `computer_resolve_access` onu bulamadı. Program açıkken bulup bulamadığı denenmedi; bulamazsa kullanıcıdan programı açmasını ya da çözüm üretmesini iste.
-- **Yeni exe kullanıcının bilgisayarında değil.** İndirilenler'deki `Relios Export.exe` 14 Kasım tarihli (eski). En yeni exe: Actions run **43774713565** → Artifacts → `relios-export-win64` (~87 MB zip; 16 Kasım, sabit kazançlı eşitleme). (Önceki: 43769903001, 43763139516.) Kullanıcı 16 Kasım'da 43769903001'i kendisi indirip `İndirilenler\Yeni klasör (3)`'e çıkardı ve programı kullanıyor.
-  - Bulut oturumundan artifact indirilemiyor (blob deposu engelli).
-  - Uygulama içi tarayıcı GitHub'a girişli değil.
-  - Kullanıcıya iki yol sunuldu, cevap gelmedi: A) tarayıcı panelinde (Ctrl+Shift+B) GitHub'a kendisi giriş yapar, Claude indirir; B) Chrome'dan zip'i kendisi indirir.
-  - Exe, eski exe'nin ve ayarların üzerine yazılmadan İndirilenler'de **"Relios Export test 15-11"** klasörüne konacak. İndirme için kullanıcının açık izni gerekir (dosya adı, kaynak, boyut söylenerek).
-- **Öncelikli bilgisayar testleri (sırayla):**
-  1. TikTok + NVENC kodlama (GitHub'da ekran kartı yok; en önemlisi).
-  2. Kodlarken pencereyi kapatma: onay sorusu, "Durdur ve kapat", `.part` kalmamalı.
-  3. Programı kapatıp açma: ayarlar korunmalı.
-  4. Sürükle-bırak.
-  - **TikTok'a yüklemeyi kullanıcı en son kendisi yapacak.**
-- **Diğer bilgisayar testleri:** satırdaki klasör ve günlük düğmeleri, kayıt yeri seçme, ön ayar kaydet/yükle/sil, YouTube'da "content loudness" (eşitleme açık), HDR telefon videosu (renklerin soluk çıkması beklenir).
+### Bilgisayar testleri (16 Kasım; eski exe 43774713565 ile, `C:\Users\relio\Downloads\Relios Export`)
+- Bağlantı: Windows `desktop-jdnkoph`, `C:\Users\relio`. Erişim verilen klasör: `C:\Users\relio\Downloads\Relios Export` (içinde exe, `ayarlar.json`, kaynak `2026-11-14 07-24-10.mkv`, çıktılar). `Yeni klasör (3)` artık yok. Kullanıcının başlangıç `ayarlar.json`'u oturumda `/home/claude/pc-test/yedek/ayarlar_baslangic.json` (testler bitince geri konacak).
+- Bilgisayar kullanımı: File Explorer "click" (exe'yi çift tıklayarak açmak olur); program açıkken `computer_resolve_access` adı **`relios export.exe`** ile bulur (full). Sürükle-bırak hem Gezgin'de hem dosya pencerelerinde engelli → **sürükle-bırak testini kullanıcı yapmalı**. Program iki kez açık olabilir (kullanıcı 10:06'da da açmıştı): iki pencere aynı `ayarlar.json`'a yazar, son yazan kazanır.
+- **Geçti:** TikTok + NVENC (8 sn; h264_nvenc High@4.2, HRD cbr_flag=1, bit hızı = tampon = 34375 kb/s, B0, ref 3, IDR/30, MOV, PCM s16 48k, eng, tarih; sürücü yeterli); kodlarken kapatma (onay "Dışa aktarma sürüyor", Durdur ve kapat → `.part` silindi); kapatıp açınca platform, kayıt yeri, profil ayarı korundu; YouTube x264 (hedef 80/82 — kalan 2 fark kaynağın kendi kare atlaması: OBS kaydında bir yerde 4 kare boşluk, program koruyor); İptal (.part silindi); `_2` adı; satırdaki klasör düğmesi (dosya seçili açılıyor); Aç; ön ayar kaydet/yükle/sil (silme onaylı); Varsayılan (onaylı); satırı çıkar.
+- **Sıradaki:** 1) Yeni exe (app-build **43825829271** → artifact `relios-export-win64` id 14206179278, 91 285 860 bayt) bilgisayara: kullanıcı Chrome'dan indirip klasöre koyar (tarayıcı paneli GitHub'a girişli değil; bulut tarafından artifact indirilemez). 2) Yeni exe ile: TikTok eşitleme (OBS kaydı → standarda göre -14,00 olmalı), YouTube AAC 128 çıktısı, kayıtlı YouTube ayarının 11'e geçişi. 3) Sürükle-bırak (kullanıcı). 4) `ayarlar.json`'u başlangıç hâline döndür. **TikTok'a yüklemeyi kullanıcı en son kendisi yapacak.**
+- Diğer bilgisayar testleri (yapılmadı): günlük düğmesi (yalnızca hatada), YouTube'da "content loudness", HDR telefon videosu.
 
 ## 16 Kasım oturumu
 - **Yapıldı (doğrulandı; app-build 43769903001, ffmpeg-dogrula 43769910163, commit 864dc37):** tepe sınırlayıcı 192 kHz'te (öneri 6). Eskiden elle yükseltmede yalnızca örnekleri sınırlıyordu: yerel ölçümde kırpılmış gürültü +4,8 dBTP, kare dalga +1,3 dBTP; 44,1 kHz kaynak 48 kHz'e çevrilirken 0,00 dBFS'te kırpılıyordu. Şimdi: -1,00 dBTP (aşırı tam bant gürültüde en kötü ~-0,6). Yeni CI denemesi: 44,1 kHz tiz ton +12 dB. Arayüz ipucu güncellendi.
@@ -89,11 +79,11 @@ Bu dosya önceki Claude sohbetinin özetidir. Yeni oturum buradan devam eder.
 - Kullanıcının bilgisayarında `C:\Users\relio\Downloads\Yeni klasör (3)` klasörüne erişim verildi (içinde exe, zip, `ayarlar.json`, kaynak MKV). İndirilenler ve Videolar köküne erişim isteği sınıflandırıcı tarafından reddedildi: dosya gerekiyorsa kullanıcıdan bu klasöre koymasını iste.
 - **Kullanıcı HDR kaydetmiyor** → zimg / ton eşleme gerekmez (yapılmayacak). zimg için tek eksik kütüphane oydu; derleme ~1–1,5 sa, hepsi 3–4 sa.
 - **Önemli, yapılmadı:** onaylı FFmpeg derlemesi (run 43369861243) GitHub'da **13 Aralık 2026'da siliniyor** (30 gün). Ondan önce FFmpeg yeniden derlenip doğrulanmalı (saklama 90 güne çıkarılabilir; yeniden derleme bütün bileşenleri o günkü en son kararlı sürüme çeker → hepsi yeniden doğrulanır). Kullanıcıya söylendi, karar bekleniyor.
-- **NVENC için sürücü:** FFmpeg nv-codec-headers **n13.1.15.0** ile derlenmiş → Windows'ta NVIDIA sürücüsü **610.0 veya üstü** gerekir (RTX 5060 Ti). Eskiyse program "sürücü çok eski" Türkçe hatasını verir. NVENC testinden önce sürücü sürümüne bakılacak.
+- **NVENC için sürücü:** FFmpeg nv-codec-headers **n13.1.15.0** ile derlenmiş → Windows'ta NVIDIA sürücüsü **610.0 veya üstü** gerekir (RTX 5060 Ti). Eskiyse program "sürücü çok eski" Türkçe hatasını verir. 16 Kasım'da kullanıcının bilgisayarında NVENC kodlaması çalıştı (sürücü yeterli).
 - **Bilgi olarak söylendi (yapılmadı):** YouTube resmi önerisi 2 ardışık B-kare + GOP kare hızının yarısı; bizde B-kare 0 ve GOP 50/26 (XviD4PSP hedefinden). NVENC'de ağırlıklı tahmin (isteğe bağlı, B-kare 0 olduğu için açılabilir). Diğer öneriler: uyku önleme, taramalı kaynak (bwdif), disk alanı kontrolü — kullanıcı yalnızca 6'yı seçti.
 
 ## Son konuşulanlar (bilgi)
-- YouTube'a PCM 16 bit yükleme, FDK 128'e göre 15–17 kHz'te biraz daha iyi sonuç verdi (kullanıcı testi). YouTube sesi zaten yeniden kodluyor.
+- YouTube'a PCM 16 bit yükleme, FDK 128'e göre 15–17 kHz'te biraz daha iyi sonuç verdi (kullanıcı testi). YouTube sesi zaten yeniden kodluyor. 16 Kasım'da kullanıcı yine de YouTube'u FDK AAC 128 kb/s istedi ("Varsayılan olsun").
 - TikTok'a WAV sesli MOV'u kullanıcı henüz denemedi — ilk yüklemede sesi kontrol etmesi önerildi.
 - TikTok indirmesi (1024×576, ~2,2 Mb/s, High@3.1, kodlayıcı bvc0ot) incelendi: muhtemelen tavanlı VBR; kesinlik için dosyanın kendisi gerekiyor.
 - Bir kayıt dosyası (Record_…mp4) incelendi: NVENC benzeri, Main@4.2, 1080p60, HRD'de VBR 13 Mb/s, 3 B-kare, 120 karede IDR, tam aralık; görüntü siyahtı. Kayıt cihazının saat dilimi UTC+4 görünüyordu (Türkiye UTC+3).
