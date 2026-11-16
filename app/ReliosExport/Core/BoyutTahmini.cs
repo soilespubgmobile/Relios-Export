@@ -47,6 +47,12 @@ public static class BoyutTahmini
         if (v.Kodlayici == VideoKodlayici.Nvenc)
         {
             var n = v.Nvenc;
+            if (n.Kayipsiz)
+            {
+                // Kayıpsızda bit hızı görüntünün kendisine bağlıdır (sınırı yoktur): tahmin yapılmaz.
+                return null;
+            }
+
             return n.Mod switch
             {
                 NvencModu.Cbr => (n.BitHizi, TahminTuru.Yaklasik),

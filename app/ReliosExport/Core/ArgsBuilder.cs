@@ -710,8 +710,8 @@ public static class ArgsBuilder
         return (v.Genislik - (v.Genislik % 2), v.Yukseklik - (v.Yukseklik % 2));
     }
 
-    /// <summary>NVENC'in sınırlı en yüksek bit hızı (kb/s); sınırsızsa null.</summary>
-    private static int? NvencBitHizi(NvencAyarlari n) => n.Mod switch
+    /// <summary>NVENC'in sınırlı en yüksek bit hızı (kb/s); sınırsızsa (kayıpsızda da) null.</summary>
+    private static int? NvencBitHizi(NvencAyarlari n) => n.Kayipsiz ? null : n.Mod switch
     {
         NvencModu.Cbr => n.BitHizi,
         NvencModu.DegiskenBitHizi => n.MaksBitHizi ?? n.BitHizi,
@@ -723,8 +723,9 @@ public static class ArgsBuilder
     /// NVENC'in VBV tamponu (kbit). Boşsa: CBR'de bit hızı kadar (1 saniye; seviye sınırına sığar), VBR'de
     /// ffmpeg'in varsayılanı olan bit hızının 2 katı. Sabit kalite / QP'de yok: ffmpeg sabit kalitede tamponu
     /// yok sayar (nvenc.c: "CQ mode shall discard avg bitrate/vbv buffer size"), kart seviyenin tamponunu kullanır.
+    /// Kayıpsızda da yok (bit hızı sınırı yoktur).
     /// </summary>
-    private static int? NvencTampon(NvencAyarlari n) => n.Mod switch
+    private static int? NvencTampon(NvencAyarlari n) => n.Kayipsiz ? null : n.Mod switch
     {
         NvencModu.Cbr => n.Tampon ?? n.BitHizi,
         NvencModu.DegiskenBitHizi => n.Tampon ?? n.BitHizi * 2,
@@ -804,7 +805,15 @@ public static class ArgsBuilder
             : null;
     }
 
-    private static string NvencProfili(NvencAyarlari n, MediaInfo? media) => ProfilCoz(n.Profil, media);
+    /// <summary>
+    /// NVENC'in profili. Kayıpsızda ffmpeg profili yok sayar, dosya her zaman High 4:4:4 Predictive olur; seçilen
+    /// profil yalnızca renk örneklemesini belirler (PikselBicimi: High 4:4:4 → 4:4:4, ötekiler → 4:2:0). Baseline'ın
+    /// sınırları (B-kare, CABAC, ağırlıklı tahmin yok) kayıpsızda geçerli değildir: 4:2:0'da "high" sayılır.
+    /// </summary>
+    private static string NvencProfili(NvencAyarlari n, MediaInfo? media) =>
+        n.Kayipsiz
+            ? (ProfilCoz(n.Profil, media) == "high444p" ? "high444p" : "high")
+            : ProfilCoz(n.Profil, media);
 
     /// <summary>
     /// B-kare sayısı. Baseline profilde B-kare yoktur; ağırlıklı tahmin de B-karelerle birlikte kullanılamaz
@@ -1049,7 +1058,8 @@ public static class ArgsBuilder
             args.AddRange(["-tune", n.Ayar]);
         }
 
-        if (!string.IsNullOrEmpty(profil))
+        // Kayıpsızda ffmpeg profili yok sayar (nvenc.c yalnızca kayıpsız değilken yazar); kart High 4:4:4 Predictive kullanır.
+        if (!string.IsNullOrEmpty(profil) && !n.Kayipsiz)
         {
             args.AddRange(["-profile:v", profil]);
         }
@@ -1060,27 +1070,37 @@ public static class ArgsBuilder
         }
 
         static string Kb(int v) => v.ToString(Inv) + "k";
-        switch (n.Mod)
+        if (n.Kayipsiz)
         {
-            case NvencModu.SabitKalite:
-                args.AddRange(["-rc", "vbr", "-cq", n.Cq.ToString(Inv), "-b:v", "0"]);
-                break;
-            case NvencModu.SabitQp:
-                // -b:v 0: verilmezse ffmpeg'in varsayılanı (2 Mb/s, tampon 4000 kbit) dosyanın HRD başlığına yazılır,
-                // oysa sabit QP'de bit hızı sınırı yoktur (kullanıcının kartında denendi: 12,6 Mb/s'lik dosyada
-                // "2000 kb/s"). 0 ile kart kendi varsayılanını yazar; görüntü bit bit aynı kalır.
-                args.AddRange(["-rc", "constqp", "-qp", n.Qp.ToString(Inv), "-b:v", "0"]);
-                break;
-            case NvencModu.DegiskenBitHizi:
-                args.AddRange(["-rc", "vbr", "-b:v", Kb(n.BitHizi)]);
-                break;
-            default:
-                args.AddRange(["-rc", "cbr", "-b:v", Kb(n.BitHizi)]);
-                break;
+            // Kayıpsızda ffmpeg kodlama modunu ve kaliteyi yok sayar, sabit QP 0 kullanır (nvenc.c set_lossless);
+            // komut da bunu söylesin. -b:v 0: sabit QP'deki gibi (verilmezse ffmpeg'in 2 Mb/s'i HRD'ye yazılır).
+            args.AddRange(["-rc", "constqp", "-qp", "0", "-b:v", "0"]);
+        }
+        else
+        {
+            switch (n.Mod)
+            {
+                case NvencModu.SabitKalite:
+                    args.AddRange(["-rc", "vbr", "-cq", n.Cq.ToString(Inv), "-b:v", "0"]);
+                    break;
+                case NvencModu.SabitQp:
+                    // -b:v 0: verilmezse ffmpeg'in varsayılanı (2 Mb/s, tampon 4000 kbit) dosyanın HRD başlığına yazılır,
+                    // oysa sabit QP'de bit hızı sınırı yoktur (kullanıcının kartında denendi: 12,6 Mb/s'lik dosyada
+                    // "2000 kb/s"). 0 ile kart kendi varsayılanını yazar; görüntü bit bit aynı kalır.
+                    args.AddRange(["-rc", "constqp", "-qp", n.Qp.ToString(Inv), "-b:v", "0"]);
+                    break;
+                case NvencModu.DegiskenBitHizi:
+                    args.AddRange(["-rc", "vbr", "-b:v", Kb(n.BitHizi)]);
+                    break;
+                default:
+                    args.AddRange(["-rc", "cbr", "-b:v", Kb(n.BitHizi)]);
+                    break;
+            }
         }
 
-        // En yüksek bit hızı yalnızca VBR ve sabit kalitede: CBR'de kart onu yok sayar (bit hızı sabittir).
-        if (n.MaksBitHizi is { } mx && n.Mod is NvencModu.DegiskenBitHizi or NvencModu.SabitKalite)
+        // En yüksek bit hızı yalnızca VBR ve sabit kalitede: CBR'de kart onu yok sayar (bit hızı sabittir), kayıpsızda
+        // bit hızı sınırı yoktur.
+        if (n.MaksBitHizi is { } mx && !n.Kayipsiz && n.Mod is NvencModu.DegiskenBitHizi or NvencModu.SabitKalite)
         {
             args.AddRange(["-maxrate", Kb(mx)]);
         }
@@ -1100,13 +1120,16 @@ public static class ArgsBuilder
             args.AddRange(["-rc-lookahead", la.ToString(Inv)]);
         }
 
-        args.AddRange(["-spatial-aq", n.UzamsalAq ? "1" : "0"]);
-        if (n.UzamsalAq)
+        // Kayıpsızda uyarlamalı niceleme yoktur: kart açılmaz ("Adaptive quantization is not supported with lossless
+        // encoding"; kullanıcının kartında denendi). QP her yerde 0 olduğundan AQ'nun değiştireceği bir şey de yoktur.
+        var uzamsalAq = n.UzamsalAq && !n.Kayipsiz;
+        args.AddRange(["-spatial-aq", uzamsalAq ? "1" : "0"]);
+        if (uzamsalAq)
         {
             args.AddRange(["-aq-strength", n.AqGucu.ToString(Inv)]);
         }
 
-        args.AddRange(["-temporal-aq", n.ZamansalAq ? "1" : "0"]);
+        args.AddRange(["-temporal-aq", n.ZamansalAq && !n.Kayipsiz ? "1" : "0"]);
         if (NvencBKare(n, profil) is { } bf)
         {
             args.AddRange(["-bf", bf.ToString(Inv)]);

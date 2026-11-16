@@ -262,6 +262,66 @@ internal static class BirimKontrol
         Iceriyor("High 4:4:4", k, ",format=yuv444p,");
 
         Console.WriteLine();
+        Console.WriteLine("--- NVENC kayıpsız (tune lossless): sabit QP 0; kodlama modu, bit hızı, tampon, AQ ve profil verilmez");
+        static void Kayipsiz(ProfilAyarlari a) => a.Video.Nvenc.Ayar = "lossless";
+
+        // TikTok varsayılanında AQ açık: kart "Adaptive quantization is not supported with lossless encoding" verip açılmıyordu.
+        k = NvencKomutu(hd, Kayipsiz);
+        Iceriyor("Kayıpsız (TikTok varsayılanı)", k,
+            " -preset p7 -tune lossless -level:v 4.0 -rc constqp -qp 0 -b:v 0 -multipass fullres -rc-lookahead 32 -spatial-aq 0 -temporal-aq 0 -bf 0 -refs 3 -dpb_size 3 -coder cabac ");
+        Icermiyor("Kayıpsız", k, " -profile:v ");
+        Icermiyor("Kayıpsız", k, " -aq-strength ");
+        Icermiyor("Kayıpsız", k, " -bufsize ");
+        Iceriyor("Kayıpsız (4:2:0)", k, ",format=yuv420p,");
+        k = NvencKomutu(hd, a =>
+        {
+            Kayipsiz(a);
+            a.Video.Nvenc.Mod = NvencModu.DegiskenBitHizi;
+            a.Video.Nvenc.MaksBitHizi = 30000;
+            a.Video.Nvenc.Tampon = 40000;
+        });
+        Iceriyor("Kayıpsız + VBR 30000 / 40000 seçili kalsa da", k, " -rc constqp -qp 0 -b:v 0 -multipass ");
+        Icermiyor("Kayıpsız + VBR", k, " -maxrate ");
+        Icermiyor("Kayıpsız + VBR", k, " -bufsize ");
+        k = NvencKomutu(hd, a =>
+        {
+            Kayipsiz(a);
+            a.Video.Nvenc.Mod = NvencModu.SabitKalite;
+            a.Video.Nvenc.Cq = 30;
+        });
+        Icermiyor("Kayıpsız + sabit kalite 30 seçili kalsa da", k, " -cq ");
+        k = NvencKomutu(hd, a =>
+        {
+            Kayipsiz(a);
+            a.Video.Nvenc.Profil = "baseline";
+            a.Video.Nvenc.BKare = 2;
+        });
+        Iceriyor("Kayıpsız + Baseline seçili (dosya High 4:4:4 Predictive)", k, " -bf 2 -b_ref_mode middle ");
+        Iceriyor("Kayıpsız + Baseline seçili", k, " -coder cabac ");
+        Icermiyor("Kayıpsız + Baseline seçili", k, " -profile:v ");
+        k = NvencKomutu(hd, a =>
+        {
+            Kayipsiz(a);
+            a.Video.Nvenc.Profil = "high444p";
+        });
+        Iceriyor("Kayıpsız + High 4:4:4", k, ",format=yuv444p,");
+        Iceriyor("Kayıpsız + High 4:4:4", k, " -coder cavlc ");
+        Icermiyor("Kayıpsız + High 4:4:4", k, " -profile:v ");
+
+        // Seviye yalnızca boyuta, kare hızına ve DPB'ye göre (bit hızı sınırı yoktur): 1080×1920@60, kaynak 4.0 → 4.2.
+        k = NvencKomutu(Kaynak(1080, 1920, 60, "h264", "High", 40), Kayipsiz);
+        Iceriyor("Kayıpsız 1080×1920@60, kaynak High@4.0", k, " -level:v 4.2 ");
+
+        var kayipsiz = Varsayilanlar.TikTok();
+        Kayipsiz(kayipsiz);
+        Kontrol("Kayıpsız: kodlama özeti", "Kayıpsız", kayipsiz.Video.Nvenc.ModOzeti);
+        Kontrol("Kayıpsız: özet", "NVENC · Kayıpsız · p7 · High 4:4:4 (seviye kaynakla aynı)", kayipsiz.Video.Nvenc.Ozet);
+        Kontrol("Kayıpsız: tahmini boyut yok", "yok", BoyutTahmini.Hesapla(kayipsiz, hd, SesSecimi.Yok)?.Metin ?? "yok");
+        Kontrol("CBR (karşılaştırma): tahmini boyut var", "True", (BoyutTahmini.Hesapla(Varsayilanlar.TikTok(), hd, SesSecimi.Yok) is not null).ToString());
+        Kontrol("Kayıpsız ayar dosyasına yazılmaz (yalnızca tune)", "False",
+            AyarDosyasi.Yaz(kayipsiz).Contains("Kayipsiz", StringComparison.Ordinal).ToString());
+
+        Console.WriteLine();
         Console.WriteLine("--- NVDEC: kareler önce kaynağın piksel biçimine çevrilir (işlemciyle çözmeyle bit bit aynı sonuç)");
         static void Nvdec(ProfilAyarlari a) => a.Video.Nvenc.GpuCozme = true;
         k = NvencKomutu(hd with { PikselBicimi = "yuv420p" }, Nvdec);
@@ -1169,6 +1229,9 @@ internal static class BirimKontrol
             Ilk(HataAciklamasi.Metin(new IOException("Diskte yeterli alan yok.", unchecked((int)0x80070070)))));
         Kontrol("Başka dosya hatası: ileti olduğu gibi", "kilitli", HataAciklamasi.Metin(new IOException("kilitli")));
         Kontrol("ffmpeg hatası: açıklaması olduğu gibi", "NVENC kullanılamadı", HataAciklamasi.Metin(new FfmpegHatasi("NVENC kullanılamadı", "günlük")));
+        Kontrol("NVENC kayıpsız + AQ (ek parametrelerle)",
+            "NVENC kayıpsız kodlamada uyarlamalı nicelemeyi (AQ) kabul etmiyor: ek parametrelerdeki -spatial-aq / -temporal-aq'yu kaldırın.",
+            HataAciklamasi.Bul("[h264_nvenc @ 0000014df5ff7180] InitializeEncoder failed: invalid param (8): Adaptive quantization is not supported with lossless encoding") ?? "yok");
     }
 
     private static void Klasorler()

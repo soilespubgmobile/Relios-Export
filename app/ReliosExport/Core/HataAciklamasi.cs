@@ -35,6 +35,8 @@ public static class HataAciklamasi
             "NVENC ağırlıklı tahmini B-karelerle birlikte kabul etmiyor: ağırlıklı tahmini kapatın ya da B-kare sayısını 0 yapın (ek parametrelerdeki -bf de)."),
         (["DPB size should be greater than or equal to"],
             "NVENC: B-kareler referans olarak kullanılınca referans kare (DPB) en az 3 olmalı. Referans kare sayısını artırın ya da B-kare referans modunu kapatın (ek parametrelerdeki -dpb_size de)."),
+        (["Adaptive quantization is not supported with lossless encoding"],
+            "NVENC kayıpsız kodlamada uyarlamalı nicelemeyi (AQ) kabul etmiyor: ek parametrelerdeki -spatial-aq / -temporal-aq'yu kaldırın."),
         (["InitializeEncoder failed", "Provided device doesn't support required NVENC features", "Lossless encoding not supported",
           "B frames as references are not supported", "Weighted prediction"],
             "NVENC bu ayarları kabul etmedi (profil, seviye, B-kare ya da ağırlıklı tahmin kartta desteklenmiyor). NVENC ayarlarını değiştirin."),

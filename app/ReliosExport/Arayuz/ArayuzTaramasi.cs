@@ -532,6 +532,10 @@ internal static class ArayuzTaramasi
         var hataOzel = await Kodla(w.KontrolAyarlari);
         Kontrol("Özel boyut 1080×1920: FFmpeg'de çalışıyor", "çalıştı", hataOzel ?? "çalıştı", hataOzel is null);
 
+        // ------------------------------------------------------------------ 1c. NVENC kayıpsız (ana panel)
+        await BaglamaGec(ExportProfileId.TikTok, Ozel(Varsayilanlar.TikTok()));
+        await KayipsizDene("Ana panel", anaDenetimler, w, AnaDurum);
+
         // ------------------------------------------------------------------ 2. Kutularda Enter / Esc / odaktan çıkma
         Bolum("Kutular: Enter uygular, Esc geri alır, odaktan çıkınca uygulanır");
         await BaglamaGec(ExportProfileId.YouTube, Ozel(Varsayilanlar.YouTube()));
@@ -788,6 +792,8 @@ internal static class ArayuzTaramasi
             p.Sonuc.AgirlikliTahmin = false;
             await Bosta(w);
 
+            await KayipsizDene("NVENC penceresi", liste, p, ortam.Durum);
+
             Bas(Dugme(p, "Vazgeç"));
             await Kapandi(w, p);
             Esit2("NVENC penceresi: Vazgeç hiçbir şeyi değiştirmedi", ilk, Json(w.KontrolAyarlari.Video.Nvenc));
@@ -813,6 +819,89 @@ internal static class ArayuzTaramasi
                 $"GpuCozme: {(!onceki).ToString().ToLowerInvariant()}", "yok");
             w.KontrolAyarlari.Video.Nvenc = AyarDosyasi.Kopyala(Varsayilanlar.TikTok().Video.Nvenc);
             await Bosta(w);
+        }
+
+        // ------------------------------------------------------------------ NVENC kayıpsız (ana panel ve pencere)
+        // Ayar (tune) listesinden "Kayıpsız" seçilince kodlama modu, bit hızı ve AQ kapanır, açıklama görünür; komutta
+        // sabit QP 0 olur, AQ / profil / bit hızı sınırı olmaz. Eski ayara dönünce alanlar yeniden açılır.
+        async Task KayipsizDene(string yer, IReadOnlyList<Denetim> liste, FrameworkElement kok, Func<Task<string>> durum)
+        {
+            Bolum(yer + ": Kayıpsız ayar (tune lossless)");
+            FrameworkElement? Bul(string ozellik) =>
+                liste.FirstOrDefault(d => d.Anahtar.EndsWith("NvencAyarlari." + ozellik, StringComparison.Ordinal))?.Oge;
+
+            async Task<bool> Etkin(FrameworkElement o)
+            {
+                SekmesiniSec(o);
+                kok.UpdateLayout();
+                await Bosta(w);
+                return o.IsEnabled;
+            }
+
+            async Task<bool> NotGorunur()
+            {
+                var aciklama = Mantiksal(kok).OfType<TextBlock>()
+                    .FirstOrDefault(t => t.Text.StartsWith("Kayıpsız", StringComparison.Ordinal));
+                if (aciklama is null)
+                {
+                    return false;
+                }
+
+                SekmesiniSec(aciklama);
+                kok.UpdateLayout();
+                await Bosta(w);
+                return aciklama.IsVisible;
+            }
+
+            if (Bul("Ayar") is not ComboBox ayarListesi)
+            {
+                Durumlu($"{yer}: Ayar (tune) listesi bulundu", false, "bulundu", "yok");
+                return;
+            }
+
+            SekmesiniSec(ayarListesi);
+            await Bosta(w);
+            var ilkAyar = ayarListesi.SelectedValue;
+            var kapanacaklar = new[] { "Mod", "BitHizi", "UzamsalAq", "AqGucu", "ZamansalAq" }
+                .Select(ad => (Ad: ad, Oge: Bul(ad)))
+                .Where(x => x.Oge is not null)
+                .ToList();
+            Bilgi($"{yer}: kapanması beklenen alanlar: {string.Join(", ", kapanacaklar.Select(x => x.Ad))}");
+
+            ayarListesi.SelectedValue = "lossless";
+            await Bosta(w);
+            Esit2($"{yer}: Kayıpsız seçildi", "lossless", ayarListesi.SelectedValue);
+            foreach (var (ad, oge) in kapanacaklar)
+            {
+                Esit2($"{yer} · Kayıpsız: {ad} alanı kapalı", false, await Etkin(oge!));
+            }
+
+            Durumlu($"{yer} · Kayıpsız: açıklama görünüyor", await NotGorunur(), "görünür", "görünmüyor");
+            var komut = await durum();
+            foreach (var parca in new[] { "-tune lossless", "-rc constqp -qp 0 -b:v 0", "-spatial-aq 0 -temporal-aq 0" })
+            {
+                Durumlu($"{yer} · Kayıpsız: komutta {parca}", komut.Contains(parca, StringComparison.Ordinal), "var", "yok");
+            }
+
+            foreach (var parca in new[] { "-profile:v", "-aq-strength", "-maxrate", "-bufsize", "-rc cbr", "-rc vbr" })
+            {
+                Durumlu($"{yer} · Kayıpsız: komutta {parca} yok", !komut.Contains(parca, StringComparison.Ordinal), "yok", "var");
+            }
+
+            if (kok is MainWindow)
+            {
+                Durumlu($"{yer} · Kayıpsız: özette \"NVENC · Kayıpsız\"", komut.Contains("NVENC · Kayıpsız", StringComparison.Ordinal), "var", "yok");
+            }
+
+            ayarListesi.SelectedValue = ilkAyar;
+            await Bosta(w);
+            foreach (var (ad, oge) in kapanacaklar.Where(x => x.Ad != "AqGucu"))
+            {
+                Esit2($"{yer} · eski ayara ({ilkAyar}) dönünce {ad} alanı açık", true, await Etkin(oge!));
+            }
+
+            Durumlu($"{yer} · eski ayara dönünce açıklama gizli", !await NotGorunur(), "gizli", "görünür");
+            Durumlu($"{yer} · eski ayara dönünce komutta -tune lossless yok", !(await durum()).Contains("-tune lossless", StringComparison.Ordinal), "yok", "var");
         }
 
         // ------------------------------------------------------------------ FDK AAC penceresi

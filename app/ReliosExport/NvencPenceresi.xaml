@@ -28,34 +28,39 @@
             <TabItem Header="Ana">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
                     <StackPanel Margin="2,0,8,0">
-                        <DockPanel Style="{StaticResource FormSatiri}">
-                            <TextBlock Text="Kodlama modu" Style="{StaticResource PencereEtiketi}"/>
-                            <ComboBox ItemsSource="{x:Static a:Secenekler.NvencModlari}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Mod}"/>
-                        </DockPanel>
-                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitKalite}">
-                            <TextBlock Text="CQ (0–51, düşük = kaliteli)" Style="{StaticResource PencereEtiketi}"/>
-                            <TextBox Style="{StaticResource SayiKutusu}" Tag="" Text="{Binding Cq, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
-                        </DockPanel>
-                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitQp}">
-                            <TextBlock Text="QP (0–51)" Style="{StaticResource PencereEtiketi}"/>
-                            <TextBox Style="{StaticResource SayiKutusu}" Tag="" Text="{Binding Qp, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
-                        </DockPanel>
-                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=DegiskenBitHizi|Cbr}">
-                            <TextBlock Text="Bit hızı (kb/s)" Style="{StaticResource PencereEtiketi}"/>
-                            <TextBox Style="{StaticResource SayiKutusu}" Tag="" Text="{Binding BitHizi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
-                        </DockPanel>
-                        <!-- En yüksek bit hızı CBR'de yoktur (kart yok sayar); tampon sabit kalitede yoktur (ffmpeg yok sayar,
-                             kart seviyenin tamponunu kullanır). -->
-                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitKalite|DegiskenBitHizi}">
-                            <TextBlock Text="En yüksek bit hızı (kb/s)" Style="{StaticResource PencereEtiketi}"/>
-                            <TextBox Style="{StaticResource SayiKutusu}" Tag="sınırsız" Text="{Binding MaksBitHizi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
-                        </DockPanel>
-                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=DegiskenBitHizi|Cbr}">
-                            <TextBlock Text="Tampon boyutu (kb)" Style="{StaticResource PencereEtiketi}"/>
-                            <TextBox Style="{StaticResource SayiKutusu}" Tag="otomatik" Text="{Binding Tampon, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
-                        </DockPanel>
-                        <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitKalite}"
-                                   Text="Sabit kalitede tampon verilmez: ekran kartı seviyenin tamponunu kullanır."/>
+                        <!-- Kayıpsızda (tune lossless) ffmpeg kodlama modunu, kaliteyi ve bit hızını yok sayar (sabit QP 0). -->
+                        <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,10" Visibility="{Binding Kayipsiz, Converter={StaticResource DogruysaGorunur}}"
+                                   Text="Kayıpsız ayarda (tune) görüntü bit bit aynı kalır: kodlama modu, kalite, bit hızı, tampon ve uyarlamalı niceleme (AQ) kullanılmaz; dosya çok büyük olur. Dosyanın profili her zaman High 4:4:4 Predictive olur; renk, profil High 4:4:4 seçiliyse 4:4:4, değilse 4:2:0 kalır."/>
+                        <StackPanel IsEnabled="{Binding Kayipsiz, Converter={StaticResource Degil}}">
+                            <DockPanel Style="{StaticResource FormSatiri}">
+                                <TextBlock Text="Kodlama modu" Style="{StaticResource PencereEtiketi}"/>
+                                <ComboBox ItemsSource="{x:Static a:Secenekler.NvencModlari}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Mod}"/>
+                            </DockPanel>
+                            <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitKalite}">
+                                <TextBlock Text="CQ (0–51, düşük = kaliteli)" Style="{StaticResource PencereEtiketi}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Tag="" Text="{Binding Cq, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                            </DockPanel>
+                            <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitQp}">
+                                <TextBlock Text="QP (0–51)" Style="{StaticResource PencereEtiketi}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Tag="" Text="{Binding Qp, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                            </DockPanel>
+                            <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=DegiskenBitHizi|Cbr}">
+                                <TextBlock Text="Bit hızı (kb/s)" Style="{StaticResource PencereEtiketi}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Tag="" Text="{Binding BitHizi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                            </DockPanel>
+                            <!-- En yüksek bit hızı CBR'de yoktur (kart yok sayar); tampon sabit kalitede yoktur (ffmpeg yok sayar,
+                                 kart seviyenin tamponunu kullanır). -->
+                            <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitKalite|DegiskenBitHizi}">
+                                <TextBlock Text="En yüksek bit hızı (kb/s)" Style="{StaticResource PencereEtiketi}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Tag="sınırsız" Text="{Binding MaksBitHizi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                            </DockPanel>
+                            <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=DegiskenBitHizi|Cbr}">
+                                <TextBlock Text="Tampon boyutu (kb)" Style="{StaticResource PencereEtiketi}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Tag="otomatik" Text="{Binding Tampon, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                            </DockPanel>
+                            <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitKalite}"
+                                       Text="Sabit kalitede tampon verilmez: ekran kartı seviyenin tamponunu kullanır."/>
+                        </StackPanel>
 
                         <TextBlock Text="HIZ VE UYUMLULUK" Style="{StaticResource AltBaslik}"/>
                         <DockPanel Style="{StaticResource FormSatiri}">
@@ -92,12 +97,16 @@
                         </DockPanel>
 
                         <TextBlock Text="UYARLAMALI NİCELEME (AQ)" Style="{StaticResource AltBaslik}"/>
-                        <CheckBox Content="Uzamsal AQ (spatial-aq)" IsChecked="{Binding UzamsalAq}" Margin="0,0,0,10"/>
-                        <DockPanel Style="{StaticResource FormSatiri}" IsEnabled="{Binding UzamsalAq}">
-                            <TextBlock Text="AQ gücü (1–15)" Style="{StaticResource PencereEtiketi}"/>
-                            <TextBox Style="{StaticResource SayiKutusu}" Tag="" Text="{Binding AqGucu, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
-                        </DockPanel>
-                        <CheckBox Content="Zamansal AQ (temporal-aq)" IsChecked="{Binding ZamansalAq}" Margin="0,0,0,10"/>
+                        <StackPanel IsEnabled="{Binding Kayipsiz, Converter={StaticResource Degil}}">
+                            <CheckBox Content="Uzamsal AQ (spatial-aq)" IsChecked="{Binding UzamsalAq}" Margin="0,0,0,10"/>
+                            <DockPanel Style="{StaticResource FormSatiri}" IsEnabled="{Binding UzamsalAq}">
+                                <TextBlock Text="AQ gücü (1–15)" Style="{StaticResource PencereEtiketi}"/>
+                                <TextBox Style="{StaticResource SayiKutusu}" Tag="" Text="{Binding AqGucu, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                            </DockPanel>
+                            <CheckBox Content="Zamansal AQ (temporal-aq)" IsChecked="{Binding ZamansalAq}" Margin="0,0,0,10"/>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8" Visibility="{Binding Kayipsiz, Converter={StaticResource DogruysaGorunur}}"
+                                   Text="Kayıpsız ayarda uyarlamalı niceleme (AQ) kullanılmaz: ekran kartı desteklemez."/>
 
                         <TextBlock Text="KARELER" Style="{StaticResource AltBaslik}"/>
                         <DockPanel Style="{StaticResource FormSatiri}" IsEnabled="{Binding AgirlikliTahmin, Converter={StaticResource Degil}}">

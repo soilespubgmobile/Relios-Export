@@ -564,8 +564,16 @@ public sealed class NvencAyarlari : Gozlenebilir
     /// <summary>Komuta eklenecek serbest ffmpeg seçenekleri (ör. -surfaces 32).</summary>
     public string EkParametreler { get => _ekParametreler; set => Set(ref _ekParametreler, value ?? string.Empty); }
 
+    /// <summary>
+    /// Kayıpsız ayar (tune lossless): görüntü bit bit aynı kalır. ffmpeg kodlama modunu, kaliteyi ve profili yok
+    /// sayar (nvenc.c: sabit QP 0); dosyanın profili her zaman High 4:4:4 Predictive olur. Uyarlamalı niceleme (AQ)
+    /// kayıpsızda yoktur: kart açılmaz ("Adaptive quantization is not supported with lossless encoding").
+    /// </summary>
     [JsonIgnore]
-    public string ModOzeti => Mod switch
+    public bool Kayipsiz => Ayar == "lossless";
+
+    [JsonIgnore]
+    public string ModOzeti => Kayipsiz ? "Kayıpsız" : Mod switch
     {
         NvencModu.SabitKalite => "Sabit kalite " + Cq,
         NvencModu.SabitQp => "Sabit QP " + Qp,
@@ -575,9 +583,9 @@ public sealed class NvencAyarlari : Gozlenebilir
 
     [JsonIgnore]
     public override string Ozet =>
-        $"NVENC · {ModOzeti} · {OnAyar} · {Bicim.ProfilSeviye(Profil, Seviye)}";
+        $"NVENC · {ModOzeti} · {OnAyar} · {Bicim.ProfilSeviye(Kayipsiz ? "high444p" : Profil, Seviye)}";
 
-    protected override IEnumerable<string> EkBildirimler(string? name) => [nameof(ModOzeti)];
+    protected override IEnumerable<string> EkBildirimler(string? name) => [nameof(ModOzeti), nameof(Kayipsiz)];
 }
 
 // ------------------------------------------------------------------------------- Ses

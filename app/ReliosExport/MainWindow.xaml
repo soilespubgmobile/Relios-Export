@@ -393,22 +393,25 @@
                                     <!-- NVENC -->
                                     <StackPanel DataContext="{Binding Video.Nvenc}"
                                                 Visibility="{Binding DataContext.Video.Kodlayici, ElementName=AyarPaneli, Converter={StaticResource Gorunur}, ConverterParameter=Nvenc}">
-                                        <DockPanel Style="{StaticResource FormSatiri}">
-                                            <TextBlock Text="Kodlama modu" Width="130" Style="{StaticResource AlanEtiketi}"/>
-                                            <ComboBox ItemsSource="{x:Static a:Secenekler.NvencModlari}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Mod}"/>
-                                        </DockPanel>
-                                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitKalite}">
-                                            <TextBlock Text="CQ (düşük = kaliteli)" Width="130" Style="{StaticResource AlanEtiketi}"/>
-                                            <TextBox Style="{StaticResource InputBox}" Width="76" HorizontalAlignment="Left" Text="{Binding Cq, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
-                                        </DockPanel>
-                                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitQp}">
-                                            <TextBlock Text="QP" Width="130" Style="{StaticResource AlanEtiketi}"/>
-                                            <TextBox Style="{StaticResource InputBox}" Width="76" HorizontalAlignment="Left" Text="{Binding Qp, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
-                                        </DockPanel>
-                                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=DegiskenBitHizi|Cbr}">
-                                            <TextBlock Text="Bit hızı (kb/s)" Width="130" Style="{StaticResource AlanEtiketi}"/>
-                                            <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Text="{Binding BitHizi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
-                                        </DockPanel>
+                                        <!-- Kayıpsızda (tune lossless) ffmpeg kodlama modunu, kaliteyi ve bit hızını yok sayar (sabit QP 0). -->
+                                        <StackPanel IsEnabled="{Binding Kayipsiz, Converter={StaticResource Degil}}">
+                                            <DockPanel Style="{StaticResource FormSatiri}">
+                                                <TextBlock Text="Kodlama modu" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                                <ComboBox ItemsSource="{x:Static a:Secenekler.NvencModlari}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Mod}"/>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitKalite}">
+                                                <TextBlock Text="CQ (düşük = kaliteli)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                                <TextBox Style="{StaticResource InputBox}" Width="76" HorizontalAlignment="Left" Text="{Binding Cq, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitQp}">
+                                                <TextBlock Text="QP" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                                <TextBox Style="{StaticResource InputBox}" Width="76" HorizontalAlignment="Left" Text="{Binding Qp, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                            </DockPanel>
+                                            <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=DegiskenBitHizi|Cbr}">
+                                                <TextBlock Text="Bit hızı (kb/s)" Width="130" Style="{StaticResource AlanEtiketi}"/>
+                                                <TextBox Style="{StaticResource InputBox}" Width="96" HorizontalAlignment="Left" Text="{Binding BitHizi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                                            </DockPanel>
+                                        </StackPanel>
                                         <DockPanel Style="{StaticResource FormSatiri}">
                                             <TextBlock Text="Hız ayarı (preset)" Width="130" Style="{StaticResource AlanEtiketi}"/>
                                             <ComboBox ItemsSource="{x:Static a:Secenekler.NvencOnAyarlar}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding OnAyar}"/>
@@ -431,6 +434,8 @@
                                         </DockPanel>
                                         <Button Content="Tüm NVENC ayarları…" Style="{StaticResource SecondaryButton}" Height="28" Padding="12,0" HorizontalAlignment="Left"
                                                 Margin="130,2,0,6" Click="OnNvencAyrintili"/>
+                                        <TextBlock Style="{StaticResource Ipucu}" Margin="130,0,0,6" Visibility="{Binding Kayipsiz, Converter={StaticResource DogruysaGorunur}}"
+                                                   Text="Kayıpsız: görüntü bit bit aynı kalır; kodlama modu, bit hızı ve uyarlamalı niceleme (AQ) kullanılmaz, dosya çok büyük olur. Profil her zaman High 4:4:4 Predictive olur."/>
                                         <TextBlock Style="{StaticResource Ipucu}" Margin="130,0,0,8" Text="NVIDIA ekran kartı ve güncel sürücü gerekir."/>
                                     </StackPanel>
                                 </StackPanel>
