@@ -36,11 +36,20 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, SesOlcum? Olcum, doubl
     /// <summary>Çıktının ölçülen gerçek tepesi (dBTP).</summary>
     public double? SonucTepe { get; init; }
 
-    /// <summary>Sınırlayıcının kıstığı payı karşılamak için sese eklenen kazanç (dB, 0 ile <see cref="Esitleme.EnCokTelafi"/> arası).</summary>
+    /// <summary>
+    /// Sınırlayıcının kıstığı ve (AAC çıktıda) kodlamanın düşürdüğü payı karşılamak için sese eklenen kazanç (dB;
+    /// en çok <see cref="Esitleme.EnCokTelafi"/>; yalnızca AAC'de eksi olabilir).
+    /// </summary>
     public double Telafi { get; init; }
 
     /// <summary>Gereken telafi <see cref="Esitleme.EnCokTelafi"/> dB'yi aştı (çok tepeli ses; tepeler daha çok ezilmesin diye durdu).</summary>
     public bool TelafiSiniri { get; init; }
+
+    /// <summary>
+    /// Çıktının sesi kayıplı (FDK AAC): telafi denemesinde ses AAC'ye çevrilip ölçüldü (AAC tizleri kestiği için
+    /// yükseklik biraz düşer; kayıp kadar telafi edildi).
+    /// </summary>
+    public bool Kayipli { get; init; }
 
     /// <summary>Ses değiştirildi mi.</summary>
     public bool Uygulandi => Karar == EsitlemeKarari.Dogrusal;
@@ -51,8 +60,8 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, SesOlcum? Olcum, doubl
     /// <summary>Sese uygulanan toplam kazanç (dB): hedefe kazanç + telafi.</summary>
     public double Kazanc => Fark + Telafi;
 
-    /// <summary>Kazanç tepeyi tavanın üstüne çıkarır mı (tepeleri sınırlayıcı tutar).</summary>
-    public bool Sinirli => Uygulandi && Olcum is { } o && Esitleme.SinirlanirMi(o, Hedef, Tavan);
+    /// <summary>Kazanç (telafi dahil) tepeyi tavanın üstüne çıkarır mı (tepeleri sınırlayıcı tutar).</summary>
+    public bool Sinirli => Uygulandi && Olcum is { } o && Esitleme.SinirlanirMi(o, Hedef, Tavan, Telafi);
 
     /// <summary>Sonuç hedefe 0,5 LU'dan uzak mı (ör. çok tepeli seste telafi sınırına gelindi).</summary>
     public bool HedefeUlasilamadi => SonucYukseklik is { } s && Math.Abs(s - Hedef) > Esitleme.Tolerans;
@@ -106,9 +115,21 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, SesOlcum? Olcum, doubl
 
             if (Sinirli)
             {
-                satirlar.Add($"Tepe {Bir(o.Tepe + Fark)} dB'ye çıkacaktı: sınırlayıcı {Bicim.Sayi(Tavan)} dB'de tuttu"
+                // AAC'de tepeyi tavana telafi de çıkarmış olabilir: o zaman uygulanan bütün kazançla.
+                satirlar.Add($"Tepe {Bir(o.Tepe + (Kayipli ? Kazanc : Fark))} dB'ye çıkacaktı: sınırlayıcı {Bicim.Sayi(Tavan)} dB'de tuttu"
                              + (Telafi > 0 ? $"; kıstığı pay için ses {Isaretli(Telafi)} dB daha yükseltildi" : string.Empty)
+                             + (Kayipli && Telafi != 0 ? " (AAC kodlamasının düşürdüğü pay da)" : string.Empty)
                              + (TelafiSiniri ? $" (telafi en çok {Bicim.Sayi(Esitleme.EnCokTelafi)} dB)" : string.Empty) + ".");
+            }
+            else if (Kayipli && Telafi > 0)
+            {
+                satirlar.Add($"AAC kodlaması tizleri kestiği için yükseklik {Bir(Telafi)} LU düşüyordu: ses {Bir(Telafi)} dB daha yükseltildi"
+                             + " (AAC'ye çevrilip ölçülerek).");
+            }
+            else if (Kayipli && Telafi < 0)
+            {
+                satirlar.Add($"AAC kodlaması yüksekliği {Bir(-Telafi)} LU artırıyordu: kazanç {Bir(-Telafi)} dB azaltıldı"
+                             + " (AAC'ye çevrilip ölçülerek).");
             }
 
             if (SonucYukseklik is { } s)
@@ -153,11 +174,26 @@ public static class Esitleme
     public const double TelafiPayi = 0.2;
 
     /// <summary>
-    /// Hedefe kazanç, ölçülen gerçek tepeyi tavanın üstüne çıkarır mı (tepe 0,1 dB'ye yuvarlı ölçüldüğü için
-    /// <see cref="TepePayi"/> kadar pay bırakılır: tavanı geçebilecek tepe her zaman sınırlanır).
+    /// AAC çıktıda deneme ölçümü hedefe bu kadar (LU) yakınsa telafi tamamdır. AAC'nin kaybı küçüktür (kullanıcının
+    /// OBS kaydında 128 kb/s'de 0,16 LU) ve kazançla doğrusal değişir: tek düzeltmede hedefe 0,01 içinde gelinir.
     /// </summary>
-    public static bool SinirlanirMi(SesOlcum o, double hedef, double tavan) =>
-        o.Tepe + TepePayi + (hedef - o.Yukseklik) > tavan;
+    public const double KayipliPayi = 0.02;
+
+    /// <summary>AAC çıktıda telafinin en küçük adımı (dB).</summary>
+    public const double KayipliAdim = 0.01;
+
+    /// <summary>
+    /// Çıktının sesi kayıplı mı (FDK AAC): AAC tizleri (128 kb/s'de ~17 kHz üstünü) keser, ölçülen yükseklik biraz
+    /// düşer. Eşitlemede ses o zaman AAC'ye çevrilip denenir, kayıp telafi edilir. WAV kayıpsızdır, denenmez.
+    /// </summary>
+    public static bool KayipliMi(SesAyarlari s) => s.Kodlayici == SesKodlayici.FdkAac;
+
+    /// <summary>
+    /// Hedefe kazanç (+ telafi), ölçülen gerçek tepeyi tavanın üstüne çıkarır mı (tepe 0,1 dB'ye yuvarlı ölçüldüğü
+    /// için <see cref="TepePayi"/> kadar pay bırakılır: tavanı geçebilecek tepe her zaman sınırlanır).
+    /// </summary>
+    public static bool SinirlanirMi(SesOlcum o, double hedef, double tavan, double telafi = 0) =>
+        o.Tepe + TepePayi + (hedef - o.Yukseklik) + telafi > tavan;
 
     /// <summary>
     /// Ölçümden sonra karar: hedefe 0,5 LU yakınsa dokunulmaz; yüksek ses "yalnızca kısık sesi yükselt" seçiliyse
@@ -187,19 +223,21 @@ public static class Esitleme
     /// <summary>
     /// Deneme ölçümünden sonra yeni telafi (dB): ölçülen yükseklik hedefin altındaysa eksik kadar artar, üstündeyse azalır;
     /// 0 ile <see cref="EnCokTelafi"/> arasında kalır. Değişmesi gerekmiyorsa (hedefte ya da sınırda) null.
+    /// <paramref name="kayipli"/> (AAC çıktı, deneme AAC'ye çevrilip ölçüldü): hedefe <see cref="KayipliPayi"/> içinde
+    /// gelinene kadar <see cref="KayipliAdim"/> adımla; AAC yüksekliği artırdıysa telafi eksi olabilir.
     /// </summary>
-    public static (double? Yeni, bool Sinir) TelafiAdimi(double telafi, double olculen, double hedef)
+    public static (double? Yeni, bool Sinir) TelafiAdimi(double telafi, double olculen, double hedef, bool kayipli = false)
     {
         var eksik = hedef - olculen;
-        if (Math.Abs(eksik) <= TelafiPayi)
+        if (Math.Abs(eksik) <= (kayipli ? KayipliPayi : TelafiPayi))
         {
             return (null, false);
         }
 
-        var istenen = Math.Max(0, telafi + eksik);
-        var sinir = istenen > EnCokTelafi;
-        var yeni = Math.Round(Math.Min(istenen, EnCokTelafi), 2);
-        return Math.Abs(yeni - telafi) < 0.05 ? (null, sinir) : (yeni, sinir);
+        var istenen = kayipli ? telafi + eksik : Math.Max(0, telafi + eksik);
+        var sinir = Math.Abs(istenen) > EnCokTelafi;
+        var yeni = Math.Round(Math.Clamp(istenen, -EnCokTelafi, EnCokTelafi), 2);
+        return Math.Abs(yeni - telafi) < (kayipli ? KayipliAdim : 0.05) ? (null, sinir) : (yeni, sinir);
     }
 
     /// <summary>

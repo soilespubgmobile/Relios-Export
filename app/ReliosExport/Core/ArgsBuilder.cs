@@ -1275,7 +1275,8 @@ public static class ArgsBuilder
         if (esitleme)
         {
             var o = olcum!;
-            esitlemeSinirli = Esitleme.SinirlanirMi(o, s.EsitlemeHedef, s.SinirlayiciTavan) || telafi > 0;
+            // Telafi de kazançtır: AAC'nin payı da tepeyi tavanın üstüne çıkarabilir (tepe tavana çok yakınsa).
+            esitlemeSinirli = Esitleme.SinirlanirMi(o, s.EsitlemeHedef, s.SinirlayiciTavan, telafi);
             af.Add($"volume={Db(s.EsitlemeHedef - o.Yukseklik + telafi)}dB");
         }
 
@@ -1347,6 +1348,28 @@ public static class ArgsBuilder
         var af = SesFiltreleri(s, harici: false, ses.Kanal, olcum, telafi, ses.OrnekHizi, out _);
         af.Add(Esitleme.OlcumFiltresi);
         args.AddRange(["-af", string.Join(',', af), "-f", "null", "-"]);
+        return args;
+    }
+
+    /// <summary>
+    /// AAC çıktıda telafi denemesi, 1. adım: ses kodlamadaki zincir (sabit kazanç + telafi, gerekirse sınırlayıcı) ve
+    /// aynı kodlayıcı ayarlarıyla (FDK AAC) geçici dosyaya kodlanır (yalnızca ses). 2. adımda dosya
+    /// <see cref="Esitleme.SonucOlcumKomutu"/> ile ölçülür. FDK AAC aynı sesten aynı sonucu verdiği için ölçülen
+    /// değer, asıl kodlamadaki sesin yüksekliğidir.
+    /// </summary>
+    public static List<string> DenemeKodlamaKomutu(
+        SesAyarlari s, string input, SesSecimi ses, double sureSaniye, SesOlcum olcum, double telafi, string cikti)
+    {
+        var harici = ses.Tur == SesSecimTuru.HariciDosya;
+        var args = new List<string> { "-hide_banner", "-nostdin", "-nostats", "-y", "-i", harici ? ses.Dosya! : input };
+        args.AddRange(["-map", harici ? "0:a:0" : "0:a:" + ses.Iz.ToString(Inv), "-vn", "-sn", "-dn"]);
+        if (sureSaniye > 0)
+        {
+            args.AddRange(["-t", sureSaniye.ToString("0.###", Inv)]);
+        }
+
+        Ses(args, s, harici: false, ses.Kanal, olcum, ses.OrnekHizi, telafi);
+        args.AddRange(["-f", "mp4", cikti]);
         return args;
     }
 

@@ -367,6 +367,8 @@ jobs:
           # Yuksek degisken: ~-7 LUFS, 16 bit 48 kHz (yalnizca yukselt: dokunulmamali, bit bit ayni).
           # Sonu kisik / sonu yuksek: son 3 sn sesin geri kalanindan 6 dB kisik / yuksek. loudnorm'un olcumu sesin son
           # ~2,9 sn'sini iki kez sayar: bu seslerde cikti -13,4 / -15,0 olurdu; BS.1770 olceriyle tam -14 olmali.
+          # Tizli pembe / beyaz gurultu: tizi bol ses. AAC 128 kb/s ~17 kHz ustunu keser, olculen yukseklik duser (kullanicinin
+          # OBS kaydinda 0,16 LU; beyaz gurultude ~1,5 LU). Program sesi AAC'ye cevirip dener ve kaybi telafi eder: tam -14.
           $deg = '(0.03+0.015*sin(2*PI*0.1*t))'
           $kaynaklar = @(
             @{ ad = 'yuksek_ton'; ses = 'aevalsrc=if(gte(t\,1)\,0.9*sin(2*PI*440*t)\,0)|if(gte(t\,1)\,0.9*sin(2*PI*660*t)\,0):s=48000:d=4'; d = 4; c = 'pcm_s24le' },
@@ -378,7 +380,9 @@ jobs:
             @{ ad = 'genis_aralik'; ses = 'aevalsrc=if(lt(t\,4)\,0.0076\,0.06)*sin(2*PI*440*t)|if(lt(t\,4)\,0.0076\,0.06)*sin(2*PI*550*t):s=48000:d=12'; d = 12; c = 'pcm_s24le' },
             @{ ad = 'yuksek_degisken'; ses = 'aevalsrc=(0.40+0.12*sin(2*PI*0.1*t))*sin(2*PI*1000*t)|(0.40+0.12*sin(2*PI*0.1*t))*sin(2*PI*1250*t):s=48000:d=12'; d = 12; c = 'pcm_s16le' },
             @{ ad = 'kisik_son'; ses = 'aevalsrc=if(lt(t\,9)\,0.03\,0.015)*sin(2*PI*440*t)|if(lt(t\,9)\,0.03\,0.015)*sin(2*PI*550*t):s=48000:d=12'; d = 12; c = 'pcm_s24le' },
-            @{ ad = 'yuksek_son'; ses = 'aevalsrc=if(lt(t\,9)\,0.015\,0.03)*sin(2*PI*440*t)|if(lt(t\,9)\,0.015\,0.03)*sin(2*PI*550*t):s=48000:d=12'; d = 12; c = 'pcm_s24le' }
+            @{ ad = 'yuksek_son'; ses = 'aevalsrc=if(lt(t\,9)\,0.015\,0.03)*sin(2*PI*440*t)|if(lt(t\,9)\,0.015\,0.03)*sin(2*PI*550*t):s=48000:d=12'; d = 12; c = 'pcm_s24le' },
+            @{ ad = 'tizli_pembe'; ses = 'anoisesrc=c=pink:r=48000:a=0.1:s=1234:d=12'; d = 12; c = 'pcm_s24le' },
+            @{ ad = 'tizli_beyaz'; ses = 'anoisesrc=c=white:r=48000:a=0.02:s=4321:d=12'; d = 12; c = 'pcm_s24le' }
           )
           $Kay = @{}  # (PowerShell degisken adlarinda buyuk / kucuk harf ayirmaz: $k ile ayni olmasin)
           foreach ($k in $kaynaklar) {
@@ -413,7 +417,11 @@ jobs:
             @{ ad = 'Esitleme: kisik ses, mono cikti -> once mono, sonra -14'; src = $Kay.kisik_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.Kanal=Mono'); arac = 'yukseklik'; kip = @('lufs'); karar = 'Dogrusal' },
             @{ ad = 'Esitleme + ayni adli WAV (kisik) -> olcum WAV''dan, dogrusal'; src = $Kay.harici_kisik; arg = $yt + $esit; arac = 'yukseklik'; kip = @('lufs'); karar = 'Dogrusal' },
             @{ ad = 'Esitleme + iki ses izli video -> kayipsiz (kisik) iz olculur, dogrusal'; src = $Kay.cok_izli; arg = $yt + $esit; arac = 'yukseklik'; kip = @('lufs'); karar = 'Dogrusal' },
-            @{ ad = 'Esitleme + YouTube varsayilani (FDK AAC 128 kb/s)'; src = $Kay.kisik_degisken; arg = @('--profil', 'youtube'); arac = 'yukseklik'; kip = @('lufs', '--codec', 'aac'); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme + YouTube varsayilani (FDK AAC 128 kb/s)'; src = $Kay.kisik_degisken; arg = @('--profil', 'youtube'); arac = 'yukseklik'; kip = @('lufs', '--codec', 'aac', '--pay', '0.05'); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme + AAC 128 kb/s, tizi bol ses (pembe gurultu) -> AAC payi telafi edilir, tam -14'; src = $Kay.tizli_pembe; arg = @('--profil', 'youtube'); arac = 'yukseklik'; kip = @('lufs', '--codec', 'aac', '--pay', '0.05'); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme + AAC 128 kb/s, tizi cok bol ses (beyaz gurultu) -> AAC payi telafi edilir, tam -14'; src = $Kay.tizli_beyaz; arg = @('--profil', 'youtube'); arac = 'yukseklik'; kip = @('lufs', '--codec', 'aac', '--pay', '0.05'); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme + AAC 64 kb/s, tizi bol ses (pembe gurultu) -> AAC payi telafi edilir, tam -14'; src = $Kay.tizli_pembe; arg = @('--profil', 'youtube', '--ayarla', 'Ses.Fdk.BitHizi=64'); arac = 'yukseklik'; kip = @('lufs', '--codec', 'aac', '--pay', '0.05'); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme + WAV, tizi cok bol ses (beyaz gurultu) -> kayipsiz, deneme yok, tam -14'; src = $Kay.tizli_beyaz; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.tizli_beyaz); karar = 'Dogrusal' },
             @{ ad = 'Esitleme: sonu kisik ses (son 3 sn -6 dB) -> tam -14 (loudnorm olcumuyle -13,4 olurdu)'; src = $Kay.kisik_son; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.kisik_son); karar = 'Dogrusal' },
             @{ ad = 'Esitleme: sonu yuksek ses (son 3 sn +6 dB) -> tam -14 (loudnorm olcumuyle -15,0 olurdu)'; src = $Kay.yuksek_son; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.yuksek_son); karar = 'Dogrusal' },
             @{ ad = 'Esitleme + x264 2 gecis (4000 kb/s) -> yalnizca yukseltildi'; src = $Kay.kisik_degisken; arg = $yt + $esit + @('--ayarla', 'Video.X264.Mod=IkiGecis', '--ayarla', 'Video.X264.BitHizi=4000'); arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.kisik_degisken); karar = 'Dogrusal' },

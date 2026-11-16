@@ -740,6 +740,42 @@ internal static class BirimKontrol
         Kontrol("Telafi: -24 ölçüldü → en çok 6", "6.00/sinir", Adim(0, -24));
         Kontrol("Telafi: sınırda, yine eksik → dur", "dur/sinir", Adim(6, -15));
         Kontrol("Telafi: hedefi geçti → azalır", "2.50", Adim(3, -13.5));
+
+        // AAC çıktı: deneme ses AAC'ye çevrilip ölçülür (AAC tizleri keser, yükseklik biraz düşer); 0,02 LU içinde
+        // durur, adım 0,01, AAC yüksekliği artırdıysa eksi olabilir. WAV'da (yalnızca sınırlayıcı) 0,2 LU.
+        string AdimAac(double telafi, double olculen)
+        {
+            var (yeni, sinir) = Esitleme.TelafiAdimi(telafi, olculen, -14, kayipli: true);
+            return (yeni?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) ?? "dur") + (sinir ? "/sinir" : string.Empty);
+        }
+
+        Kontrol("AAC telafi: -14,16 ölçüldü (kullanıcının OBS kaydı, 128 kb/s) → 0,16", "0.16", AdimAac(0, -14.16));
+        Kontrol("AAC telafi: 0,16 ile -14,003 → dur", "dur", AdimAac(0.16, -14.003));
+        Kontrol("AAC telafi: 0,16 ile -14,03 → 0,19", "0.19", AdimAac(0.16, -14.03));
+        Kontrol("AAC telafi: AAC yüksekliği artırdı (-13,9) → -0,10", "-0.10", AdimAac(0, -13.9));
+        Kontrol("AAC telafi: en çok 6 dB", "6.00/sinir", AdimAac(0, -24));
+        Kontrol("Sınırlayıcı telafisi (WAV): -14,16 (0,2 içinde) → dur", "dur", Adim(0, -14.16));
+        Kontrol("Kayıplı mı: TikTok sesi (WAV)", "False", Esitleme.KayipliMi(Varsayilanlar.TikTok().Ses).ToString());
+        Kontrol("Kayıplı mı: YouTube sesi (FDK AAC)", "True", Esitleme.KayipliMi(Varsayilanlar.YouTube().Ses).ToString());
+        Kontrol("Telafi tepeyi tavana çıkarırsa sınırlayıcı (tepe -12,1 + 11 + 0,2 > -1)", "True", (rd with { Telafi = 0.2 }).Sinirli.ToString());
+        Kontrol("Bilgi satırı (AAC telafisi 0,16)", "-25,0 → -14 LUFS (bütün ses +11,2 dB)", (rd with { Telafi = 0.16, Kayipli = true }).BilgiMetni);
+        Kontrol("Ayrıntı (AAC telafisi)", "True", (rd with { Telafi = 0.16, Kayipli = true }).Ayrinti
+            .Contains("AAC kodlaması tizleri kestiği için yükseklik 0,2 LU düşüyordu: ses 0,2 dB daha yükseltildi", StringComparison.Ordinal).ToString());
+
+        var ytAac = Varsayilanlar.YouTube();
+        var ytAacSes = ArgsBuilder.SesSec(ytAac.Ses, Kaynak48(), "KAYNAK.mp4");
+        var aacKomut = " " + string.Join(' ', ArgsBuilder.Olustur(ytAac, Kaynak48(), "KAYNAK.mp4", ytAacSes, "CIKTI.mov", "GECIS",
+            new SesOlcum(-21.37, -10, 25), 0.16).Gecisler[0]) + " ";
+        Iceriyor("YouTube (AAC) + eşitleme, AAC telafisi 0,16: kazanç 7,53 dB, sınırlayıcı yok", aacKomut,
+            " -af volume=7.53dB,aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac ");
+        Icermiyor("YouTube (AAC) + eşitleme, AAC telafisi: tepe aşmıyorsa sınırlayıcı yok", aacKomut, "alimiter");
+        var aacDeneme = " " + string.Join(' ', ArgsBuilder.DenemeKodlamaKomutu(ytAac.Ses, "KAYNAK.mp4", ytAacSes, 10,
+            new SesOlcum(-21.37, -10, 25), 0.16, "DENEME.m4a")) + " ";
+        Iceriyor("AAC denemesi: kodlamadaki ses zinciri ve aynı FDK AAC ayarı, yalnızca ses", aacDeneme,
+            " -map 0:a:0 -vn -sn -dn -t 10 -af volume=7.53dB,aresample=48000:resampler=soxr:precision=33:dither_method=triangular"
+            + " -c:a libfdk_aac -profile:a aac_low -b:a 128k ");
+        Iceriyor("AAC denemesi: geçici dosyaya", aacDeneme, " -f mp4 DENEME.m4a ");
+        Icermiyor("AAC denemesi: görüntü yok", aacDeneme, " -c:v ");
         Kontrol("Biten satır (zaten yüksek)", "-9,2 LUFS (dokunulmadı)",
             Esitleme.KararVer(ka, new SesOlcum(-9.2, -3, 5)).SatirMetni ?? "yok");
         Iceriyor("Sonuç ölçüm komutu (ölçümle aynı ölçer)", " " + string.Join(' ', Esitleme.SonucOlcumKomutu("CIKTI.mov")) + " ",

@@ -3,7 +3,7 @@
 
 Kullanım: python3 -I ses_yukseklik_kontrol.py <çıktı> <kip> [--hz 48000] [--hedef -14] [--tavan -1]
                                                [--kaynak <kaynak>] [--program <programın ölçtüğü LUFS>]
-                                               [--codec pcm_s16le]
+                                               [--codec pcm_s16le] [--pay 0.05]
 
 sinir:    ses yükseltilmiş, sınırlayıcı açık: en büyük örnek tavanın altında (16 bit titreşim payı 0,05 dB),
           örneklerin arasındaki gerçek tepe de tavanın altında (+ 0,3 dB pay; sınırlayıcı 192 kHz'te çalışır),
@@ -15,6 +15,7 @@ dogrusal: lufs + ses yalnızca yükseltilmiş / kısılmış olmalı: çıktı =
 tepeli:   kısık + ani tepeli ses (sabit kazanç + sınırlayıcı + telafi): yükseklik hedefte (± 0,25 LU: telafi 0,2 LU
           içinde durur), gerçek tepe tavanın altında, hiç kırpılma yok.
 --program: programın satırda gösterdiği sonuç (kendi ölçümü) bu aracın ölçtüğüyle 0,05 LU içinde aynı olmalı.
+--pay:     yüksekliğin hedefe uzaklığı için başka pay (ör. AAC çıktıda telafiyle 0,05).
 
 Yükseklik ITU-R BS.1770-4 ölçeriyle (FFmpeg ebur128) ölçülür: tümleşik yükseklik çerçeve bilgisinden 0,001
 hassasiyetle (özette yalnızca 0,1), gerçek tepe özetten.
@@ -34,6 +35,7 @@ TAVAN = float(_ek.get("--tavan", "-1"))
 KAYNAK = _ek.get("--kaynak")
 PROGRAM = _ek.get("--program")
 CODEC = _ek.get("--codec", "pcm_s16le")
+PAY = _ek.get("--pay")
 if kip not in ("sinir", "kirpik", "lufs", "dogrusal", "tepeli"):
     sys.exit(f"bilinmeyen kip: {kip}")
 if kip == "dogrusal" and not KAYNAK:
@@ -104,7 +106,7 @@ if kip in ("sinir", "kirpik"):
         chk("Tam ölçekte kırpılan örnek (sınırlayıcı kapalı)", "> 100", kirpik, kirpik > 100)
 else:
     yukseklik, tepe = r128(cikti)
-    pay = 0.25 if kip == "tepeli" else 0.1
+    pay = float(PAY) if PAY is not None else (0.25 if kip == "tepeli" else 0.1)
     chk("Tümleşik yükseklik (LUFS)", f"{HEDEF:.2f} ± {pay}", f"{yukseklik:.3f}", abs(yukseklik - HEDEF) <= pay)
     if kip == "tepeli":
         s = ornekler(cikti, "s16le")

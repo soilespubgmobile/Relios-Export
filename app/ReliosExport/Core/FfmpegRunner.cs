@@ -221,44 +221,78 @@ public static class Exporter
             rapor = Esitleme.KararVer(a.Ses, ArgsBuilder.OlcumOku(string.Join('\n', cikti)));
             onInfo?.Invoke(Describe(media, a, ses, rapor));
 
-            if (rapor is { Sinirli: true, Olcum: { } o })
+            var kayipli = Esitleme.KayipliMi(a.Ses);
+            if (rapor is { Uygulandi: true, Olcum: { } o } && (rapor.Sinirli || kayipli))
             {
-                // Kazanç tepeyi tavanın üstüne çıkarıyor: tepeleri sınırlayıcı tutar, kıstığı kadar yükseklik eksik kalır.
-                // Kodlamadaki ses zinciriyle deneme ölçümü yapılır (yalnızca ses), eksik kadar telafi eklenir.
+                // Telafi denemesi (yalnızca ses): kodlamadaki ses zinciriyle sesin yüksekliği ölçülür, eksik kadar telafi
+                // eklenip yeniden denenir. Kazanç tepeyi tavanın üstüne çıkarıyorsa tepeleri sınırlayıcı tutar, kıstığı
+                // kadar yükseklik eksik kalır. Çıktının sesi AAC ise ses AAC'ye de çevrilip ölçülür: AAC tizleri kestiği
+                // için yükseklik biraz düşer (kullanıcının OBS kaydında 128 kb/s'de 0,16 LU), o da telafi edilir.
                 var telafi = 0.0;
                 var sinir = false;
-                for (var d = 0; d < Esitleme.EnCokDeneme; d++)
+                var denemeDosyasi = kayipli
+                    ? Path.Combine(Path.GetTempPath(), "Relios Export", "deneme-" + Guid.NewGuid().ToString("N") + ".m4a")
+                    : null;
+                try
                 {
-                    onInfo?.Invoke(Describe(media, a, ses, rapor) + " · sınırlayıcının payı ölçülüyor");
-                    var denemeCikti = new List<string>();
-                    var deneme = ArgsBuilder.DenemeOlcumKomutu(a.Ses, input, ses, media.DurationSeconds, o, telafi);
-                    try
+                    for (var d = 0; d < Esitleme.EnCokDeneme; d++)
                     {
-                        await FfmpegRunner.RunAsync(deneme, 0, null, ct, denemeCikti);
-                    }
-                    catch (FfmpegHatasi ex)
-                    {
-                        ex.GunlukDosyasi = HataAciklamasi.GunlukYaz(input, GunlukMetni(ex, input, profile, media, a, ses, rapor, [deneme]));
-                        throw;
-                    }
+                        onInfo?.Invoke(Describe(media, a, ses, rapor) + (kayipli
+                            ? (rapor.Sinirli ? " · sınırlayıcının ve AAC'nin payı ölçülüyor" : " · AAC'nin payı ölçülüyor")
+                            : " · sınırlayıcının payı ölçülüyor"));
+                        var denemeCikti = new List<string>();
+                        var denemeler = new List<List<string>>();
+                        if (denemeDosyasi is not null)
+                        {
+                            denemeler.Add(ArgsBuilder.DenemeKodlamaKomutu(a.Ses, input, ses, media.DurationSeconds, o, telafi, denemeDosyasi));
+                            denemeler.Add(Esitleme.SonucOlcumKomutu(denemeDosyasi));
+                        }
+                        else
+                        {
+                            denemeler.Add(ArgsBuilder.DenemeOlcumKomutu(a.Ses, input, ses, media.DurationSeconds, o, telafi));
+                        }
 
-                    if (ArgsBuilder.OlcumOku(string.Join('\n', denemeCikti)) is not { } olculen)
-                    {
-                        break;
-                    }
+                        try
+                        {
+                            if (denemeDosyasi is not null)
+                            {
+                                Directory.CreateDirectory(Path.GetDirectoryName(denemeDosyasi)!);
+                                await FfmpegRunner.RunAsync(denemeler[0], 0, null, ct);
+                            }
 
-                    var (yeni, sinirda) = Esitleme.TelafiAdimi(telafi, olculen.Yukseklik, a.Ses.EsitlemeHedef);
-                    sinir = sinirda;
-                    if (yeni is not { } t)
-                    {
-                        break;
-                    }
+                            await FfmpegRunner.RunAsync(denemeler[^1], 0, null, ct, denemeCikti);
+                        }
+                        catch (FfmpegHatasi ex)
+                        {
+                            ex.GunlukDosyasi = HataAciklamasi.GunlukYaz(input, GunlukMetni(ex, input, profile, media, a, ses, rapor, denemeler));
+                            throw;
+                        }
 
-                    telafi = t;
-                    rapor = rapor with { Telafi = telafi, TelafiSiniri = sinir };
+                        if (ArgsBuilder.OlcumOku(string.Join('\n', denemeCikti)) is not { } olculen)
+                        {
+                            break;
+                        }
+
+                        var (yeni, sinirda) = Esitleme.TelafiAdimi(telafi, olculen.Yukseklik, a.Ses.EsitlemeHedef, kayipli);
+                        sinir = sinirda;
+                        if (yeni is not { } t)
+                        {
+                            break;
+                        }
+
+                        telafi = t;
+                        rapor = rapor with { Telafi = telafi, TelafiSiniri = sinir, Kayipli = kayipli };
+                    }
+                }
+                finally
+                {
+                    if (denemeDosyasi is not null)
+                    {
+                        DeleteQuietly(denemeDosyasi);
+                    }
                 }
 
-                rapor = rapor with { Telafi = telafi, TelafiSiniri = sinir };
+                rapor = rapor with { Telafi = telafi, TelafiSiniri = sinir, Kayipli = kayipli };
                 onInfo?.Invoke(Describe(media, a, ses, rapor));
             }
         }
