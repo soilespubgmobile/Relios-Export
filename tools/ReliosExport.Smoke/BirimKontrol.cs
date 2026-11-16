@@ -25,6 +25,7 @@ internal static class BirimKontrol
         AyarGecisi();
         Klasorler();
         HataYazilari();
+        FdkSinirlari();
         Console.WriteLine();
         Console.WriteLine($"Birim kontrol: {_ok + _fark} kontrol, {_fark} fark.");
         return _fark == 0 ? 0 : 1;
@@ -1082,6 +1083,70 @@ internal static class BirimKontrol
     {
         var plan = ArgsBuilder.Olustur(a, m, "KAYNAK.mp4", SesSecimi.Yok, "CIKTI.mp4", "GECIS");
         return " " + string.Join(' ', plan.Gecisler[0]) + " ";
+    }
+
+    /// <summary>
+    /// FDK AAC'de FFmpeg'in kabul ettiği sınırlar (kesim frekansı, DRC / sıkıştırma hedefi, program seviyesi; dışı
+    /// kodlayıcıyı açmaz) ve panelde "Özel boyut" seçimi (liste başka boyuta atlamaz).
+    /// </summary>
+    private static void FdkSinirlari()
+    {
+        Console.WriteLine();
+        Console.WriteLine("--- FDK AAC sınırları ve \"Özel boyut\" seçimi");
+        static MediaInfo Kaynak(int hz) => new(1920, 1080, 1, 1, 0, 10, true, 30, "bt709", "bt709", "tv")
+        {
+            VideoCodec = "h264",
+            VideoProfil = "High",
+            VideoSeviye = 40,
+            SesAkislari = [new SesAkisi(1, "aac", hz, 2, null, null)],
+        };
+
+        static string Komut(ProfilAyarlari a, int hz)
+        {
+            var m = Kaynak(hz);
+            var ses = ArgsBuilder.SesSec(a.Ses, m, "KAYNAK.mp4");
+            var plan = ArgsBuilder.Olustur(a, m, "KAYNAK.mp4", ses, "CIKTI.mov", "GECIS");
+            return " " + string.Join(' ', plan.Gecisler[0]) + " ";
+        }
+
+        var f = new FdkAyarlari { Kesim = 99999, DrcHedef = 5, SikistirmaHedef = -50, ProgramSeviyesi = -10 };
+        Kontrol("Kesim en çok 20000 Hz", "20000", f.Kesim.ToString());
+        f.Kesim = -5;
+        Kontrol("Kesim eksi → 0 (otomatik)", "0", f.Kesim.ToString());
+        Kontrol("DRC hedefi en çok 0 dB", "0", f.DrcHedef?.ToString() ?? "boş");
+        Kontrol("Sıkıştırma hedefi en az -31 dB", "-31", f.SikistirmaHedef?.ToString() ?? "boş");
+        Kontrol("Program seviyesi aralıktaysa olduğu gibi", "-10", f.ProgramSeviyesi?.ToString() ?? "boş");
+        f.DrcHedef = null;
+        Kontrol("DRC hedefi boş (kullanılmaz)", "boş", f.DrcHedef?.ToString() ?? "boş");
+        var y = Varsayilanlar.YouTube();
+        y.Ses.Fdk.Kesim = 100;
+        Iceriyor("Kesim 100 Hz, 48 kHz: FFmpeg'in en azına (188) yükseltilir", Komut(y, 48000), " -cutoff 188 ");
+        y.Ses.OrnekHizi = 44100;
+        Iceriyor("Kesim 100 Hz, 44,1 kHz: 173", Komut(y, 48000), " -cutoff 173 ");
+        y.Ses.OrnekHizi = null;
+        Iceriyor("Kesim 100 Hz, örnekleme kaynakla aynı (96 kHz): 375", Komut(y, 96000), " -cutoff 375 ");
+        y.Ses.OrnekHizi = 48000;
+        y.Ses.Fdk.Kesim = 16000;
+        Iceriyor("Kesim 16000 Hz olduğu gibi", Komut(y, 48000), " -cutoff 16000 ");
+        y.Ses.Fdk.Kesim = 0;
+        Icermiyor("Kesim 0: otomatik (-cutoff yok)", Komut(y, 48000), " -cutoff ");
+
+        var v = new VideoAyarlari { Cozunurluk = CozunurlukModu.Kaynak };
+        v.BoyutSecimi = "ozel";
+        Kontrol("Kaynakla aynı → Özel boyut: liste Özel'de kalır", "ozel Hedef", $"{v.BoyutSecimi} {v.Cozunurluk}");
+        v.BoyutSecimi = "1080x1920";
+        Kontrol("Özel → 1080×1920", "1080x1920", v.BoyutSecimi);
+        v.BoyutSecimi = "ozel";
+        Kontrol("1080×1920 → Özel boyut: liste Özel'de, kutularda 1080×1920 kalır", "ozel 1080x1920", $"{v.BoyutSecimi} {v.Genislik}x{v.Yukseklik}");
+        v.Genislik = 1000;
+        Kontrol("Özel boyutta kutuya yazılan genişlik", "ozel 1000", $"{v.BoyutSecimi} {v.Genislik}");
+        v.BoyutSecimi = "kaynak";
+        Kontrol("Özel → Kaynakla aynı", "kaynak Kaynak", $"{v.BoyutSecimi} {v.Cozunurluk}");
+        var kayit = new ProfilAyarlari();
+        kayit.Video.BoyutSecimi = "ozel";
+        kayit.Video.Genislik = 1080;
+        kayit.Video.Yukseklik = 1920;
+        Kontrol("Özel seçimi ayar dosyasına yazılmaz (açılışta listedeki boyut görünür)", "1080x1920", AyarDosyasi.Kopyala(kayit).Video.BoyutSecimi);
     }
 
     /// <summary>Satırda görünen hata yazıları Türkçe ve anlaşılır (okunamayan video, kayıt yeri, disk).</summary>

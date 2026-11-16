@@ -117,6 +117,7 @@ public sealed class VideoAyarlari : Gozlenebilir
     private KapBicimi _kap = KapBicimi.Mp4;
     private X264Ayarlari _x264 = new();
     private NvencAyarlari _nvenc = new();
+    private bool _ozelBoyut;
 
     public VideoAyarlari()
     {
@@ -152,32 +153,41 @@ public sealed class VideoAyarlari : Gozlenebilir
 
     public NvencAyarlari Nvenc { get => _nvenc; set => Bagla(ref _nvenc, value); }
 
-    /// <summary>Panelde boyut listesi: "kaynak" ya da "GxY".</summary>
+    /// <summary>
+    /// Panelde boyut listesi: "kaynak", "ozel" ya da "GxY". "Özel boyut" seçilince liste orada kalır (genişlik ve
+    /// yükseklik kutulardan girilir; o an listedeki bir boyutta olsa da liste o boyuta atlamaz). Bu seçim yalnızca
+    /// panelde tutulur, ayar dosyasına yazılmaz: açılışta kutulardaki boyut listede varsa o görünür.
+    /// </summary>
     [JsonIgnore]
     public string BoyutSecimi
     {
-        get => Cozunurluk == CozunurlukModu.Kaynak ? "kaynak" : $"{Genislik}x{Yukseklik}";
+        get => Cozunurluk == CozunurlukModu.Kaynak ? "kaynak" : _ozelBoyut ? "ozel" : $"{Genislik}x{Yukseklik}";
         set
         {
             if (value == "kaynak")
             {
+                _ozelBoyut = false;
                 Cozunurluk = CozunurlukModu.Kaynak;
+                Bildir(nameof(BoyutSecimi));
                 return;
             }
 
             if (value == "ozel")
             {
-                // Listede olmayan boyut: genişlik ve yükseklik kutulardan girilir.
+                _ozelBoyut = true;
                 Cozunurluk = CozunurlukModu.Hedef;
+                Bildir(nameof(BoyutSecimi));
                 return;
             }
 
             var p = (value ?? string.Empty).Split('x');
             if (p.Length == 2 && int.TryParse(p[0], out var w) && int.TryParse(p[1], out var h))
             {
+                _ozelBoyut = false;
                 Genislik = w;
                 Yukseklik = h;
                 Cozunurluk = CozunurlukModu.Hedef;
+                Bildir(nameof(BoyutSecimi));
             }
         }
     }
@@ -736,8 +746,13 @@ public sealed class FdkAyarlari : Gozlenebilir
     /// <summary>kb/s (CBR).</summary>
     public int BitHizi { get => _bitHizi; set => Set(ref _bitHizi, Math.Clamp(value, 8, 800)); }
 
-    /// <summary>Kesim frekansı (Hz); 0: otomatik.</summary>
-    public int Kesim { get => _kesim; set => Set(ref _kesim, Math.Clamp(value, 0, 24000)); }
+    /// <summary>
+    /// Kesim frekansı (Hz); 0: otomatik. En çok 20000 (FFmpeg'in FDK AAC sınırı; üstü kodlayıcıyı açmaz). En az
+    /// sınırı örnekleme hızına bağlıdır (48 kHz'te 188): komut yazılırken ona yükseltilir.
+    /// </summary>
+    public int Kesim { get => _kesim; set => Set(ref _kesim, Math.Clamp(value, 0, EnCokKesim)); }
+
+    public const int EnCokKesim = 20000;
 
     public bool Afterburner { get => _afterburner; set => Set(ref _afterburner, value); }
 
@@ -748,11 +763,14 @@ public sealed class FdkAyarlari : Gozlenebilir
 
     public int? SikistirmaProfili { get => _sikistirmaProfili; set => Set(ref _sikistirmaProfili, value); }
 
-    public int? DrcHedef { get => _drcHedef; set => Set(ref _drcHedef, value); }
+    public int? DrcHedef { get => _drcHedef; set => Set(ref _drcHedef, Seviye(value)); }
 
-    public int? SikistirmaHedef { get => _sikistirmaHedef; set => Set(ref _sikistirmaHedef, value); }
+    public int? SikistirmaHedef { get => _sikistirmaHedef; set => Set(ref _sikistirmaHedef, Seviye(value)); }
 
-    public int? ProgramSeviyesi { get => _programSeviyesi; set => Set(ref _programSeviyesi, value); }
+    public int? ProgramSeviyesi { get => _programSeviyesi; set => Set(ref _programSeviyesi, Seviye(value)); }
+
+    /// <summary>DRC / sıkıştırma hedefi ve program seviyesi: FFmpeg'de -31 ile 0 dB arası (dışı kodlayıcıyı açmaz).</summary>
+    private static int? Seviye(int? v) => v is { } x ? Math.Clamp(x, -31, 0) : null;
 
     [JsonIgnore]
     public override string Ozet =>

@@ -38,6 +38,9 @@ internal static class ArayuzTaramasi
 {
     private const string GecisAdi = "tarama-gecis";
 
+    /// <summary>Ön ayar adı: I / ı / İ / i yok (büyük-küçük harf eşleşmesi işletim sisteminin diline bağlı olmasın).</summary>
+    private const string OnAyarAdi = "Deneme ön ses";
+
     /// <summary>WPF bağlama iletilerini toplar; pencereler açılmadan önce kurulur.</summary>
     internal sealed class BaglamaDinleyici : TraceListener
     {
@@ -92,6 +95,8 @@ internal static class ArayuzTaramasi
 
         void Bilgi(string metin) => rapor.AppendLine("     | " + metin);
 
+        void Durumlu(string ad, bool ok, string iyi, string kotu) => Kontrol(ad, iyi, ok ? iyi : kotu, ok);
+
         void Bolum(string ad) => rapor.AppendLine().AppendLine("--- " + ad);
 
         Directory.CreateDirectory(cikti);
@@ -135,7 +140,7 @@ internal static class ArayuzTaramasi
             }
             catch (FfmpegHatasi ex)
             {
-                return Kisa(ex.Message);
+                return Kisa(ex.Message, 900);
             }
             catch (Exception ex) when (ex is InvalidOperationException or IOException or Win32Exception or ArgumentException)
             {
@@ -209,7 +214,7 @@ internal static class ArayuzTaramasi
             {
                 var gercek = Bicimle(ozellik?.GetValue(kaynakNesne));
                 Kontrol($"{anahtar}: kutuda ayarın değeri görünüyor", gercek, tb.Text, tb.Text == gercek);
-                Kontrol($"{anahtar} = {tb.Text}: komuta / özete yansıyor", "farklı", "aynı", await o.Durum() != ilkDurum);
+                Durumlu($"{anahtar} = {tb.Text}: komuta / özete yansıyor", await o.Durum() != ilkDurum, "farklı", "aynı");
                 await Calistir(o, $"{anahtar} = {tb.Text}");
             }
 
@@ -241,7 +246,7 @@ internal static class ArayuzTaramasi
             if (tip is not null && tip != typeof(string))
             {
                 await Yaz(w, tb, "abc");
-                Kontrol($"{anahtar}: hatalı yazım (abc) ayara yazılmıyor", "aynı", "değişti", o.Model() == oncesi);
+                Durumlu($"{anahtar}: hatalı yazım (abc) ayara yazılmıyor", o.Model() == oncesi, "aynı", "değişti");
                 Kontrol($"{anahtar}: hatalı yazımdan sonra kutuda eski değer", ilkMetin, tb.Text, tb.Text == ilkMetin);
             }
 
@@ -261,11 +266,17 @@ internal static class ArayuzTaramasi
 
             // 5) Eski değer.
             await Yaz(w, tb, ilkMetin);
-            Kontrol($"{anahtar}: eski değere dönüldü", "aynı", "farklı", o.Model() == ilkModel);
+            Durumlu($"{anahtar}: eski değere dönüldü", o.Model() == ilkModel, "aynı", "farklı");
         }
+
+        TextBox AnaKutu(string yol) =>
+            Mantiksal(w.AyarPaneli).OfType<TextBox>().First(t => t.GetBindingExpression(TextBox.TextProperty)?.ParentBinding.Path.Path == yol);
 
         async Task ListeDene(ComboBox cb, Ortam o, string anahtar)
         {
+            (int G, int Y)? ilkBoyut = anahtar.EndsWith(".Video.BoyutSecimi", StringComparison.Ordinal)
+                ? (w.KontrolAyarlari.Video.Genislik, w.KontrolAyarlari.Video.Yukseklik)
+                : null;
             var ilkIndeks = cb.SelectedIndex;
             var ilkModel = o.Model();
             var ilkDurum = await o.Durum();
@@ -287,7 +298,7 @@ internal static class ArayuzTaramasi
                 cb.GetBindingExpression(Selector.SelectedValueProperty)?.UpdateTarget();
                 await Bosta(w);
                 Kontrol($"{anahtar} → {ad}: ekrandaki seçim ayarla aynı", gorunen, cb.SelectedIndex, cb.SelectedIndex == gorunen);
-                Kontrol($"{anahtar} → {ad}: ayar değişiyor", "değişti", "değişmedi", o.Model() != ilkModel);
+                Durumlu($"{anahtar} → {ad}: ayar değişiyor", o.Model() != ilkModel, "değişti", "değişmedi");
                 if (await o.Durum() != ilkDurum)
                 {
                     etkili++;
@@ -302,13 +313,31 @@ internal static class ArayuzTaramasi
 
             cb.SelectedIndex = ilkIndeks;
             await Bosta(w);
+
+            // "Özel boyut"a dönünce kutulardaki boyut korunur (son seçilen boyut kalır): kullanıcı gibi eski boyut yazılır.
+            if (o.Model() != ilkModel && anahtar.EndsWith(".Video.BoyutSecimi", StringComparison.Ordinal) && ilkBoyut is { } eski)
+            {
+                Durumlu($"{anahtar}: Özel boyut'a dönünce liste orada kalıyor", cb.SelectedValue as string == "ozel", "Özel boyut", cb.SelectedValue?.ToString() ?? "?");
+                await Yaz(w, AnaKutu("Video.Genislik"), eski.G.ToString(CultureInfo.InvariantCulture));
+                await Yaz(w, AnaKutu("Video.Yukseklik"), eski.Y.ToString(CultureInfo.InvariantCulture));
+            }
+
             Kontrol($"{anahtar}: seçenekler komuta / özete yansıyor", "en az biri", etkili + " seçenek", etkili > 0 || cb.Items.Count <= 1);
             if (ayni.Count > 0)
             {
                 Bilgi($"{anahtar}: bu ortamda komutu / özeti değiştirmeyen seçenek: {string.Join(", ", ayni)}");
             }
 
-            Kontrol($"{anahtar}: ilk seçime dönüldü", "aynı", "farklı", o.Model() == ilkModel);
+            // İlk seçime dönünce ayar aynı olmalı; değilse en azından komut ve özet aynı (ör. "Kaynakla aynı" kare hızında
+            // son seçilen sabit hız ayar dosyasında kalır ama kullanılmaz).
+            var donusModel = o.Model() == ilkModel;
+            var donusDurum = donusModel || await o.Durum() == ilkDurum;
+            if (!donusModel && donusDurum)
+            {
+                Bilgi($"{anahtar}: ilk seçime dönünce kullanılmayan bir değer ayarda kaldı (komut ve özet aynı)");
+            }
+
+            Durumlu($"{anahtar}: ilk seçime dönüldü (komut ve özet eskisi gibi)", donusDurum, "aynı", "farklı");
         }
 
         async Task OnayDene(CheckBox ch, Ortam o, string anahtar)
@@ -322,14 +351,14 @@ internal static class ArayuzTaramasi
                 var ad = d switch { true => "açık", false => "kapalı", _ => "hız ayarına göre" };
                 ch.IsChecked = d;
                 await Bosta(w);
-                Kontrol($"{anahtar} = {ad}: ayar değişiyor", "değişti", "değişmedi", o.Model() != ilkModel);
-                Kontrol($"{anahtar} = {ad}: komuta / özete yansıyor", "farklı", "aynı", await o.Durum() != ilkDurum);
+                Durumlu($"{anahtar} = {ad}: ayar değişiyor", o.Model() != ilkModel, "değişti", "değişmedi");
+                Durumlu($"{anahtar} = {ad}: komuta / özete yansıyor", await o.Durum() != ilkDurum, "farklı", "aynı");
                 await Calistir(o, $"{anahtar} = {ad}");
             }
 
             ch.IsChecked = ilk;
             await Bosta(w);
-            Kontrol($"{anahtar}: ilk duruma dönüldü", "aynı", "farklı", o.Model() == ilkModel);
+            Durumlu($"{anahtar}: ilk duruma dönüldü", o.Model() == ilkModel, "aynı", "farklı");
         }
 
         async Task Dene(Denetim d, Ortam o)
@@ -471,11 +500,37 @@ internal static class ArayuzTaramasi
         Bolum("Ana panel · denenmeyen denetim kalmadı mı");
         foreach (var d in anaDenetimler.Where(x => !denenen.Contains(x.Anahtar)))
         {
-            Kontrol($"{d.Anahtar}: denendi", "denendi", "hiçbir bağlamda görünür / etkin olmadı", false);
+            Durumlu($"{d.Anahtar}: denendi", false, "denendi", "hiçbir bağlamda görünür / etkin olmadı");
         }
 
         Kontrol("Ana paneldeki bütün denetimler denendi", anaDenetimler.Count, anaDenetimler.Count(d => denenen.Contains(d.Anahtar)),
             anaDenetimler.All(d => denenen.Contains(d.Anahtar)));
+
+        // ------------------------------------------------------------------ 1b. "Özel boyut" seçimi
+        Bolum("Boyut listesi: \"Özel boyut\" seçilince liste orada kalır, genişlik / yükseklik kutuları açılır");
+        var yt = Varsayilanlar.YouTube();
+        yt.Video.Cozunurluk = CozunurlukModu.Kaynak;
+        await BaglamaGec(ExportProfileId.YouTube, yt);
+        var boyutListesi = anaDenetimler.Select(d => d.Oge).OfType<ComboBox>()
+            .First(c => c.GetBindingExpression(Selector.SelectedValueProperty)?.ParentBinding.Path.Path == "Video.BoyutSecimi");
+        var genislikKutusu = AnaKutu("Video.Genislik");
+        Esit2("Kaynakla aynı: genişlik kutusu gizli", false, genislikKutusu.IsVisible);
+        boyutListesi.SelectedValue = "ozel";
+        await Bosta(w);
+        Esit2("Kaynakla aynı → Özel boyut: listede Özel boyut kalıyor", "ozel", boyutListesi.SelectedValue);
+        Esit2("Özel boyut: genişlik kutusu görünüyor", true, genislikKutusu.IsVisible);
+        await Yaz(w, genislikKutusu, "1000");
+        Esit2("Özel boyut: yazılan genişlik ayara geçti", 1000, w.KontrolAyarlari.Video.Genislik);
+        Esit2("Özel boyut: liste yine Özel boyut", "ozel", boyutListesi.SelectedValue);
+        boyutListesi.SelectedValue = "1080x1920";
+        await Bosta(w);
+        Esit2("1080×1920 seçildi: kutularda 1080 × 1920", "1080×1920", $"{genislikKutusu.Text}×{AnaKutu("Video.Yukseklik").Text}");
+        boyutListesi.SelectedValue = "ozel";
+        await Bosta(w);
+        Esit2("1080×1920 → Özel boyut: listede Özel boyut kalıyor (1080×1920'ye atlamıyor)", "ozel", boyutListesi.SelectedValue);
+        Esit2("1080×1920 → Özel boyut: kutularda 1080 × 1920 kaldı", "1080×1920", $"{genislikKutusu.Text}×{AnaKutu("Video.Yukseklik").Text}");
+        var hataOzel = await Kodla(w.KontrolAyarlari);
+        Kontrol("Özel boyut 1080×1920: FFmpeg'de çalışıyor", "çalıştı", hataOzel ?? "çalıştı", hataOzel is null);
 
         // ------------------------------------------------------------------ 2. Kutularda Enter / Esc / odaktan çıkma
         Bolum("Kutular: Enter uygular, Esc geri alır, odaktan çıkınca uygulanır");
@@ -485,7 +540,7 @@ internal static class ArayuzTaramasi
         var seviyeKutusu = anaDenetimler.Select(d => d.Oge).OfType<TextBox>()
             .First(t => t.GetBindingExpression(TextBox.TextProperty)?.ParentBinding.Path.Path == "Ses.Seviye");
         gecikmeKutusu.Text = "250";
-        Kontrol("Enter tuşu olayı gönderildi", "gönderildi", "pencere yok", Tus(gecikmeKutusu, Key.Enter));
+        Durumlu("Enter tuşu olayı gönderildi", Tus(gecikmeKutusu, Key.Enter), "gönderildi", "pencere yok");
         await Bosta(w);
         Esit2("Enter: gecikme ayara geçti", 250, w.KontrolAyarlari.Ses.Gecikme);
         gecikmeKutusu.Text = "777";
@@ -518,7 +573,7 @@ internal static class ArayuzTaramasi
         Bolum("Varsayılan düğmesi: onay penceresi (Vazgeç / Varsayılana dön)");
         var degisik = AyarDosyasi.Yaz(w.KontrolAyarlari);
         var onay = await DiyalogAc<ConfirmDialog>(w, w.BtnVarsayilan);
-        Kontrol("Varsayılan: onay penceresi açıldı", "açıldı", "açılmadı", onay is not null);
+        Durumlu("Varsayılan: onay penceresi açıldı", onay is not null, "açıldı", "açılmadı");
         if (onay is not null)
         {
             Esit2("Onay penceresinde varsayılan seçim \"Vazgeç\"", true, onay.BtnNo.IsDefault);
@@ -543,8 +598,17 @@ internal static class ArayuzTaramasi
 
         // ------------------------------------------------------------------ 5. Bağlama hataları
         Bolum("WPF bağlama (binding) iletileri");
-        var bizim = baglama.Iletiler.Where(BizimHatamiz).Distinct().ToList();
-        foreach (var ileti in baglama.Iletiler.Distinct().Take(40))
+        var sinama = new TextBlock { DataContext = new X264Ayarlari() };
+        sinama.SetBinding(TextBlock.TextProperty, new Binding("BoyleBirOzellikYok"));
+        w.AyarPaneli.Children.Add(sinama);
+        w.UpdateLayout();
+        await Bosta(w);
+        w.AyarPaneli.Children.Remove(sinama);
+        var yakalandi = baglama.Iletiler.Any(i => i.Contains("BoyleBirOzellikYok", StringComparison.Ordinal));
+        Durumlu("Bağlama hatası dinleyicisi çalışıyor (bilerek bozuk bağlama yakalandı)", yakalandi, "yakalandı", "yakalanmadı");
+        var bizim = baglama.Iletiler.Where(i => BizimHatamiz(i) && !i.Contains("BoyleBirOzellikYok", StringComparison.Ordinal)).Distinct().ToList();
+        rapor.AppendLine($"     | toplanan bağlama iletisi: {baglama.Iletiler.Count}");
+        foreach (var ileti in baglama.Iletiler.Where(i => !i.Contains("BoyleBirOzellikYok", StringComparison.Ordinal)).Distinct().Take(40))
         {
             Bilgi(Kisa(ileti, 400));
         }
@@ -568,7 +632,7 @@ internal static class ArayuzTaramasi
             var dugme = Dugme(w.AyarPaneli, "Tüm x264 ayarları…");
             var ilkX264 = Json(w.KontrolAyarlari.Video.X264);
             var p = await DiyalogAc<X264Penceresi>(w, dugme);
-            Kontrol("x264 penceresi açıldı", "açıldı", "açılmadı", p is not null);
+            Durumlu("x264 penceresi açıldı", p is not null, "açıldı", "açılmadı");
             if (p is null)
             {
                 return;
@@ -608,7 +672,7 @@ internal static class ArayuzTaramasi
 
             foreach (var d in liste.Where(x => !denenen.Contains(x.Anahtar)))
             {
-                Kontrol($"{d.Anahtar}: denendi", "denendi", "görünür / etkin olmadı", false);
+                Durumlu($"{d.Anahtar}: denendi", false, "denendi", "görünür / etkin olmadı");
             }
 
             // "Tümünü hız ayarına bırak": ayrıntılı ayarlar boşalır, ana ayarlar (mod, CRF, hız ayarı...) kalır.
@@ -638,7 +702,7 @@ internal static class ArayuzTaramasi
             p = await DiyalogAc<X264Penceresi>(w, dugme);
             if (p is null)
             {
-                Kontrol("x264 penceresi yeniden açıldı", "açıldı", "açılmadı", false);
+                Durumlu("x264 penceresi yeniden açıldı", false, "açıldı", "açılmadı");
                 return;
             }
 
@@ -649,8 +713,8 @@ internal static class ArayuzTaramasi
             await Kapandi(w, p);
             Esit2("x264 penceresi: Tamam uyguladı (referans kare 4)", 4, w.KontrolAyarlari.Video.X264.Ref);
             await Task.Delay(1200);
-            Kontrol("x264 penceresi: Tamam ayar dosyasına yazıldı", "Ref: 4", "yok",
-                AyarDosyasiOku(ExportProfileId.YouTube)?.Contains("\"Ref\": 4", StringComparison.Ordinal) == true);
+            Durumlu("x264 penceresi: Tamam ayar dosyasına yazıldı", AyarDosyasiOku(ExportProfileId.YouTube)?.Contains("\"Ref\": 4", StringComparison.Ordinal) == true,
+                "Ref: 4", "yok");
 
             // Yeniden açınca kutuda 4 görünür; odaktaki kutuya yazılıp Enter'a basılmadan Tamam: yazılan yine uygulanır.
             p = await DiyalogAc<X264Penceresi>(w, dugme);
@@ -679,7 +743,7 @@ internal static class ArayuzTaramasi
             var dugme = Dugme(w.AyarPaneli, "Tüm NVENC ayarları…");
             var ilk = Json(w.KontrolAyarlari.Video.Nvenc);
             var p = await DiyalogAc<NvencPenceresi>(w, dugme);
-            Kontrol("NVENC penceresi açıldı", "açıldı", "açılmadı", p is not null);
+            Durumlu("NVENC penceresi açıldı", p is not null, "açıldı", "açılmadı");
             if (p is null)
             {
                 return;
@@ -706,13 +770,14 @@ internal static class ArayuzTaramasi
                 p.Sonuc.Mod = mod;
                 p.Sonuc.UzamsalAq = true;
                 p.Sonuc.AgirlikliTahmin = false;
+                p.Sonuc.BKare = 2;
                 await Bosta(w);
                 await Gecis(liste, ortam, p);
             }
 
             foreach (var d in liste.Where(x => !denenen.Contains(x.Anahtar)))
             {
-                Kontrol($"{d.Anahtar}: denendi", "denendi", "görünür / etkin olmadı", false);
+                Durumlu($"{d.Anahtar}: denendi", false, "denendi", "görünür / etkin olmadı");
             }
 
             // Ağırlıklı tahmin açılınca B-kare satırları kapanır (kart ikisini birlikte kabul etmiyor).
@@ -730,7 +795,7 @@ internal static class ArayuzTaramasi
             p = await DiyalogAc<NvencPenceresi>(w, dugme);
             if (p is null)
             {
-                Kontrol("NVENC penceresi yeniden açıldı", "açıldı", "açılmadı", false);
+                Durumlu("NVENC penceresi yeniden açıldı", false, "açıldı", "açılmadı");
                 return;
             }
 
@@ -743,8 +808,9 @@ internal static class ArayuzTaramasi
             await Kapandi(w, p);
             Esit2("NVENC penceresi: Tamam uyguladı (NVDEC)", !onceki, w.KontrolAyarlari.Video.Nvenc.GpuCozme);
             await Task.Delay(1200);
-            Kontrol("NVENC penceresi: Tamam ayar dosyasına yazıldı", $"GpuCozme: {(!onceki).ToString().ToLowerInvariant()}", "yok",
-                AyarDosyasiOku(ExportProfileId.TikTok)?.Contains($"\"GpuCozme\": {(!onceki).ToString().ToLowerInvariant()}", StringComparison.Ordinal) == true);
+            Durumlu("NVENC penceresi: Tamam ayar dosyasına yazıldı",
+                AyarDosyasiOku(ExportProfileId.TikTok)?.Contains($"\"GpuCozme\": {(!onceki).ToString().ToLowerInvariant()}", StringComparison.Ordinal) == true,
+                $"GpuCozme: {(!onceki).ToString().ToLowerInvariant()}", "yok");
             w.KontrolAyarlari.Video.Nvenc = AyarDosyasi.Kopyala(Varsayilanlar.TikTok().Video.Nvenc);
             await Bosta(w);
         }
@@ -756,7 +822,7 @@ internal static class ArayuzTaramasi
             var dugme = Dugme(w.AyarPaneli, "Tüm FDK AAC ayarları…");
             var ilk = Json(w.KontrolAyarlari.Ses.Fdk);
             var p = await DiyalogAc<FdkPenceresi>(w, dugme);
-            Kontrol("FDK AAC penceresi açıldı", "açıldı", "açılmadı", p is not null);
+            Durumlu("FDK AAC penceresi açıldı", p is not null, "açıldı", "açılmadı");
             if (p is null)
             {
                 return;
@@ -792,8 +858,24 @@ internal static class ArayuzTaramasi
 
             foreach (var d in liste.Where(x => !denenen.Contains(x.Anahtar)))
             {
-                Kontrol($"{d.Anahtar}: denendi", "denendi", "görünür / etkin olmadı", false);
+                Durumlu($"{d.Anahtar}: denendi", false, "denendi", "görünür / etkin olmadı");
             }
+
+            var kesimKutusu = liste.Select(d => d.Oge).OfType<TextBox>().First(t => t.GetBindingExpression(TextBox.TextProperty)?.ParentBinding.Path.Path == "Kesim");
+            SekmesiniSec(kesimKutusu);
+            p.Sonuc.Mod = FdkModu.Cbr;
+            await Bosta(w);
+            foreach (var kesim in new[] { "100", "20000", "21000" })
+            {
+                await Yaz(w, kesimKutusu, kesim);
+                await Calistir(ortam, $"FDK kesim frekansı {kesim} yazılınca ({kesimKutusu.Text})");
+            }
+
+            p.Sonuc.Mod = FdkModu.Vbr3;
+            await Bosta(w);
+            await Yaz(w, kesimKutusu, "20000");
+            await Calistir(ortam, "FDK VBR 3 + kesim 20000");
+            await Yaz(w, kesimKutusu, "0");
 
             Bas(Dugme(p, "Vazgeç"));
             await Kapandi(w, p);
@@ -802,7 +884,7 @@ internal static class ArayuzTaramasi
             p = await DiyalogAc<FdkPenceresi>(w, dugme);
             if (p is null)
             {
-                Kontrol("FDK AAC penceresi yeniden açıldı", "açıldı", "açılmadı", false);
+                Durumlu("FDK AAC penceresi yeniden açıldı", false, "açıldı", "açılmadı");
                 return;
             }
 
@@ -831,7 +913,7 @@ internal static class ArayuzTaramasi
             await Bosta(w);
 
             var p = await DiyalogAc<OnAyarPenceresi>(w, w.BtnOnAyarlar);
-            Kontrol("Ön ayar penceresi açıldı", "açıldı", "açılmadı", p is not null);
+            Durumlu("Ön ayar penceresi açıldı", p is not null, "açıldı", "açılmadı");
             if (p is null)
             {
                 return;
@@ -845,16 +927,16 @@ internal static class ArayuzTaramasi
             Esit2("Boş ad: kaydedilmedi", 0, dosya.OnAyarlar.Count);
             Esit2("Boş ad: uyarı yazıldı", "Önce bir ad yazın.", p.Bilgi.Text);
 
-            p.AdKutusu.Text = "Tarama ön ayarı";
+            p.AdKutusu.Text = OnAyarAdi;
             Bas(kaydet);
             await Bosta(w);
-            Esit2("Kaydet: listeye eklendi", "Tarama ön ayarı", string.Join(", ", dosya.OnAyarlar.Select(o => o.Ad)));
+            Esit2("Kaydet: listeye eklendi", OnAyarAdi, string.Join(", ", dosya.OnAyarlar.Select(o => o.Ad)));
             Esit2("Kaydet: kaydedilen ayar şu anki ayar (gecikme 111)", 111, dosya.OnAyarlar.FirstOrDefault()?.Ayarlar.Ses.Gecikme);
             Esit2("Kaydet: ad kutusu temizlendi", string.Empty, p.AdKutusu.Text);
             Esit2("Kaydet: listede bir satır", 1, Gorsel(p.Liste).OfType<Button>().Count(b => b.Content as string == "Yükle"));
             await Task.Delay(300);
-            Kontrol("Kaydet: ayar dosyasına yazıldı", "Tarama ön ayarı", "yok",
-                File.ReadAllText(Path.Combine(AppPaths.VeriKlasoru, "ayarlar.json")).Contains("Tarama ön ayarı", StringComparison.Ordinal));
+            Durumlu("Kaydet: ayar dosyasına yazıldı", File.ReadAllText(Path.Combine(AppPaths.VeriKlasoru, "ayarlar.json")).Contains(OnAyarAdi, StringComparison.Ordinal),
+                OnAyarAdi, "yok");
 
             // Aynı adla yeniden: üzerine yazma sorulur; Vazgeç değiştirmez, "Üzerine yaz" yazar.
             Bas(Dugme(p, "Kapat"));
@@ -864,14 +946,14 @@ internal static class ArayuzTaramasi
             p = await DiyalogAc<OnAyarPenceresi>(w, w.BtnOnAyarlar);
             if (p is null)
             {
-                Kontrol("Ön ayar penceresi yeniden açıldı", "açıldı", "açılmadı", false);
+                Durumlu("Ön ayar penceresi yeniden açıldı", false, "açıldı", "açılmadı");
                 return;
             }
 
             kaydet = Dugme(p, "Kaydet");
-            p.AdKutusu.Text = "tarama ÖN AYARI";
+            p.AdKutusu.Text = OnAyarAdi.ToUpperInvariant();
             var soru = await DiyalogAc<ConfirmDialog>(w, kaydet);
-            Kontrol("Aynı ad (büyük/küçük harf farklı): üzerine yazma soruldu", "soruldu", "sorulmadı", soru is not null);
+            Durumlu("Aynı ad (büyük/küçük harf farklı): üzerine yazma soruldu", soru is not null, "soruldu", "sorulmadı");
             if (soru is not null)
             {
                 Bas(soru.BtnNo);
@@ -900,7 +982,7 @@ internal static class ArayuzTaramasi
             }
 
             var yukle = Gorsel(p.Liste).OfType<Button>().FirstOrDefault(b => b.Content as string == "Yükle");
-            Kontrol("Listede Yükle düğmesi var", "var", "yok", yukle is not null);
+            Durumlu("Listede Yükle düğmesi var", yukle is not null, "var", "yok");
             if (yukle is not null)
             {
                 Bas(yukle);
@@ -916,7 +998,7 @@ internal static class ArayuzTaramasi
             }
 
             var sil = Gorsel(p.Liste).OfType<Button>().FirstOrDefault(b => b.Content as string == "Sil");
-            Kontrol("Listede Sil düğmesi var", "var", "yok", sil is not null);
+            Durumlu("Listede Sil düğmesi var", sil is not null, "var", "yok");
             if (sil is not null)
             {
                 soru = await DiyalogAc<ConfirmDialog>(w, sil);
@@ -941,10 +1023,10 @@ internal static class ArayuzTaramasi
             var kapat = Dugme(p, "Kapat");
             Bas(kapat);
             await Kapandi(w, p);
-            Kontrol("Kapat: pencere kapandı", "kapandı", "açık", !p.IsVisible);
+            Durumlu("Kapat: pencere kapandı", !p.IsVisible, "kapandı", "açık");
             await Task.Delay(300);
-            Kontrol("Sil: ayar dosyasından da silindi", "yok", "var",
-                !File.ReadAllText(Path.Combine(AppPaths.VeriKlasoru, "ayarlar.json")).Contains("Tarama ön ayarı", StringComparison.OrdinalIgnoreCase));
+            Durumlu("Sil: ayar dosyasından da silindi",
+                !File.ReadAllText(Path.Combine(AppPaths.VeriKlasoru, "ayarlar.json")).Contains(OnAyarAdi, StringComparison.OrdinalIgnoreCase), "yok", "var");
         }
     }
 

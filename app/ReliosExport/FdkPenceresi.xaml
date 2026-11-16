@@ -44,7 +44,7 @@
                             <TextBlock Text="Kesim frekansı (Hz)" Style="{StaticResource PencereEtiketi}"/>
                             <TextBox Style="{StaticResource SayiKutusu}" Tag="" Text="{Binding Kesim, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                         </DockPanel>
-                        <TextBlock Style="{StaticResource Ipucu}" Margin="220,-2,0,10" Text="0: kodlayıcı bit hızına göre seçer."/>
+                        <TextBlock Style="{StaticResource Ipucu}" Margin="220,-2,0,10" Text="0: kodlayıcı bit hızına göre seçer. En çok 20000 Hz."/>
                         <DockPanel Style="{StaticResource FormSatiri}">
                             <TextBlock Text="SBR / PS bildirimi" Style="{StaticResource PencereEtiketi}"/>
                             <ComboBox ItemsSource="{x:Static a:Secenekler.FdkSinyaller}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Sinyal}"/>

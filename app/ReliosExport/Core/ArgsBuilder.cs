@@ -1398,7 +1398,9 @@ public static class ArgsBuilder
 
             if (f.Kesim > 0)
             {
-                args.AddRange(["-cutoff", f.Kesim.ToString(Inv)]);
+                // FFmpeg'in FDK AAC sınırı: (örnekleme hızı + 255) / 256 ile 20000 Hz arası (48 kHz'te en az 188).
+                var hz = hedefHz ?? kaynakHz ?? 48000;
+                args.AddRange(["-cutoff", Math.Clamp(f.Kesim, (hz + 255) >> 8, FdkAyarlari.EnCokKesim).ToString(Inv)]);
             }
 
             if (!f.Afterburner)
