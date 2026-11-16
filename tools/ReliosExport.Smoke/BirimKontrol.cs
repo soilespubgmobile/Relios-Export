@@ -758,9 +758,13 @@ internal static class BirimKontrol
         Kontrol("Kayıplı mı: TikTok sesi (WAV)", "False", Esitleme.KayipliMi(Varsayilanlar.TikTok().Ses).ToString());
         Kontrol("Kayıplı mı: YouTube sesi (FDK AAC)", "True", Esitleme.KayipliMi(Varsayilanlar.YouTube().Ses).ToString());
         Kontrol("Telafi tepeyi tavana çıkarırsa sınırlayıcı (tepe -12,1 + 11 + 0,2 > -1)", "True", (rd with { Telafi = 0.2 }).Sinirli.ToString());
-        Kontrol("Bilgi satırı (AAC telafisi 0,16)", "-25,0 → -14 LUFS (bütün ses +11,2 dB)", (rd with { Telafi = 0.16, Kayipli = true }).BilgiMetni);
-        Kontrol("Ayrıntı (AAC telafisi)", "True", (rd with { Telafi = 0.16, Kayipli = true }).Ayrinti
+        var rAac = Esitleme.KararVer(ka, new SesOlcum(-25, -20, 5)) with { Telafi = 0.16, Kayipli = true };
+        Kontrol("Bilgi satırı (AAC telafisi 0,16; tepe -20 + 11,16: sınırlayıcı yok)", "-25,0 → -14 LUFS (bütün ses +11,2 dB)", rAac.BilgiMetni);
+        Kontrol("Ayrıntı (AAC telafisi)", "True", rAac.Ayrinti
             .Contains("AAC kodlaması tizleri kestiği için yükseklik 0,2 LU düşüyordu: ses 0,2 dB daha yükseltildi", StringComparison.Ordinal).ToString());
+        Kontrol("Ayrıntı (AAC telafisi tepeyi tavana çıkardı: -12,1 + 11,16)", "True", (rd with { Telafi = 0.16, Kayipli = true }).Ayrinti
+            .Contains("Tepe -0,9 dB'ye çıkacaktı: sınırlayıcı -1 dB'de tuttu; kıstığı pay için ses +0,2 dB daha yükseltildi (AAC kodlamasının düşürdüğü pay da).",
+                StringComparison.Ordinal).ToString());
 
         var ytAac = Varsayilanlar.YouTube();
         var ytAacSes = ArgsBuilder.SesSec(ytAac.Ses, Kaynak48(), "KAYNAK.mp4");

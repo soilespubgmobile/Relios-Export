@@ -367,7 +367,7 @@ jobs:
           # Yuksek degisken: ~-7 LUFS, 16 bit 48 kHz (yalnizca yukselt: dokunulmamali, bit bit ayni).
           # Sonu kisik / sonu yuksek: son 3 sn sesin geri kalanindan 6 dB kisik / yuksek. loudnorm'un olcumu sesin son
           # ~2,9 sn'sini iki kez sayar: bu seslerde cikti -13,4 / -15,0 olurdu; BS.1770 olceriyle tam -14 olmali.
-          # Tizli pembe / beyaz gurultu: tizi bol ses. AAC 128 kb/s ~17 kHz ustunu keser, olculen yukseklik duser (kullanicinin
+          # Tizli pembe / beyaz gurultu (iki kanal ayni): tizi bol ses. AAC 128 kb/s ~17 kHz ustunu keser, olculen yukseklik duser (kullanicinin
           # OBS kaydinda 0,16 LU; beyaz gurultude ~1,5 LU). Program sesi AAC'ye cevirip dener ve kaybi telafi eder: tam -14.
           $deg = '(0.03+0.015*sin(2*PI*0.1*t))'
           $kaynaklar = @(
@@ -381,8 +381,8 @@ jobs:
             @{ ad = 'yuksek_degisken'; ses = 'aevalsrc=(0.40+0.12*sin(2*PI*0.1*t))*sin(2*PI*1000*t)|(0.40+0.12*sin(2*PI*0.1*t))*sin(2*PI*1250*t):s=48000:d=12'; d = 12; c = 'pcm_s16le' },
             @{ ad = 'kisik_son'; ses = 'aevalsrc=if(lt(t\,9)\,0.03\,0.015)*sin(2*PI*440*t)|if(lt(t\,9)\,0.03\,0.015)*sin(2*PI*550*t):s=48000:d=12'; d = 12; c = 'pcm_s24le' },
             @{ ad = 'yuksek_son'; ses = 'aevalsrc=if(lt(t\,9)\,0.015\,0.03)*sin(2*PI*440*t)|if(lt(t\,9)\,0.015\,0.03)*sin(2*PI*550*t):s=48000:d=12'; d = 12; c = 'pcm_s24le' },
-            @{ ad = 'tizli_pembe'; ses = 'anoisesrc=c=pink:r=48000:a=0.1:s=1234:d=12'; d = 12; c = 'pcm_s24le' },
-            @{ ad = 'tizli_beyaz'; ses = 'anoisesrc=c=white:r=48000:a=0.02:s=4321:d=12'; d = 12; c = 'pcm_s24le' }
+            @{ ad = 'tizli_pembe'; ses = 'anoisesrc=c=pink:r=48000:a=0.1:s=1234:d=12,pan=stereo|c0=c0|c1=c0'; d = 12; c = 'pcm_s24le' },
+            @{ ad = 'tizli_beyaz'; ses = 'anoisesrc=c=white:r=48000:a=0.02:s=4321:d=12,pan=stereo|c0=c0|c1=c0'; d = 12; c = 'pcm_s24le' }
           )
           $Kay = @{}  # (PowerShell degisken adlarinda buyuk / kucuk harf ayirmaz: $k ile ayni olmasin)
           foreach ($k in $kaynaklar) {
