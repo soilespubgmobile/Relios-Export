@@ -208,7 +208,7 @@ jobs:
           function Kaynak($ad) { $man | Where-Object { $_.dosya -like "$ad*" } | Select-Object -First 1 }
           $yt = @('--profil', 'youtube')
           $testler = @(
-            @{ ad = 'YouTube varsayilani: 1080p60 yatay H.264 (XviD4PSP ayarlari; boyut, fps, profil, seviye kaynak)'; k = '01_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
+            @{ ad = 'YouTube varsayilani: 1080p60 yatay H.264 High (XviD4PSP ayarlari, profil Main; boyut, fps, seviye kaynak)'; k = '01_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
                hedef = @('--boyut', '1920x1080', '--fps', '60/1', '--gop', '100/51', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'aac'); ayar = @('kap=mov', 'acodec=aac', 'aprofil=LC', 'abit=128000±5%', 'ar=48000', 'ac=2') },
             @{ ad = 'YouTube varsayilani: telefon (dondurulmus HEVC 10 bit)'; k = '03_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
                hedef = @('--boyut', '1080x1920', '--fps', '30/1', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'aac'); ayar = @('kap=mov', 'acodec=aac', 'aprofil=LC', 'abit=128000±5%', 'ar=48000', 'ac=2') },
@@ -288,7 +288,8 @@ jobs:
               $arc = $LASTEXITCODE
               if ($t.hedef) {
                 # Kaynakla ayni boyut / fps disinda her sey XviD4PSP hedefiyle ayni mi
-                $hd = & python -X utf8 -I tools/hedef_kontrol.py $out 8 @($t.hedef) '--profil' 'kaynak' '--kaynak' $src 2>&1 | ForEach-Object { "$_" }
+                # YouTube varsayilani: profil Main (16 Kasim), seviye kaynakla ayni (yetmezse yeten en dusuk)
+                $hd = & python -X utf8 -I tools/hedef_kontrol.py $out 8 @($t.hedef) '--profil' 'main' '--kaynak' $src 2>&1 | ForEach-Object { "$_" }
                 if ($LASTEXITCODE -ne 0) { $arc = 1 }
                 $a += $hd
               }
@@ -546,7 +547,8 @@ jobs:
             @{ ad = 'Blu-ray uyumlu, referans 8 (x264 en cok 6 kullanir)'; k = '10_'; arg = (A 'Video.X264.Ref=8', 'Video.X264.BlurayUyumlu=true'); bek = '5.0'; alt = $true },
             @{ ad = 'CBR 40000, tampon bos (2 kati: 80000)'; k = '10_'; arg = (A 'Video.X264.Mod=Cbr', 'Video.X264.BitHizi=40000', 'Video.X264.VbvTampon=null'); bek = '5.0'; alt = $true },
             @{ ad = 'Profil high, 8x8 DCT kapali, VBV 55000 / 70000 (dosya Main olur)'; k = '10_'; arg = (A 'Video.X264.Profil=high', 'Video.X264.Dct8x8=false', 'Video.X264.VbvMaks=55000', 'Video.X264.VbvTampon=70000'); bek = '5.0'; alt = $true },
-            @{ ad = 'Profil kaynak (High), VBV 55000 / 70000'; k = '10_'; arg = (A 'Video.X264.VbvMaks=55000', 'Video.X264.VbvTampon=70000'); bek = '4.1'; alt = $true },
+            @{ ad = 'Profil kaynak (High), VBV 55000 / 70000'; k = '10_'; arg = (A 'Video.X264.Profil=kaynak', 'Video.X264.VbvMaks=55000', 'Video.X264.VbvTampon=70000'); bek = '4.1'; alt = $true },
+            @{ ad = 'YouTube varsayilani (Main), VBV 55000 / 70000 (Main 4.1 / 4.2 siniri 50000 / 62500: 5.0)'; k = '10_'; arg = (A 'Video.X264.VbvMaks=55000', 'Video.X264.VbvTampon=70000'); bek = '5.0'; alt = $true },
             @{ ad = 'CIF 1.1: 3 referans'; k = 'cif'; arg = $vbvYok; bek = '1.2'; alt = $true },
             @{ ad = 'CIF 1.1: 2 referans'; k = 'cif'; arg = $vbvYok + (A 'Video.X264.Ref=2'); bek = '1.1' },
             @{ ad = 'CIF 1.1: 2 referans, 1 B-kare (piramit olmaz)'; k = 'cif'; arg = $vbvYok + (A 'Video.X264.Ref=2', 'Video.X264.BKare=1'); bek = '1.1' },

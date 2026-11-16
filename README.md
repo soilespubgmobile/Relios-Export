@@ -19,18 +19,18 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
   - Varsayılan kayıt yeri: İndirilenler klasörü.
   - Dikey 9:16 ayarı (1216×2160, 29,97 fps, x264 Main@L5.0 CRF 18, FDK AAC 128 kb/s 48 kHz; önceki TikTok
     varsayılanı) yalnızca kodda durur: YouTube varsayılanının temeli ve GitHub doğrulamasının hedef ayarı.
-  - YouTube varsayılanı: dikey 9:16 ayarıyla aynı x264 (CRF 18) ayarları; ses WAV 16 bit 48 kHz; çözünürlük, en-boy oranı,
-    kare hızı, H.264 profili ve seviyesi kaynakla aynı. VBV: en yüksek bit hızı 34375 kb/s, tampon 55000 kb
+  - YouTube varsayılanı: dikey 9:16 ayarıyla aynı x264 (CRF 18, Main profil) ayarları; ses FDK AAC-LC 128 kb/s 48 kHz;
+    çözünürlük, en-boy oranı, kare hızı ve H.264 seviyesi kaynakla aynı. VBV: en yüksek bit hızı 34375 kb/s, tampon 55000 kb
     (kalite yine CRF 18'le belirlenir; bit hızı en çok 34375 kb/s'e çıkar). Anahtar kare aralığı 30 fps'e göre
     50 / 26 ve kare hızıyla orantılı (aynı süre): 25 fps'te 42 / 22, 50 fps'te 83 / 42, 60 fps'te 100 / 51
     (en az, en fazlanın yarısı + 1'i geçemez).
   - x264'te de seviye "kaynakla aynı" iken çıktı kaynağın seviyesini aşıyorsa (boyut, kare hızı, VBV ya da
-    referans kareler) yeten en düşük seviye yazılır: ör. 1080p30 High@4.0 kaynak, 34375 kb/s ile 4.1 olur
-    (4.0'ın sınırı 25000 kb/s). x264 aşan seviyeyle de kodlar ama yalnızca uyarır; dosya kendi yazdığı seviyeye
+    referans kareler) yeten en düşük seviye yazılır: ör. 1080p30 4.0 seviyeli kaynak, 34375 kb/s ile 4.1 olur
+    (Main 4.0'ın sınırı 20000 kb/s, High'ınki 25000 kb/s). x264 aşan seviyeyle de kodlar ama yalnızca uyarır; dosya kendi yazdığı seviyeye
     uymazdı. Referans kareler x264'ün kendi hesabıyla sayılır (B-kare varsa en az 2, B-piramitte en az 4; boş
     bırakılanlar hız ayarından).
   - TikTok ve YouTube varsayılan dosya biçimi MOV (dikey 9:16 ön ayarı MP4); ses WAV ise dosya her zaman MOV.
-  - TikTok ve YouTube sesi WAV (PCM) 16 bit, 48 kHz, stereo. Platform sesi zaten kendisi sıkıştırır; 16 bit PCM,
+  - TikTok sesi WAV (PCM) 16 bit, 48 kHz, stereo (YouTube sesi FDK AAC-LC 128 kb/s 48 kHz stereo). Platform sesi zaten kendisi sıkıştırır; 16 bit PCM,
     FDK AAC'nin de girişte kullandığı 16 bitlik sesi hiç sıkıştırmadan verir. YouTube'a yükleyip indirerek
     denendi: 128 kb/s AAC yüklemeye göre 15–17 kHz'te 1,7–3,6 dB daha çok ayrıntı kalıyor, altı aynı.
     Dönüşüm en yüksek kalitede (soxr 33 bit); 24 / 32 bit ya da kayan noktalı kaynak 16 bite üçgen titreşimle

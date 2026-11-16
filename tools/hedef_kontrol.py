@@ -2,14 +2,15 @@
 """Bir MP4 çıktısını kullanıcının hedef meta verisiyle karşılaştırır.
 
 Kullanım: python3 -I hedef_kontrol.py <dosya.mp4> [iş parçacığı] [--boyut GxY] [--fps N/D]
-          [--gop N/M] [--vbv MAKS/TAMPON] [--kap mp4|mov] [--profil kaynak --kaynak <kaynak video>]
+          [--gop N/M] [--vbv MAKS/TAMPON] [--kap mp4|mov] [--profil kaynak|main --kaynak <kaynak video>]
           [--ses aac|pcm16]
 
 --boyut / --fps: YouTube gibi "kaynakla aynı" profillerde beklenen çözünürlük ve kare hızı
 (varsayılan TikTok hedefi: 1216x2160, 30000/1001). --gop: beklenen keyint / min-keyint (varsayılan 50/26;
 YouTube'da 30 fps'e göre: 60 fps'te 100/51). --vbv: beklenen vbv-maxrate / vbv-bufsize (varsayılan 14000/28000;
 YouTube 34375/55000). --profil kaynak: profil ve seviye kaynakla aynı; seviye çıktıya yetmiyorsa (boyut, kare hızı,
-VBV, referans kare) yeten en düşük seviye. --ses pcm16: ses WAV (PCM) 16 bit 48 kHz stereo (varsayılan aac: AAC-LC
+VBV, referans kare) yeten en düşük seviye. --profil main: profil Main (YouTube varsayılanı, 16 Kasım), seviye yine
+kaynakla aynı / yeten en düşük (Main sınırlarıyla). --ses pcm16: ses WAV (PCM) 16 bit 48 kHz stereo (varsayılan aac: AAC-LC
 128 kb/s 48 kHz stereo). Diğer her şey XviD4PSP hedefiyle aynı beklenir.
 """
 import datetime
@@ -54,7 +55,10 @@ BW, BH = (int(x) for x in BOYUT.split("x"))
 # Beklenen H.264 profili / seviyesi: varsayılan TikTok hedefi (Main@L5.0). "kaynak": programdaki
 # ArgsBuilder.ProfilCoz / SeviyeCoz'un bağımsız karşılığı (H.264 kaynakta aynısı, değilse Main + otomatik).
 BEK_PROFIL, BEK_SEVIYE = "Main", "5.0"
-KAYNAK_MODU = _SECENEK.get("--profil") == "kaynak"
+PROFIL_MODU = _SECENEK.get("--profil")
+if PROFIL_MODU not in (None, "kaynak", "main"):
+    sys.exit(f"--profil kaynak ya da main olmalı: {PROFIL_MODU}")
+KAYNAK_MODU = PROFIL_MODU in ("kaynak", "main")
 if KAYNAK_MODU:
     _k = json.loads(subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name,profile,level",
@@ -66,6 +70,8 @@ if KAYNAK_MODU:
         BEK_SEVIYE = f"{_l / 10:.1f}" if _l > 0 else None
     else:
         BEK_PROFIL, BEK_SEVIYE = "Main", None  # seviyeyi x264 seçer
+    if PROFIL_MODU == "main":
+        BEK_PROFIL = "Main"  # profil her kaynakta Main (8x8 DCT kapalı); seviye kaynağınki
 LOOKAHEAD = {"7": "1", "8": "1", "67": "11"}.get(THREADS, "?")
 
 # H.264 Tablo A-1 (programdaki H264Seviye'den bağımsız yazıldı):

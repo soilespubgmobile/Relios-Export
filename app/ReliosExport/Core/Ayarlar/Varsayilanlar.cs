@@ -197,7 +197,10 @@ public static class Varsayilanlar
         var a = Dikey916();
         a.Video.Cozunurluk = CozunurlukModu.Kaynak;
         a.Video.KareHiziModu = KareHiziModu.Kaynak;
-        a.Video.X264.Profil = "kaynak";
+
+        // Profil Main (8x8 DCT kapalı; 16 Kasım, kullanıcı isteği): x264 ayarları kullanıcının örnek videosuyla birebir,
+        // yalnızca anahtar kare aralığı, VBV ve iş parçacığı programın. Seviye kaynakla aynı (yetmezse yükselir).
+        a.Video.X264.Profil = "main";
         a.Video.X264.Seviye = "kaynak";
         a.Video.Nvenc.Profil = "kaynak";
         a.Video.Nvenc.Seviye = "kaynak";
@@ -207,7 +210,7 @@ public static class Varsayilanlar
         a.Video.Yukseklik = 1080;
 
         // Kalite yine CRF 18'le belirlenir; bit hızı en çok 34375 kb/s'e çıkar (9:16 ayarında 14000 / 28000).
-        // Kaynağın seviyesi buna yetmezse (ör. 1080p30 High@4.0'ın sınırı 25000 / 31250) yeten en düşük seviye
+        // Kaynağın seviyesi buna yetmezse (ör. 1080p30 Main@4.0'ın sınırı 20000 / 25000) yeten en düşük seviye
         // yazılır (4.1); bkz. ArgsBuilder.X264Seviyesi.
         a.Video.X264.VbvMaks = 34375;
         a.Video.X264.VbvTampon = 55000;

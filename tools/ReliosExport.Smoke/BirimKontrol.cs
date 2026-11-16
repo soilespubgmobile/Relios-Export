@@ -372,7 +372,7 @@ internal static class BirimKontrol
     private static void X264Seviyeleri()
     {
         Console.WriteLine();
-        Console.WriteLine("--- YouTube varsayılanı (x264 CRF 18, VBV 34375 / 55000): seviye kaynakla aynı, sınır aşılırsa yeten en düşük");
+        Console.WriteLine("--- YouTube varsayılanı (x264 CRF 18, Main, VBV 34375 / 55000): seviye kaynakla aynı, sınır aşılırsa yeten en düşük");
 
         static string Yt(MediaInfo m, Action<X264Ayarlari>? degistir = null)
         {
@@ -387,9 +387,15 @@ internal static class BirimKontrol
             x.VbvTampon = null;
         }
 
+        // Profil Main (16 Kasım, kullanıcının örnek videosuyla birebir): kaynak High olsa da 8x8 DCT kapalı, dosya Main.
         var k = Yt(Kaynak(1920, 1080, 30, "h264", "High", 40));
-        Iceriyor("High@4.0 1080p30 (34375 kb/s 4.0'ı aşar)", k, " -profile:v high -level:v 4.1 ");
+        Iceriyor("High@4.0 1080p30 (34375 kb/s Main 4.0'ı aşar)", k, " -profile:v main -level:v 4.1 ");
         Iceriyor("High@4.0 1080p30", k, ":vbv-maxrate=34375:vbv-bufsize=55000:");
+        Iceriyor("High kaynak, profil Main: 8x8 DCT kapalı", k, ":8x8dct=0:");
+        Icermiyor("High kaynak, profil Main", k, " -profile:v high ");
+        Iceriyor("High@4.2 1080p60: Main", Yt(Kaynak(1920, 1080, 60, "h264", "High", 42)), " -profile:v main -level:v 4.2 ");
+        Iceriyor("Baseline kaynak: Main", Yt(Kaynak(720, 1280, 30, "h264", "Constrained Baseline", 31)), " -profile:v main -level:v 4.1 ");
+        Iceriyor("HEVC kaynak: Main", Yt(Kaynak(1920, 1080, 30, "hevc", "Main 10", 120)), " -profile:v main ");
         Iceriyor("High@4.0 1080×1920@29.97", Yt(Kaynak(1080, 1920, 30000.0 / 1001, "h264", "High", 40)), " -level:v 4.1 ");
         Iceriyor("High@4.2 1080p60 (aynı kalır)", Yt(Kaynak(1920, 1080, 60, "h264", "High", 42)), " -level:v 4.2 ");
         Iceriyor("High@3.2 1080×1080@30", Yt(Kaynak(1080, 1080, 30, "h264", "High", 32)), " -level:v 4.1 ");
@@ -534,7 +540,11 @@ internal static class BirimKontrol
             x.VbvTampon = 70000;
         }
 
-        Iceriyor("Profil kaynak (High: 8x8 DCT açılır)", Yt(hd, Vbv55), " -level:v 4.1 ");
+        Iceriyor("Profil kaynak (High: 8x8 DCT açılır)", Yt(hd, x =>
+        {
+            Vbv55(x);
+            x.Profil = "kaynak";
+        }), " -level:v 4.1 ");
         Iceriyor("Profil high, 8x8 DCT kapalı (x264 Main yazar)", Yt(hd, x =>
         {
             Vbv55(x);
@@ -561,8 +571,10 @@ internal static class BirimKontrol
         Iceriyor("Profil kaynak + ek parametre no-8x8dct", Yt(hd, x =>
         {
             Vbv55(x);
+            x.Profil = "kaynak";
             x.EkParametreler = "no-8x8dct=1";
         }), " -level:v 5.0 ");
+        Iceriyor("YouTube varsayılanı (Main), VBV 55000 / 70000: Main 5.0", Yt(hd, Vbv55), " -profile:v main -level:v 5.0 ");
     }
 
     private static void AnahtarKareler()
@@ -950,6 +962,7 @@ internal static class BirimKontrol
         Console.WriteLine("--- Dosya biçimi: TikTok ve YouTube MOV, dikey 9:16 MP4, WAV ses her zaman MOV; kodlama tarihi");
         Kontrol("TikTok varsayılanı", ".mov", Varsayilanlar.TikTok().Uzanti);
         Kontrol("YouTube varsayılanı", ".mov", Varsayilanlar.YouTube().Uzanti);
+        Kontrol("YouTube varsayılanı: x264 profili", "main / kaynak", $"{Varsayilanlar.YouTube().Video.X264.Profil} / {Varsayilanlar.YouTube().Video.X264.Seviye}");
         Kontrol("Dikey 9:16 ön ayarı", ".mp4", Varsayilanlar.Dikey916().Uzanti);
         var wav = Varsayilanlar.Dikey916();
         wav.Ses.Kodlayici = SesKodlayici.Wav;
