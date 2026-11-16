@@ -30,7 +30,7 @@ public static class BoyutTahmini
 
         var sesKbps = SesBitHizi(a.Ses, ses);
         var kbit = (video.Kbps + sesKbps) * m.DurationSeconds;
-        if (video.Tur == TahminTuru.EnCok && TamponPayi(a) is { } pay)
+        if (video.Tur == TahminTuru.EnCok && TamponPayi(a, m) is { } pay)
         {
             // Üst sınırda kodlayıcının tamponu da sayılır: video başında tampondaki bitleri harcayabilir, kısa
             // videoda ortalama en yüksek bit hızının üstüne çıkabilir (ör. 5 sn'de 55000 kb'lık tampon ≈ +%29).
@@ -74,14 +74,15 @@ public static class BoyutTahmini
 
     /// <summary>
     /// "En çok" tahmininde tamponun payı (kbit): x264'te tampon × başlangıç doluluğu (vbv-init, boşsa x264'ün
-    /// varsayılanı 0,9); NVENC'te tampon (verildiyse). Bilinmiyorsa null.
+    /// varsayılanı 0,9); NVENC'te ("en çok" yalnızca sabit kalitede) seviyenin en büyük tamponu, çünkü ffmpeg
+    /// sabit kalitede verilen tamponu yok sayar ve kart seviyenin tamponunu kullanır. Bilinmiyorsa null.
     /// </summary>
-    private static double? TamponPayi(ProfilAyarlari a)
+    private static double? TamponPayi(ProfilAyarlari a, MediaInfo m)
     {
         var v = a.Video;
         if (v.Kodlayici == VideoKodlayici.Nvenc)
         {
-            return v.Nvenc.Tampon is > 0 ? v.Nvenc.Tampon.Value : null;
+            return v.Nvenc.Mod == NvencModu.SabitKalite ? ArgsBuilder.NvencSabitKaliteTamponu(a, m) : null;
         }
 
         var x = v.X264;

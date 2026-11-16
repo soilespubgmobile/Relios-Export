@@ -169,6 +169,127 @@ internal static class BirimKontrol
         Iceriyor("Main@4.2 1080×1920@60, elle tampon 55000", k, " -level:v 4.2 -rc cbr -b:v 34375k -bufsize 55000k ");
 
         Console.WriteLine();
+        Console.WriteLine("--- NVENC kipleri ve kartın kabul etmediği birleşimler (kullanıcının kartında denendi)");
+        var hd = Kaynak(1080, 1920, 30, "h264", "High", 40);
+
+        // CBR'de en yüksek bit hızını kart yok sayar (dosyanın HRD'sinde bit hızı yazar): komuta konmaz.
+        k = NvencKomutu(hd, a => a.Video.Nvenc.MaksBitHizi = 30000);
+        Icermiyor("CBR + en yüksek bit hızı 30000", k, " -maxrate ");
+        Iceriyor("CBR + en yüksek bit hızı 30000", k, " -rc cbr -b:v 34375k -bufsize 34375k ");
+
+        k = NvencKomutu(hd, a =>
+        {
+            a.Video.Nvenc.Mod = NvencModu.DegiskenBitHizi;
+            a.Video.Nvenc.BitHizi = 20000;
+            a.Video.Nvenc.MaksBitHizi = 30000;
+            a.Video.Nvenc.Tampon = 40000;
+        });
+        Iceriyor("VBR 20000 / 30000 / 40000", k, " -rc vbr -b:v 20000k -maxrate 30000k -bufsize 40000k ");
+        Iceriyor("VBR 20000 / 30000 / 40000 (4.0'ın 25000 / 31250'si aşılır)", k, " -level:v 4.1 ");
+
+        // Sabit kalitede ffmpeg tamponu yok sayar ("CQ mode shall discard ... vbv buffer size"): komuta konmaz.
+        k = NvencKomutu(hd, a =>
+        {
+            a.Video.Nvenc.Mod = NvencModu.SabitKalite;
+            a.Video.Nvenc.MaksBitHizi = 30000;
+            a.Video.Nvenc.Tampon = 40000;
+        });
+        Iceriyor("Sabit kalite + en yüksek 30000", k, " -rc vbr -cq 19 -b:v 0 -maxrate 30000k -multipass ");
+        Icermiyor("Sabit kalite + tampon 40000", k, " -bufsize ");
+
+        // Sabit QP'de -b:v 0: yoksa ffmpeg'in 2 Mb/s varsayılanı HRD'ye yazılırdı.
+        k = NvencKomutu(hd, a => a.Video.Nvenc.Mod = NvencModu.SabitQp);
+        Iceriyor("Sabit QP 20", k, " -rc constqp -qp 20 -b:v 0 -multipass ");
+        Icermiyor("Sabit QP", k, " -maxrate ");
+        Icermiyor("Sabit QP", k, " -bufsize ");
+
+        // B-kare referans olunca DPB en az 3 ("DPB size should be greater than or equal to 3 for B as reference").
+        k = NvencKomutu(hd, a =>
+        {
+            a.Video.Nvenc.BKare = 2;
+            a.Video.Nvenc.BRefModu = "middle";
+            a.Video.Nvenc.Ref = 1;
+        });
+        Iceriyor("2 B-kare (ortadaki referans) + referans 1", k, " -bf 2 -b_ref_mode middle -refs 1 -dpb_size 3 ");
+        k = NvencKomutu(hd, a =>
+        {
+            a.Video.Nvenc.BKare = 2;
+            a.Video.Nvenc.BRefModu = "each";
+            a.Video.Nvenc.Ref = 2;
+        });
+        Iceriyor("2 B-kare (her biri referans) + referans 2", k, " -bf 2 -b_ref_mode each -refs 2 -dpb_size 3 ");
+        k = NvencKomutu(hd, a =>
+        {
+            a.Video.Nvenc.BKare = 2;
+            a.Video.Nvenc.BRefModu = "disabled";
+            a.Video.Nvenc.Ref = 1;
+        });
+        Iceriyor("2 B-kare (referans değil) + referans 1", k, " -bf 2 -b_ref_mode disabled -refs 1 -dpb_size 2 ");
+        k = NvencKomutu(hd, a =>
+        {
+            a.Video.Nvenc.BKare = 2;
+            a.Video.Nvenc.Ref = 4;
+        });
+        Iceriyor("2 B-kare + referans 4 (yeter)", k, " -refs 4 -dpb_size 4 ");
+
+        // Ağırlıklı tahmin B-karelerle kullanılamaz ("Weighted Prediction not supported with B-frames"): B-kare 0.
+        k = NvencKomutu(hd, a =>
+        {
+            a.Video.Nvenc.BKare = 2;
+            a.Video.Nvenc.AgirlikliTahmin = true;
+        });
+        Iceriyor("Ağırlıklı tahmin + 2 B-kare", k, " -bf 0 -refs 3 -dpb_size 3 -weighted_pred 1 ");
+        Icermiyor("Ağırlıklı tahmin + 2 B-kare", k, " -b_ref_mode ");
+        k = NvencKomutu(hd, a =>
+        {
+            a.Video.Nvenc.BKare = null;
+            a.Video.Nvenc.AgirlikliTahmin = true;
+        });
+        Iceriyor("Ağırlıklı tahmin + B-kare boş (kartın varsayılanı)", k, " -bf 0 ");
+        k = NvencKomutu(hd, a =>
+        {
+            a.Video.Nvenc.Profil = "baseline";
+            a.Video.Nvenc.AgirlikliTahmin = true;
+        });
+        Icermiyor("Baseline + ağırlıklı tahmin (Baseline'da yok)", k, " -weighted_pred ");
+
+        // High 4:4:4'te kart yalnızca CAVLC kullanır.
+        k = NvencKomutu(hd, a => a.Video.Nvenc.Profil = "high444p");
+        Iceriyor("High 4:4:4 + CABAC seçili", k, " -profile:v high444p ");
+        Iceriyor("High 4:4:4 + CABAC seçili", k, " -coder cavlc ");
+        Iceriyor("High 4:4:4", k, ",format=yuv444p,");
+
+        Console.WriteLine();
+        Console.WriteLine("--- NVDEC: kareler önce kaynağın piksel biçimine çevrilir (işlemciyle çözmeyle bit bit aynı sonuç)");
+        static void Nvdec(ProfilAyarlari a) => a.Video.Nvenc.GpuCozme = true;
+        k = NvencKomutu(hd with { PikselBicimi = "yuv420p" }, Nvdec);
+        Iceriyor("NVDEC, 8 bit kaynak", k, " -hwaccel cuda -i KAYNAK.mp4 ");
+        Iceriyor("NVDEC, 8 bit kaynak", k, " -vf format=yuv420p,scale=");
+        k = NvencKomutu(Kaynak(3840, 2160, 60, "hevc", "Main 10", 153) with { PikselBicimi = "yuv420p10le" }, Nvdec);
+        Iceriyor("NVDEC, HEVC 10 bit kaynak", k, " -vf format=yuv420p10le,scale=");
+        k = NvencKomutu(hd with { PikselBicimi = "yuvj420p" }, Nvdec);
+        Iceriyor("NVDEC, tam aralık (yuvj420p) kaynak", k, " -vf format=yuv420p,scale=");
+        k = NvencKomutu(hd with { PikselBicimi = "yuv420p" }, a =>
+        {
+            Nvdec(a);
+            a.Video.KareHiziModu = KareHiziModu.Sabit;
+            a.Video.KareHizi = "30";
+        });
+        Iceriyor("NVDEC + sabit kare hızı", k, " -vf format=yuv420p,fps=30,scale=");
+        k = NvencKomutu(hd with { PikselBicimi = "yuv420p" });
+        Icermiyor("NVDEC kapalı", k, " -hwaccel ");
+        Icermiyor("NVDEC kapalı", k, "format=yuv420p,scale=");
+        k = NvencKomutu(hd with { PikselBicimi = "yuv420p" }, a =>
+        {
+            Nvdec(a);
+            a.Video.Kodlayici = VideoKodlayici.X264;
+        });
+        Icermiyor("x264 seçili (NVDEC kutusu açık kalsa da)", k, " -hwaccel ");
+        Icermiyor("x264 seçili (NVDEC kutusu açık kalsa da)", k, "format=yuv420p,scale=");
+        k = NvencKomutu(hd, Nvdec);
+        Icermiyor("NVDEC, piksel biçimi bilinmiyor", k, " -vf format=");
+
+        Console.WriteLine();
         Console.WriteLine("--- YouTube'da NVENC seçilirse (referans kare boş, 3 B-kare, sabit kalite)");
         static void Nvenc(ProfilAyarlari a) => a.Video.Kodlayici = VideoKodlayici.Nvenc;
 
@@ -668,6 +789,16 @@ internal static class BirimKontrol
         Kontrol("YouTube 5 sn: tampon payı kısa videoda büyük", "en çok 26,5 MB", BoyutTahmini.Hesapla(yt, kisa, ses)?.Metin ?? "yok");
         yt.Video.X264.VbvMaks = null;
         Kontrol("CRF, üst sınır yok: tahmin yapılmaz", "yok", BoyutTahmini.Hesapla(yt, m, ses)?.Metin ?? "yok");
+        var cq = Varsayilanlar.TikTok();
+        cq.Video.Nvenc.Mod = NvencModu.SabitKalite;
+        cq.Video.Nvenc.MaksBitHizi = 30000;
+        cq.Video.Nvenc.Tampon = 40000;
+        // NVENC sabit kalite: tampon yok sayılır, kart seviyenin tamponunu kullanır. Kaynak H.264 değil → Main,
+        // seviye otomatik → yeten en düşük: 30000 kb/s 4.0'ı (20000) aşar → 4.1, tamponu 62500 kbit.
+        // (30000 + 1536) × 60 + 62500 = 1 954 660 kbit = 244 332 500 bayt = 233,0 MB
+        Kontrol("NVENC sabit kalite, en yüksek 30000 (tampon 40000 yok sayılır)", "en çok 233 MB", BoyutTahmini.Hesapla(cq, m, ses)?.Metin ?? "yok");
+        cq.Video.Nvenc.MaksBitHizi = null;
+        Kontrol("NVENC sabit kalite, üst sınır yok: tahmin yapılmaz", "yok", BoyutTahmini.Hesapla(cq, m, ses)?.Metin ?? "yok");
         var sessiz = Varsayilanlar.TikTok();
         sessiz.Ses.Kaynak = SesKaynagi.Sessiz;
         Kontrol("Sessiz (yalnızca video)", "tahmini 246 MB",

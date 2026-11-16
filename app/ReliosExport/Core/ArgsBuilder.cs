@@ -326,6 +326,11 @@ public static class ArgsBuilder
     {
         var v = a.Video;
         var filters = new List<string>();
+        if (NvdecBicimi(a, media) is { } nvdec)
+        {
+            filters.Add("format=" + nvdec);
+        }
+
         if (v.KareHiziModu == KareHiziModu.Sabit)
         {
             // Önce kare hızı (gereksiz ölçekleme yapılmasın), ör. 60 → 29.97.
@@ -375,6 +380,26 @@ public static class ArgsBuilder
         // tek başına etiketsiz kaynakta işe yaramıyor.
         filters.Add("setparams=color_primaries=bt709:color_trc=bt709");
         return filters;
+    }
+
+    /// <summary>
+    /// Kaynak ekran kartıyla çözülüyorsa (NVDEC) karelerin önce çevrileceği piksel biçimi: kaynağın işlemcide
+    /// çözülünce geldiği biçim. NVDEC kareleri NV12 / P010 olarak verir; ölçekleme ve renk dönüşümü bu biçimleri
+    /// işlemcide çözülen karelerden (yuv420p / yuv420p10le) farklı işler, sonuç bit bit aynı olmaz (kullanıcının
+    /// kartında ölçüldü: VP9 480p'de 0,37 dB düşük). NV12 → yuv420p ve P010 → yuv420p10le kayıpsızdır (yalnızca
+    /// düzlemlerin yeri değişir); bu çevirmeyle ekran kartıyla çözmenin sonucu işlemciyle çözmeyle aynı olur.
+    /// "yuvj" biçimlerinin yerine aynı biçimin normal adı (aralık karenin bilgisinde kalır; ffmpeg de aynısını yapar).
+    /// Ekran kartı kaynağı çözemezse (ör. ProRes) ffmpeg işlemcide çözer; çevirme o zaman etkisizdir.
+    /// </summary>
+    public static string? NvdecBicimi(ProfilAyarlari a, MediaInfo? media)
+    {
+        if (a.Video.Kodlayici != VideoKodlayici.Nvenc || !a.Video.Nvenc.GpuCozme
+            || media?.PikselBicimi?.Trim() is not { Length: > 0 } p)
+        {
+            return null;
+        }
+
+        return p.StartsWith("yuvj", StringComparison.Ordinal) ? "yuv" + p[4..] : p;
     }
 
     private static string PikselBicimi(ProfilAyarlari a, MediaInfo? media)
@@ -696,16 +721,35 @@ public static class ArgsBuilder
 
     /// <summary>
     /// NVENC'in VBV tamponu (kbit). Boşsa: CBR'de bit hızı kadar (1 saniye; seviye sınırına sığar), VBR'de
-    /// ffmpeg'in varsayılanı olan bit hızının 2 katı; sabit kalite / QP'de yok.
+    /// ffmpeg'in varsayılanı olan bit hızının 2 katı. Sabit kalite / QP'de yok: ffmpeg sabit kalitede tamponu
+    /// yok sayar (nvenc.c: "CQ mode shall discard avg bitrate/vbv buffer size"), kart seviyenin tamponunu kullanır.
     /// </summary>
     private static int? NvencTampon(NvencAyarlari n) => n.Mod switch
     {
-        NvencModu.SabitQp => null,
-        _ when n.Tampon is { } t => t,
-        NvencModu.Cbr => n.BitHizi,
-        NvencModu.DegiskenBitHizi => n.BitHizi * 2,
+        NvencModu.Cbr => n.Tampon ?? n.BitHizi,
+        NvencModu.DegiskenBitHizi => n.Tampon ?? n.BitHizi * 2,
         _ => null,
     };
+
+    /// <summary>
+    /// Sabit kalitede kartın kullanacağı tampon (kbit): seviyenin en büyük tamponu (ffmpeg verilen tamponu yok
+    /// sayar). "En çok" boyut tahmini için; seviye bilinmiyorsa (otomatik) çıktıya yeten en düşük seviyeninki.
+    /// </summary>
+    public static int? NvencSabitKaliteTamponu(ProfilAyarlari a, MediaInfo media)
+    {
+        var n = a.Video.Nvenc;
+        var profil = NvencProfili(n, media);
+        var high = profil.StartsWith("high", StringComparison.Ordinal);
+        var seviye = NvencSeviyesi(a, media);
+        if (H264Seviye.Sira(seviye) < 0)
+        {
+            var (w, h) = CiktiBoyutu(a, media);
+            seviye = H264Seviye.EnAz(w, h, CiktiKareHizi(a, media), NvencBitHizi(n), null, NvencEnAzDpb(n, profil), high)
+                     ?? string.Empty;
+        }
+
+        return H264Seviye.EnFazlaTampon(seviye, high);
+    }
 
     /// <summary>
     /// NVENC'e verilecek seviye. "kaynak" ise kaynağın seviyesi; ama çıktının boyutu, kare hızı, bit hızı,
@@ -724,9 +768,11 @@ public static class ArgsBuilder
         var profil = NvencProfili(n, media);
         var (w, h) = CiktiBoyutu(a, media);
 
-        // DPB, referans kare sayısı kadar verilir (NvencDpb); boşsa seviyeye göre seçildiği için 1 kare yeter.
+        // DPB, referans kare sayısı kadar verilir (NvencDpb; B-kare varsa en az 2 ya da 3); boşsa seviyeye göre
+        // seçildiği için B-karenin gerektirdiği kadar yeter.
         var gerekli = H264Seviye.EnAz(
-            w, h, CiktiKareHizi(a, media), NvencBitHizi(n), NvencTampon(n), n.Ref ?? 1,
+            w, h, CiktiKareHizi(a, media), NvencBitHizi(n), NvencTampon(n),
+            Math.Max(n.Ref ?? 1, NvencEnAzDpb(n, profil)),
             high: profil.StartsWith("high", StringComparison.Ordinal));
         return H264Seviye.EnYuksek(seviye, gerekli);
     }
@@ -735,14 +781,15 @@ public static class ArgsBuilder
     /// NVENC'in DPB'si (dosyadaki referans kare tamponu, max_num_ref_frames). ffmpeg'de -refs yalnızca bir karenin
     /// kaç kareye baktığıdır; DPB ayrı ayardır (-dpb_size) ve boşsa kart kendisi seçer (6 kare). 1080p'de 4.x
     /// seviyeleri en fazla 4 kare taşır: kartın seçtiği 6 kare seviyeyi aşar ve NVENC "Invalid Level" verir.
-    /// Bu yüzden referans kare sayısı verilmişse DPB de o kadar; verilmemişse ve seviye belliyse seviyenin
-    /// taşıyabildiği kadar (en fazla kartın seçeceği 6 kare). Seviye otomatikse kart seçer.
+    /// Bu yüzden referans kare sayısı verilmişse DPB de o kadar (B-karenin gerektirdiğinden az değil, bkz.
+    /// NvencEnAzDpb); verilmemişse ve seviye belliyse seviyenin taşıyabildiği kadar (en fazla kartın seçeceği 6
+    /// kare). Seviye otomatikse kart seçer.
     /// </summary>
-    private static int? NvencDpb(NvencAyarlari n, string seviye, ProfilAyarlari a, MediaInfo? media)
+    private static int? NvencDpb(NvencAyarlari n, string seviye, string profil, ProfilAyarlari a, MediaInfo? media)
     {
         if (n.Ref is { } r)
         {
-            return r;
+            return Math.Max(r, NvencEnAzDpb(n, profil));
         }
 
         if (media is null || H264Seviye.Sira(seviye) < 0)
@@ -750,14 +797,43 @@ public static class ArgsBuilder
             return null;
         }
 
+        // Elle seçilen seviye B-karenin gerektirdiğini taşıyamıyorsa kart "Invalid Level" verir (açıklaması: seviye düşük).
         var (w, h) = CiktiBoyutu(a, media);
-        return H264Seviye.EnFazlaDpb(seviye, w, h) is { } enFazla ? Math.Min(6, enFazla) : null;
+        return H264Seviye.EnFazlaDpb(seviye, w, h) is { } enFazla
+            ? Math.Max(Math.Min(6, enFazla), NvencEnAzDpb(n, profil))
+            : null;
     }
 
     private static string NvencProfili(NvencAyarlari n, MediaInfo? media) => ProfilCoz(n.Profil, media);
 
-    /// <summary>Baseline profilde B-kare yoktur.</summary>
-    private static int? NvencBKare(NvencAyarlari n, string profil) => profil == "baseline" ? 0 : n.BKare;
+    /// <summary>
+    /// B-kare sayısı. Baseline profilde B-kare yoktur; ağırlıklı tahmin de B-karelerle birlikte kullanılamaz
+    /// (NVENC "Weighted Prediction not supported with B-frames" verip hiç açılmaz). İkisinde de 0.
+    /// </summary>
+    private static int? NvencBKare(NvencAyarlari n, string profil) =>
+        profil == "baseline" || NvencAgirlikliTahmin(n, profil) ? 0 : n.BKare;
+
+    /// <summary>Ağırlıklı tahmin (Baseline profilde yoktur).</summary>
+    private static bool NvencAgirlikliTahmin(NvencAyarlari n, string profil) => n.AgirlikliTahmin && profil != "baseline";
+
+    /// <summary>
+    /// B-karenin gerektirdiği en az DPB: B-kare referans olarak kullanılıyorsa 3 (NVENC "DPB size should be greater
+    /// than or equal to 3 for B as reference" verip açılmaz; kullanıcının kartında denendi), yalnızca B-kare varsa
+    /// 2 (önceki ve sonraki kare), B-kare yoksa 1. B-kare sayısı boşsa kartın varsayılanı B-kareli sayılır.
+    /// </summary>
+    private static int NvencEnAzDpb(NvencAyarlari n, string profil) => NvencBKare(n, profil) switch
+    {
+        0 => 1,
+        null => 3,
+        _ => n.BRefModu == "disabled" ? 2 : 3,
+    };
+
+    /// <summary>
+    /// Entropi kodlaması: Baseline ve High 4:4:4 profilde kart yalnızca CAVLC kullanır (Baseline'da CABAC yoktur;
+    /// NVENC 4:4:4'ü yalnızca CAVLC ile kodlar, CABAC seçilse de; kullanıcının kartında denendi).
+    /// </summary>
+    private static string NvencEntropi(NvencAyarlari n, string profil) =>
+        profil is "baseline" or "high444p" ? "cavlc" : n.Kodlama;
 
     /// <summary>
     /// x264'e verilecek seviye. "kaynak" ise kaynağın seviyesi; ama çıktının boyutu, kare hızı, VBV'si (en yüksek
@@ -990,7 +1066,10 @@ public static class ArgsBuilder
                 args.AddRange(["-rc", "vbr", "-cq", n.Cq.ToString(Inv), "-b:v", "0"]);
                 break;
             case NvencModu.SabitQp:
-                args.AddRange(["-rc", "constqp", "-qp", n.Qp.ToString(Inv)]);
+                // -b:v 0: verilmezse ffmpeg'in varsayılanı (2 Mb/s, tampon 4000 kbit) dosyanın HRD başlığına yazılır,
+                // oysa sabit QP'de bit hızı sınırı yoktur (kullanıcının kartında denendi: 12,6 Mb/s'lik dosyada
+                // "2000 kb/s"). 0 ile kart kendi varsayılanını yazar; görüntü bit bit aynı kalır.
+                args.AddRange(["-rc", "constqp", "-qp", n.Qp.ToString(Inv), "-b:v", "0"]);
                 break;
             case NvencModu.DegiskenBitHizi:
                 args.AddRange(["-rc", "vbr", "-b:v", Kb(n.BitHizi)]);
@@ -1000,14 +1079,17 @@ public static class ArgsBuilder
                 break;
         }
 
-        if (n.MaksBitHizi is { } mx && n.Mod != NvencModu.SabitQp)
+        // En yüksek bit hızı yalnızca VBR ve sabit kalitede: CBR'de kart onu yok sayar (bit hızı sabittir).
+        if (n.MaksBitHizi is { } mx && n.Mod is NvencModu.DegiskenBitHizi or NvencModu.SabitKalite)
         {
             args.AddRange(["-maxrate", Kb(mx)]);
         }
 
-        // CBR'de tampon boşsa bit hızı kadar (1 saniye): ffmpeg'in varsayılanı (2 katı) Main@4.1 / 4.2'nin
-        // tampon sınırını (62500 kbit) aşar ve NVENC seviyeyi reddeder.
-        if ((n.Tampon is not null || n.Mod == NvencModu.Cbr) && NvencTampon(n) is { } tb)
+        // Tampon yalnızca CBR ve VBR'de (sabit kalitede ffmpeg yok sayar, QP'de yoktur). CBR'de boşsa bit hızı
+        // kadar (1 saniye): ffmpeg'in varsayılanı (2 katı) Main@4.1 / 4.2'nin tampon sınırını (62500 kbit) aşar ve
+        // NVENC seviyeyi reddeder. VBR'de boşsa ffmpeg'e bırakılır (2 katı).
+        if ((n.Mod == NvencModu.Cbr || (n.Mod == NvencModu.DegiskenBitHizi && n.Tampon is not null))
+            && NvencTampon(n) is { } tb)
         {
             args.AddRange(["-bufsize", Kb(tb)]);
         }
@@ -1039,18 +1121,18 @@ public static class ArgsBuilder
             args.AddRange(["-refs", refs.ToString(Inv)]);
         }
 
-        if (NvencDpb(n, seviye, a, media) is { } dpb)
+        if (NvencDpb(n, seviye, profil, a, media) is { } dpb)
         {
             args.AddRange(["-dpb_size", dpb.ToString(Inv)]);
         }
 
-        if (n.AgirlikliTahmin)
+        if (NvencAgirlikliTahmin(n, profil))
         {
             args.AddRange(["-weighted_pred", "1"]);
         }
 
-        // Baseline profilde CABAC yoktur (kaynak Baseline ise "kaynakla aynı" profil buna düşer).
-        args.AddRange(["-coder", profil == "baseline" && n.Kodlama == "cabac" ? "cavlc" : n.Kodlama]);
+        // Baseline'da CABAC yoktur (kaynak Baseline ise "kaynakla aynı" profil buna düşer); 4:4:4'te kart CAVLC kullanır.
+        args.AddRange(["-coder", NvencEntropi(n, profil)]);
 
         if (Kare(k, k.EnBuyuk, fps) is { } g)
         {

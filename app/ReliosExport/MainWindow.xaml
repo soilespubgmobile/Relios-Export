@@ -596,7 +596,7 @@
                                                  Text="{Binding AnahtarKare.SahneDegisimi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                                     </DockPanel>
                                     <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8"
-                                               Text="0: kapalı; anahtar kareler yalnızca aralığa göre konur (hedef videodaki gibi). Boş: x264 varsayılanı."/>
+                                               Text="0: kapalı; anahtar kareler yalnızca aralığa göre konur (hedef videodaki gibi). Boş: x264 varsayılanı. NVENC'te eşik yoktur: 0 kapalı, başka her değer (ve boş) açık."/>
                                 </StackPanel>
                             </Expander>
 
@@ -604,6 +604,8 @@
                                 <StackPanel Margin="0,0,0,6">
                                     <CheckBox Content="Açık GOP (open-gop)" IsChecked="{Binding AnahtarKare.AcikGop}" Margin="0,0,0,8"/>
                                     <CheckBox Content="İntra yenileme (anahtar kare yerine kademeli yenileme)" IsChecked="{Binding AnahtarKare.IntraYenileme}" Margin="0,0,0,8"/>
+                                    <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8"
+                                               Text="Açık GOP yalnızca x264'te; NVENC her zaman kapalı GOP yazar."/>
                                 </StackPanel>
                             </Expander>
                         </StackPanel>

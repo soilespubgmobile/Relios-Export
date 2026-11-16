@@ -57,6 +57,9 @@ public sealed record MediaInfo(
     /// <summary>Kaynak videonun seviyesi (ffprobe: H.264'te 40 = 4.0, 42 = 4.2, 9 = 1b).</summary>
     public int? VideoSeviye { get; init; }
 
+    /// <summary>Kaynak videonun piksel biçimi (ffprobe adı: yuv420p, yuv420p10le, yuvj420p...); işlemcide çözülünce kareler bu biçimde gelir.</summary>
+    public string? PikselBicimi { get; init; }
+
     /// <summary>Kaynaktaki ses akışları (ilki çıktıda "videonun sesi" olarak kullanılır).</summary>
     public IReadOnlyList<SesAkisi> SesAkislari { get; init; } = [];
 
@@ -156,6 +159,7 @@ public static class MediaProbe
             SesAkislari = sesler,
             VideoCodec = ReadString(v, "codec_name"),
             VideoProfil = ReadString(v, "profile"),
+            PikselBicimi = ReadString(v, "pix_fmt"),
             VideoSeviye = v.TryGetProperty("level", out var lv) && lv.ValueKind == JsonValueKind.Number && lv.TryGetInt32(out var l) && l > 0
                 ? l
                 : null,

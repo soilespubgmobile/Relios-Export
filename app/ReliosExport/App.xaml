@@ -15,6 +15,7 @@
             <a:BosSecenek x:Key="Bos"/>
             <a:ListeDisi x:Key="ListeDisi"/>
             <a:Sayi x:Key="Sayi"/>
+            <a:Degil x:Key="Degil"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

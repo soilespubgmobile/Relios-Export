@@ -314,6 +314,8 @@
                             <ComboBox ItemsSource="{x:Static a:Secenekler.NalHrdler}" DisplayMemberPath="Ad" SelectedValuePath="Deger"
                                       SelectedValue="{Binding NalHrd, Converter={StaticResource Bos}}"/>
                         </DockPanel>
+                        <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8"
+                                   Text="CBR'de en yüksek bit hızı her zaman bit hızıdır, tampon boşsa bit hızının 2 katı. Diğer kiplerde VBV yalnızca tampon verilince kullanılır: CRF'de en yüksek bit hızı da gerekir; ortalama bit hızı ve 2 / 3 geçişte en yüksek bit hızı boşsa ortalamaya eşittir. Sabit QP'de VBV yoktur."/>
 
                         <TextBlock Text="AKIŞ" Style="{StaticResource AltBaslik}"/>
                         <CheckBox Content="Dolgu verisi (filler)" IsChecked="{Binding Dolgu}" Margin="0,0,0,10"/>

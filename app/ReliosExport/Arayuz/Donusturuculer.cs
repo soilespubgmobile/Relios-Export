@@ -74,6 +74,15 @@ public sealed class DogruysaGorunur : IValueConverter
         Binding.DoNothing;
 }
 
+/// <summary>bool'un tersi (ör. bir seçenek açıkken başka bir alanı kapatmak için IsEnabled).</summary>
+public sealed class Degil : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value is not true;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        Binding.DoNothing;
+}
+
 /// <summary>
 /// Sayı kutuları: virgül de nokta da ondalık ayırıcı sayılır (binlik ayırıcı yok), ekranda Türkçe virgül görünür.
 /// Boş kutu: değer yok (ön ayar / otomatik). Hatalı yazım kaynağa yazılmaz; kutudan çıkınca eski değer geri gelir.

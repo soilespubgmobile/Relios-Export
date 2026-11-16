@@ -148,6 +148,15 @@ public static class H264Seviye
         return (int)Math.Max(1, Math.Min(Tablo[i].MaksDpb / kare, 16));
     }
 
+    /// <summary>
+    /// Seviyenin en büyük VBV tamponu (kbit; High ve üstünde 1,25 katı); seviye bilinmiyorsa null.
+    /// </summary>
+    public static int? EnFazlaTampon(string? seviye, bool high)
+    {
+        var i = Sira(seviye);
+        return i < 0 ? null : (int)Math.Round(Tablo[i].MaksTampon * (high ? 1.25 : 1.0));
+    }
+
     /// <summary>İki seviyeden yüksek olanı (biri bilinmiyorsa diğeri).</summary>
     public static string EnYuksek(string a, string? b)
     {

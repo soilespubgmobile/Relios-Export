@@ -44,16 +44,18 @@
                             <TextBlock Text="Bit hızı (kb/s)" Style="{StaticResource PencereEtiketi}"/>
                             <TextBox Style="{StaticResource SayiKutusu}" Tag="" Text="{Binding BitHizi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                         </DockPanel>
-                        <StackPanel Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitKalite|DegiskenBitHizi|Cbr}">
-                            <DockPanel Style="{StaticResource FormSatiri}">
-                                <TextBlock Text="En yüksek bit hızı (kb/s)" Style="{StaticResource PencereEtiketi}"/>
-                                <TextBox Style="{StaticResource SayiKutusu}" Tag="sınırsız" Text="{Binding MaksBitHizi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
-                            </DockPanel>
-                            <DockPanel Style="{StaticResource FormSatiri}">
-                                <TextBlock Text="Tampon boyutu (kb)" Style="{StaticResource PencereEtiketi}"/>
-                                <TextBox Style="{StaticResource SayiKutusu}" Tag="otomatik" Text="{Binding Tampon, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
-                            </DockPanel>
-                        </StackPanel>
+                        <!-- En yüksek bit hızı CBR'de yoktur (kart yok sayar); tampon sabit kalitede yoktur (ffmpeg yok sayar,
+                             kart seviyenin tamponunu kullanır). -->
+                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitKalite|DegiskenBitHizi}">
+                            <TextBlock Text="En yüksek bit hızı (kb/s)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Tag="sınırsız" Text="{Binding MaksBitHizi, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <DockPanel Style="{StaticResource FormSatiri}" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=DegiskenBitHizi|Cbr}">
+                            <TextBlock Text="Tampon boyutu (kb)" Style="{StaticResource PencereEtiketi}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Tag="otomatik" Text="{Binding Tampon, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                        </DockPanel>
+                        <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8" Visibility="{Binding Mod, Converter={StaticResource Gorunur}, ConverterParameter=SabitKalite}"
+                                   Text="Sabit kalitede tampon verilmez: ekran kartı seviyenin tamponunu kullanır."/>
 
                         <TextBlock Text="HIZ VE UYUMLULUK" Style="{StaticResource AltBaslik}"/>
                         <DockPanel Style="{StaticResource FormSatiri}">
@@ -98,11 +100,11 @@
                         <CheckBox Content="Zamansal AQ (temporal-aq)" IsChecked="{Binding ZamansalAq}" Margin="0,0,0,10"/>
 
                         <TextBlock Text="KARELER" Style="{StaticResource AltBaslik}"/>
-                        <DockPanel Style="{StaticResource FormSatiri}">
+                        <DockPanel Style="{StaticResource FormSatiri}" IsEnabled="{Binding AgirlikliTahmin, Converter={StaticResource Degil}}">
                             <TextBlock Text="Ardışık B-kare (bf)" Style="{StaticResource PencereEtiketi}"/>
                             <TextBox Style="{StaticResource SayiKutusu}" Tag="sürücü" Text="{Binding BKare, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                         </DockPanel>
-                        <DockPanel Style="{StaticResource FormSatiri}">
+                        <DockPanel Style="{StaticResource FormSatiri}" IsEnabled="{Binding AgirlikliTahmin, Converter={StaticResource Degil}}">
                             <TextBlock Text="B-kare referans modu" Style="{StaticResource PencereEtiketi}"/>
                             <ComboBox ItemsSource="{x:Static a:Secenekler.BRefModlari}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding BRefModu}"/>
                         </DockPanel>
@@ -115,7 +117,8 @@
                             <ComboBox ItemsSource="{x:Static a:Secenekler.Kodlamalar}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Kodlama}"/>
                         </DockPanel>
                         <CheckBox Content="Ağırlıklı tahmin (weighted_pred)" IsChecked="{Binding AgirlikliTahmin}" Margin="0,2,0,6"/>
-                        <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8" Text="Ağırlıklı tahmin B-karelerle birlikte her sürücüde desteklenmez; açarsanız B-kare sayısını 0 yapın."/>
+                        <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8"
+                                   Text="Ağırlıklı tahmin B-karelerle birlikte kullanılamaz (NVENC desteklemez): açıkken B-kare kullanılmaz. B-kareler referans olarak kullanılınca referans kare tamponu en az 3 kare olur. Baseline ve High 4:4:4 profilde ekran kartı yalnızca CAVLC kullanır."/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -126,7 +129,7 @@
                     <StackPanel Margin="2,0,8,0">
                         <CheckBox Content="Kaynağı da ekran kartıyla çöz (NVDEC)" IsChecked="{Binding GpuCozme}" Margin="0,0,0,6"/>
                         <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,12"
-                                   Text="Çözme hızlanır; filtreler (kırpma, ölçekleme, renk) yine işlemcide yapılır, kalite değişmez."/>
+                                   Text="Çözme hızlanır; filtreler (kırpma, ölçekleme, renk) yine işlemcide yapılır. Çözülen kareler önce kaynağın kendi piksel biçimine kayıpsız çevrilir; kalite değişmez. Ekran kartının çözemediği kaynağı (ör. ProRes) işlemci çözer."/>
 
                         <TextBlock Text="EK PARAMETRELER" Style="{StaticResource AltBaslik}"/>
                         <TextBox Style="{StaticResource InputArea}" Tag="ör. -surfaces 32 (ffmpeg seçenekleri, boşlukla ayrılır)"
