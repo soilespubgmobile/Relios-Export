@@ -16,7 +16,7 @@ public partial class App : Application
         // Derleme kontrolünde (--ffmpeg-kontrol / --pencere-kontrol) hata penceresi açılmaz:
         // hata yalnızca dosyaya yazılır ve program hata koduyla kapanır.
         CrashReport.Silent = Array.Exists(
-            Environment.GetCommandLineArgs(), a => a is "--ffmpeg-kontrol" or "--pencere-kontrol" or "--uctan-uca");
+            Environment.GetCommandLineArgs(), a => a is "--ffmpeg-kontrol" or "--pencere-kontrol" or "--uctan-uca" or "--arayuz-taramasi");
 
         // WPF'in kendisi başlatılmadan önce bağlanır: başlangıçta bir şey çökerse bile
         // hata "Relios Export hata.txt" dosyasına yazılır ve ekranda gösterilir.
@@ -44,8 +44,10 @@ public partial class App : Application
         //   --pencere-kontrol <dosya>  ana pencere ve ayar pencereleri hatasız açılıyor mu
         //   --ekran <klasör>           (pencere kontrolüyle) pencerelerin görüntüsünü PNG olarak kaydeder
         //   --uctan-uca <rapor> --medya <klasör> --cikti <klasör>  arayüzü bir kullanıcı gibi kullanıp denetler
+        //   --arayuz-taramasi <rapor> --medya <klasör> --cikti <klasör>  her kutuyu, listeyi, düğmeyi tek tek dener
         var uu = Array.IndexOf(e.Args, "--uctan-uca");
-        if (uu >= 0)
+        var at = Array.IndexOf(e.Args, "--arayuz-taramasi");
+        if (uu >= 0 || at >= 0)
         {
             string Arg(string ad)
             {
@@ -53,7 +55,15 @@ public partial class App : Application
                 return i >= 0 && i + 1 < e.Args.Length ? e.Args[i + 1] : string.Empty;
             }
 
-            UctanUcaCalistir(Arg("--uctan-uca"), Arg("--medya"), Arg("--cikti"));
+            if (at >= 0)
+            {
+                ArayuzTaramasiCalistir(Arg("--arayuz-taramasi"), Arg("--medya"), Arg("--cikti"));
+            }
+            else
+            {
+                UctanUcaCalistir(Arg("--uctan-uca"), Arg("--medya"), Arg("--cikti"));
+            }
+
             return;
         }
 
@@ -142,6 +152,33 @@ public partial class App : Application
             }
 
             await UctanUca.DurdurAsync(w);
+            File.WriteAllText(raporYolu, rapor.ToString());
+            Shutdown(kod);
+        }));
+        w.Show();
+    }
+
+    /// <summary>Arayüz taraması: sonuç rapora yazılır; fark varsa çıkış kodu 1, beklenmeyen hata 2.</summary>
+    private void ArayuzTaramasiCalistir(string raporYolu, string medya, string cikti)
+    {
+        // Bağlama iletileri pencereler oluşmadan önce dinlenir (açılıştaki hatalar da yakalansın).
+        var baglama = ArayuzTaramasi.BaglamaIletileriniDinle();
+        var w = new MainWindow();
+        MainWindow = w;
+        w.Loaded += (_, _) => Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Func<Task>(async () =>
+        {
+            var rapor = new StringBuilder();
+            var kod = 0;
+            try
+            {
+                kod = await ArayuzTaramasi.CalistirAsync(w, medya, cikti, baglama, rapor) == 0 ? 0 : 1;
+            }
+            catch (Exception ex)
+            {
+                rapor.AppendLine("BEKLENMEYEN HATA | " + ex);
+                kod = 2;
+            }
+
             File.WriteAllText(raporYolu, rapor.ToString());
             Shutdown(kod);
         }));

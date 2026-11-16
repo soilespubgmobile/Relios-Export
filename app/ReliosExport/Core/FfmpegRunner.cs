@@ -196,7 +196,18 @@ public static class Exporter
     {
         // Kodlama sürerken arayüzde ayar değişse bile bu video başladığı ayarlarla biter.
         var a = ayarlar.Kopya();
-        var media = await MediaProbe.ProbeAsync(Tools.Ffprobe, input, ct);
+        MediaInfo media;
+        try
+        {
+            media = await MediaProbe.ProbeAsync(Tools.Ffprobe, input, ct);
+        }
+        catch (FfmpegHatasi ex)
+        {
+            // Okunamayan video (bozuk, yarım kopyalanmış, silinmiş): okuma komutu ve çıktısı günlüğe yazılır.
+            ex.GunlukDosyasi = HataAciklamasi.GunlukYaz(input, OkumaGunlugu(ex, input, profile, a));
+            throw;
+        }
+
         var ses = await ArgsBuilder.SesSecAsync(Tools.Ffprobe, a.Ses, media, input, ct);
         onInfo?.Invoke(Describe(media, a, ses));
         EsitlemeRaporu? rapor = null;
@@ -390,6 +401,25 @@ public static class Exporter
 
         sb.AppendLine();
         sb.AppendLine("----- ffmpeg çıktısı -----");
+        sb.AppendLine(ex.Gunluk);
+        sb.AppendLine();
+        sb.AppendLine("----- ayarlar -----");
+        sb.AppendLine(AyarDosyasi.Yaz(a));
+        return sb.ToString();
+    }
+
+    /// <summary>Video okunamadığında (kodlamadan önce) günlük: okuma komutu ve ffprobe çıktısı.</summary>
+    private static string OkumaGunlugu(FfmpegHatasi ex, string input, ExportProfile profile, ProfilAyarlari a)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Relios Export · hata günlüğü · " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
+        sb.AppendLine("Kaynak : " + input);
+        sb.AppendLine("Profil : " + profile.DisplayName);
+        sb.AppendLine("Açıklama: " + ex.Message);
+        sb.AppendLine();
+        sb.AppendLine($"Komut 1/1: \"{Tools.Ffprobe}\" " + ArgsBuilder.KomutMetni(MediaProbe.ProbeArgumanlari(input)));
+        sb.AppendLine();
+        sb.AppendLine("----- ffprobe çıktısı -----");
         sb.AppendLine(ex.Gunluk);
         sb.AppendLine();
         sb.AppendLine("----- ayarlar -----");

@@ -24,6 +24,7 @@ internal static class BirimKontrol
         Kaplar();
         AyarGecisi();
         Klasorler();
+        HataYazilari();
         Console.WriteLine();
         Console.WriteLine($"Birim kontrol: {_ok + _fark} kontrol, {_fark} fark.");
         return _fark == 0 ? 0 : 1;
@@ -1081,6 +1082,28 @@ internal static class BirimKontrol
     {
         var plan = ArgsBuilder.Olustur(a, m, "KAYNAK.mp4", SesSecimi.Yok, "CIKTI.mp4", "GECIS");
         return " " + string.Join(' ', plan.Gecisler[0]) + " ";
+    }
+
+    /// <summary>Satırda görünen hata yazıları Türkçe ve anlaşılır (okunamayan video, kayıt yeri, disk).</summary>
+    private static void HataYazilari()
+    {
+        Console.WriteLine("--- Hata yazıları (okunamayan video, kayıt yeri, disk dolu)");
+        static string Ilk(string s) => s.Split('\n', 2)[0].Trim();
+        var bozuk = MediaProbe.OkumaHatasi("[mov,mp4,m4a,3gp,3g2,mj2 @ 000001a17943f340] moov atom not found\nx.mp4: Invalid data found when processing input\n", 1);
+        Kontrol("Bozuk video: Türkçe açıklama", "Video dosyası okunamadı: bozuk, yarım kopyalanmış ya da desteklenmeyen bir dosya.", Ilk(bozuk.Message));
+        Kontrol("Bozuk video: ffprobe'un satırları ayrıntıda", "True", bozuk.Message.Contains("moov atom not found", StringComparison.Ordinal).ToString());
+        Kontrol("Bozuk video: günlüğe tam çıktı", "True", bozuk.Gunluk.Contains("Invalid data found", StringComparison.Ordinal).ToString());
+        var yok = MediaProbe.OkumaHatasi("C:\\yok.mp4: No such file or directory", 1);
+        Kontrol("Silinmiş video: Türkçe açıklama", "Dosya ya da klasör bulunamadı: silinmiş, taşınmış ya da adı değişmiş olabilir.", Ilk(yok.Message));
+        Kontrol("Bilinmeyen okuma hatası", "Video dosyası okunamadı (kod 5).", Ilk(MediaProbe.OkumaHatasi("garip bir hata", 5).Message));
+        Kontrol("Yazma izni yok", "Kayıt yerine yazılamadı: yazma izni yok. Başka bir kayıt yeri seçin.",
+            Ilk(HataAciklamasi.Metin(new UnauthorizedAccessException("Access to the path 'C:\\x' is denied."))));
+        Kontrol("Kayıt yeri yok", "Kayıt yeri bulunamadı: klasör ya da sürücü yok (disk çıkarılmış olabilir). Başka bir kayıt yeri seçin.",
+            Ilk(HataAciklamasi.Metin(new DirectoryNotFoundException("Could not find a part of the path 'Q:\\x'."))));
+        Kontrol("Disk dolu (ERROR_DISK_FULL)", "Diskte yer kalmadı. Kayıt yerinde yer açın ya da başka bir kayıt yeri seçin.",
+            Ilk(HataAciklamasi.Metin(new IOException("Diskte yeterli alan yok.", unchecked((int)0x80070070)))));
+        Kontrol("Başka dosya hatası: ileti olduğu gibi", "kilitli", HataAciklamasi.Metin(new IOException("kilitli")));
+        Kontrol("ffmpeg hatası: açıklaması olduğu gibi", "NVENC kullanılamadı", HataAciklamasi.Metin(new FfmpegHatasi("NVENC kullanılamadı", "günlük")));
     }
 
     private static void Klasorler()

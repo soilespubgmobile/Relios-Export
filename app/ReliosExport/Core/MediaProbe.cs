@@ -80,8 +80,25 @@ public sealed record MediaInfo(
 
 public static class MediaProbe
 {
+    /// <summary>
+    /// Videoyu okur. Okunamazsa (bozuk, yarım kopyalanmış, silinmiş dosya) <see cref="FfmpegHatasi"/>: Türkçe açıklama
+    /// (<see cref="HataAciklamasi"/>) + ffprobe'un son satırları; tam çıktısı hata günlüğüne yazılır.
+    /// </summary>
     public static async Task<MediaInfo> ProbeAsync(string ffprobePath, string inputPath, CancellationToken ct) =>
         Parse(await RunProbeAsync(ffprobePath, inputPath, ct));
+
+    /// <summary>Okuma komutunun bağımsız değişkenleri (hata günlüğünde de yazar).</summary>
+    public static IReadOnlyList<string> ProbeArgumanlari(string inputPath) =>
+        ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", inputPath];
+
+    /// <summary>ffprobe çıkış kodu 0 değilse fırlatılan hata: Türkçe açıklama ilk satırda, ardından son 8 satır.</summary>
+    public static FfmpegHatasi OkumaHatasi(string stderr, int kod)
+    {
+        var cikti = stderr.Trim();
+        var aciklama = HataAciklamasi.Bul(cikti) ?? $"Video dosyası okunamadı (kod {kod}).";
+        var son = cikti.Split('\n').Select(l => l.TrimEnd('\r')).Where(l => !string.IsNullOrWhiteSpace(l)).TakeLast(8);
+        return new FfmpegHatasi(aciklama + Environment.NewLine + string.Join(Environment.NewLine, son), cikti);
+    }
 
     private static async Task<string> RunProbeAsync(string ffprobePath, string inputPath, CancellationToken ct)
     {
@@ -95,16 +112,12 @@ public static class MediaProbe
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8,
         };
-        foreach (var a in new[]
-                 {
-                     "-v", "error", "-print_format", "json",
-                     "-show_format", "-show_streams", inputPath,
-                 })
+        foreach (var a in ProbeArgumanlari(inputPath))
         {
             psi.ArgumentList.Add(a);
         }
 
-        using var p = Process.Start(psi) ?? throw new InvalidOperationException("ffprobe başlatılamadı.");
+        using var p = Process.Start(psi) ?? throw new InvalidOperationException("Video okuyucu (ffprobe) başlatılamadı.");
         var stdoutTask = p.StandardOutput.ReadToEndAsync(ct);
         var stderrTask = p.StandardError.ReadToEndAsync(ct);
         await p.WaitForExitAsync(ct);
@@ -112,7 +125,7 @@ public static class MediaProbe
         var err = await stderrTask;
         if (p.ExitCode != 0)
         {
-            throw new InvalidOperationException($"ffprobe dosyayı okuyamadı: {err.Trim()}");
+            throw OkumaHatasi(err, p.ExitCode);
         }
 
         return json;

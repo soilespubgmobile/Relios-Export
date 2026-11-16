@@ -941,9 +941,10 @@ public partial class MainWindow : Window
                 catch (Exception ex)
                 {
                     item.State = ItemState.Failed;
-                    item.Status = "Hata: " + FirstLine(ex.Message);
+                    var metin = HataAciklamasi.Metin(ex);
+                    item.Status = "Hata: " + FirstLine(metin);
                     item.GunlukYolu = (ex as FfmpegHatasi)?.GunlukDosyasi;
-                    item.Detail = ex.Message + (item.GunlukYolu is { } g ? "\n\nAyrıntılı günlük: " + g : string.Empty);
+                    item.Detail = metin + (item.GunlukYolu is { } g ? "\n\nAyrıntılı günlük: " + g : string.Empty);
                     item.Progress = 0;
                     failed++;
                 }
@@ -1151,6 +1152,16 @@ public partial class MainWindow : Window
     internal string KontrolIlkSatir => _files.Count > 0 ? _files[0].Status : string.Empty;
 
     internal ProfilAyarlari KontrolAyarlari => _ayarlar;
+
+    /// <summary>Üst çubuktaki özetler (arayüz taraması: ayar değişikliği özete yansıyor mu).</summary>
+    internal IEnumerable<OzetParcasi> KontrolEtiketler => ProfileTags.ItemsSource as IEnumerable<OzetParcasi> ?? [];
+
+    /// <summary>Seçili profile hazır ayarlar yükler (arayüz taraması: her bağlam fabrika ayarlarından başlar).</summary>
+    internal void KontrolProfilYukle(ProfilAyarlari a)
+    {
+        _settings.Profiller[SelectedProfile.Id] = a;
+        AyarlariBagla();
+    }
 
     internal AppSettings KontrolAyarDosyasi => _settings;
 

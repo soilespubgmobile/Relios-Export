@@ -48,11 +48,30 @@ public static class HataAciklamasi
             "Çok geçişli x264'te geçiş dosyası okunamadı. Bir kez daha deneyin; sürerse tek geçişli (CRF) kullanın."),
         (["moov atom not found", "Invalid data found when processing input", "could not find codec parameters"],
             "Video dosyası okunamadı: bozuk, yarım kopyalanmış ya da desteklenmeyen bir dosya."),
+        (["No such file or directory"],
+            "Dosya ya da klasör bulunamadı: silinmiş, taşınmış ya da adı değişmiş olabilir."),
         (["Error while opening encoder", "Error initializing output stream", "Could not open encoder"],
             "Kodlayıcı bu ayarlarla açılamadı (ayarlar birbirine uymuyor). Günlükte hangi ayarın reddedildiği yazar."),
         (["height not divisible by 2", "width not divisible by 2"],
             "Çözünürlük çift sayı olmalı (genişlik ve yükseklik)."),
     ];
+
+    /// <summary>
+    /// Satırda gösterilecek hata yazısı. ffmpeg ve okuma hataları zaten Türkçe açıklamalıdır; dosya sistemi hataları
+    /// (kayıt yerine yazma izni yok, klasör / sürücü yok, disk dolu) burada Türkçeleştirilir, asıl ileti alt satırda kalır.
+    /// </summary>
+    public static string Metin(Exception ex) => ex switch
+    {
+        FfmpegHatasi => ex.Message,
+        UnauthorizedAccessException =>
+            "Kayıt yerine yazılamadı: yazma izni yok. Başka bir kayıt yeri seçin." + Environment.NewLine + ex.Message,
+        DirectoryNotFoundException or DriveNotFoundException =>
+            "Kayıt yeri bulunamadı: klasör ya da sürücü yok (disk çıkarılmış olabilir). Başka bir kayıt yeri seçin."
+            + Environment.NewLine + ex.Message,
+        IOException io when (io.HResult & 0xFFFF) is 0x70 or 0x27 =>
+            "Diskte yer kalmadı. Kayıt yerinde yer açın ya da başka bir kayıt yeri seçin." + Environment.NewLine + ex.Message,
+        _ => ex.Message,
+    };
 
     /// <summary>Bilinen bir hata ise Türkçe açıklaması, değilse null.</summary>
     public static string? Bul(string ffmpegCiktisi)

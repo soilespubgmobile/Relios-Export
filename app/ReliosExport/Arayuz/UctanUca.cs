@@ -146,7 +146,18 @@ internal static class UctanUca
 
         var bozuk = Satir("bozuk.mp4");
         Esit("bozuk: durum", ItemState.Failed, bozuk?.State);
-        Kontrol("bozuk: hata yazısı", "Hata: …", bozuk?.Status, bozuk?.Status.StartsWith("Hata: ", StringComparison.Ordinal) == true);
+        Esit("bozuk: hata yazısı Türkçe ve anlaşılır", "Hata: Video dosyası okunamadı: bozuk, yarım kopyalanmış ya da desteklenmeyen bir dosya.", bozuk?.Status);
+        Kontrol("bozuk: satırda program adı / bellek adresi yok", "ffprobe ve @ 0x yok", bozuk?.Status,
+            bozuk?.Status is { } bs && !bs.Contains("ffprobe", StringComparison.OrdinalIgnoreCase) && !bs.Contains(" @ ", StringComparison.Ordinal));
+        var bozukGunluk = bozuk?.GunlukYolu;
+        Kontrol("bozuk: hata günlüğü yazıldı (satırdaki günlük düğmesi)", "dosya var", bozukGunluk, bozukGunluk is not null && File.Exists(bozukGunluk));
+        Esit("bozuk: günlük düğmesi görünür", Visibility.Visible, bozuk?.GunlukGorunur);
+        Kontrol("bozuk: günlükte okuma komutu ve çıktısı", "Komut 1/1 … ----- ffprobe çıktısı ----- … Invalid data", bozukGunluk,
+            bozukGunluk is not null && File.Exists(bozukGunluk) && File.ReadAllText(bozukGunluk) is var bg
+            && bg.Contains("Komut 1/1:", StringComparison.Ordinal) && bg.Contains("----- ffprobe çıktısı -----", StringComparison.Ordinal)
+            && bg.Contains("Invalid data found", StringComparison.Ordinal));
+        Kontrol("bozuk: ipucunda ayrıntı ve günlüğün yeri", "… Ayrıntılı günlük: …", bozuk?.Detail,
+            bozuk?.Detail?.Contains("Ayrıntılı günlük: ", StringComparison.Ordinal) == true);
         Esit("Yarım dosya kalmadı (.part)", 0, Parcalar().Length);
         Esit("Durum yazısı", "4 video hazır · 1 hatalı", w.KontrolDurum);
         Esit("Hatalı satır varken düğme", "Başlat", Dugme());
@@ -281,6 +292,33 @@ internal static class UctanUca
 
         Esit("ayarlar.json: son seçilen platform", "TikTok", platform);
 
+        // ------------------------------------------------------------------ 8. Kayıt yeri yok (çıkarılmış disk)
+        Bolum("8. Kayıt yeri bulunamıyor (olmayan sürücü): anlaşılır Türkçe hata");
+        var surucu = "QRSTUVWXYZ".Select(c => c + @":\").FirstOrDefault(d => !Directory.Exists(d));
+        if (surucu is null)
+        {
+            rapor.AppendLine("     | boş sürücü harfi yok; bu adım atlandı");
+        }
+        else
+        {
+            w.KontrolCiktiKlasoru(Path.Combine(surucu, "Relios Export deneme"));
+            w.KontrolEkle(M("sessiz.mov"));
+            await Task.Delay(300);
+            if (await Tikla(w.BtnStart, "Başlat"))
+            {
+                await Bitir("Olmayan kayıt yerine dışa aktarma", 120);
+            }
+
+            Esit("Olmayan kayıt yeri: durum", ItemState.Failed, Satir("sessiz.mov")?.State);
+            Kontrol("Olmayan kayıt yeri: Türkçe açıklama", "Hata: Kayıt yeri bulunamadı: …", Durum("sessiz.mov"),
+                Durum("sessiz.mov").StartsWith("Hata: Kayıt yeri bulunamadı:", StringComparison.Ordinal));
+            w.KontrolCiktiKlasoru(cikti);
+            if (await Tikla(w.BtnClear, "Temizle"))
+            {
+                Esit("Liste boş", 0, w.KontrolSatirlar.Count);
+            }
+        }
+
         rapor.AppendLine().AppendLine($"Uçtan uca: {sira} kontrol, {fark} fark.");
         return fark;
     }
@@ -322,7 +360,7 @@ internal static class UctanUca
         {
             return await MediaProbe.ProbeAsync(Tools.Ffprobe, yol, CancellationToken.None);
         }
-        catch (InvalidOperationException)
+        catch (Exception ex) when (ex is FfmpegHatasi or InvalidOperationException)
         {
             return null;
         }

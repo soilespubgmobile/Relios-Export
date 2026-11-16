@@ -176,7 +176,7 @@ public static class ArgsBuilder
                     };
                 }
             }
-            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
+            catch (Exception ex) when (ex is FfmpegHatasi or InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
             {
                 // Okunamazsa ffmpeg kodlarken asıl hatayı söyler.
             }

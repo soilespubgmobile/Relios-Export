@@ -135,6 +135,31 @@ jobs:
           if ($p.ExitCode -ne 0) { "HATA: uctan uca denemede fark var (kod $($p.ExitCode))"; exit 1 }
           "Uctan uca deneme: hepsi OK."
 
+      # Arayuzdeki her kutu, acilir liste, onay kutusu ve dugme tek tek denenir (ana panel ve x264 / NVENC / FDK AAC /
+      # on ayar pencereleri): ayar degisiyor mu, komuta yansiyor mu, FFmpeg'de calisiyor mu (kucuk deneme videosuyla),
+      # uc degerler, hatali yazim, bos kutu, Enter / Esc, Vazgec / Tamam, Varsayilan, on ayar, baglama hatasi.
+      - name: Arayuz taramasi (her kutu, liste ve dugme)
+        if: ${{ !cancelled() }}
+        run: |
+          $ff = (Resolve-Path app/ReliosExport/ffmpeg/ffmpeg.exe).Path
+          $m = Join-Path $PWD 'medya-tarama'
+          New-Item -ItemType Directory $m -Force | Out-Null
+          # minik: 1 sn 320x180 30 fps, stereo ses; yaninda ayni adli WAV (ses kaynagi secenekleri farkli komut versin).
+          & $ff -hide_banner -loglevel error -f lavfi -i testsrc2=size=320x180:rate=30 -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 1 -pix_fmt yuv420p -c:v libx264 -preset veryfast -c:a aac -ac 2 -y "$m/minik.mp4"
+          & $ff -hide_banner -loglevel error -f lavfi -i "aevalsrc=0.3*sin(2*PI*660*t)|0.3*sin(2*PI*880*t):s=48000:d=1" -c:a pcm_s16le -y "$m/minik.wav"
+          if (-not (Test-Path "$m/minik.mp4") -or -not (Test-Path "$m/minik.wav")) { "HATA: deneme videosu uretilemedi"; exit 1 }
+          Remove-Item "out/ayarlar.json" -ErrorAction SilentlyContinue
+          Remove-Item "out/Relios Export hata.txt" -ErrorAction SilentlyContinue
+          $rapor = Join-Path $PWD 'arayuz-taramasi.txt'
+          $cikti = Join-Path $PWD 'arayuz-taramasi-cikti'
+          $p = Start-Process -FilePath "out/Relios Export.exe" -ArgumentList @('--arayuz-taramasi', $rapor, '--medya', $m, '--cikti', $cikti) -PassThru
+          $null = $p.Handle
+          if (-not $p.WaitForExit(2400000)) { $p.Kill(); "HATA: arayuz taramasi 40 dakikada bitmedi" }
+          if (Test-Path $rapor) { Get-Content $rapor | ForEach-Object { Write-Host $_ } } else { "HATA: rapor yazilmadi" }
+          if (Test-Path "out/Relios Export hata.txt") { "--- hata kaydi"; Get-Content "out/Relios Export hata.txt" }
+          if ($p.ExitCode -ne 0) { "HATA: arayuz taramasinda fark var (kod $($p.ExitCode))"; exit 1 }
+          "Arayuz taramasi: hepsi OK."
+
       # Arayuzun goruntuleri (ana pencere, ayar paneli, x264 / NVENC / FDK / on ayar pencerelerinin her sekmesi).
       # Gunlukte base64 olarak durur; gozle kontrol icin.
       - name: Ekran goruntuleri
