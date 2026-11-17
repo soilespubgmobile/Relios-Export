@@ -195,12 +195,13 @@ public partial class App : Application
         var arka = (Brush)w.FindResource("BgSurface");
         w.KontrolIcinDoldur();
         EkranGoruntusu.Bekle(w.Dispatcher);
-        // Bekleyen örnek: 60 sn, TikTok CBR 34375 kb/s + WAV 16 bit 48 kHz stereo = 257 MB.
+        // Bekleyen örnek: 60 sn 1080×1920, yanında aynı adlı WAV. TikTok varsayılanı x264 CRF 24 (bit hızı üst sınırı
+        // yok): tahmini boyut yazılmaz.
         var ilk = w.KontrolIlkSatir;
-        rapor.AppendLine("Tahmini boyut: " + ilk);
-        if (!ilk.Contains("tahmini 257 MB", StringComparison.Ordinal))
+        rapor.AppendLine("Bekleyen satır (TikTok): " + ilk);
+        if (ilk != "Bekliyor · Ses: edit1.wav")
         {
-            throw new InvalidOperationException("Bekleyen satırda tahmini boyut yok: " + ilk);
+            throw new InvalidOperationException("TikTok varsayılanında bekleyen satır beklenen gibi değil (tahmin olmamalı): " + ilk);
         }
 
         if (ekran is not null)
@@ -209,13 +210,27 @@ public partial class App : Application
             w.KontrolIcinTumSatirlariAc();
             EkranGoruntusu.Bekle(w.Dispatcher);
             EkranGoruntusu.Oge(w.AyarPaneli, arka, Path.Combine(ekran, "02-ayar-paneli-tiktok.png"));
-            w.RbYouTube.IsChecked = true;
-            EkranGoruntusu.Bekle(w.Dispatcher);
+        }
+
+        // YouTube: CRF 18 + en yüksek 34375 kb/s (tampon 55000 kb), ses FDK AAC 128 kb/s:
+        // (34375 + 128) × 60 + 55000 × 0,9 = 2 119 680 kbit = 264 960 000 bayt = 252,7 MB → "en çok 253 MB".
+        w.RbYouTube.IsChecked = true;
+        EkranGoruntusu.Bekle(w.Dispatcher);
+        var ytIlk = w.KontrolIlkSatir;
+        rapor.AppendLine("Bekleyen satır (YouTube): " + ytIlk);
+        if (!ytIlk.Contains("en çok 253 MB", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("YouTube'da bekleyen satırda tahmini boyut yok: " + ytIlk);
+        }
+
+        if (ekran is not null)
+        {
             EkranGoruntusu.Oge(w.AyarPaneli, arka, Path.Combine(ekran, "03-ayar-paneli-youtube.png"));
             EkranGoruntusu.Pencere(w, Path.Combine(ekran, "04-ana-pencere-youtube.png"));
-            w.RbTikTok.IsChecked = true;
-            EkranGoruntusu.Bekle(w.Dispatcher);
         }
+
+        w.RbTikTok.IsChecked = true;
+        EkranGoruntusu.Bekle(w.Dispatcher);
 
         // Hepsi bitince Başlat düğmesi "Tekrar işle" olmalı.
         var dugme = w.KontrolIcinHepsiBitti();
@@ -271,9 +286,10 @@ public partial class App : Application
             sira++;
         }
 
-        // TikTok varsayılanının x264 komutu (önizlemedeki ile aynı fonksiyon) — kontrol çıktısında görünsün.
+        // Varsayılanların kodlayıcı komutları (önizlemedeki ile aynı fonksiyon) — kontrol çıktısında görünsün.
+        rapor.Append("x264_tiktok=").Append(ArgsBuilder.X264KomutMetni(Varsayilanlar.TikTok(), 60)).Append('\n');
         rapor.Append("x264_dikey916=").Append(ArgsBuilder.X264KomutMetni(Varsayilanlar.Dikey916(), 30000.0 / 1001)).Append('\n');
-        rapor.Append("nvenc_tiktok=").Append(ArgsBuilder.NvencKomutMetni(Varsayilanlar.TikTok(), 60)).Append('\n');
+        rapor.Append("nvenc_tiktok=").Append(ArgsBuilder.NvencKomutMetni(Varsayilanlar.TikTokNvenc(), 60)).Append('\n');
         return rapor.ToString();
     }
 

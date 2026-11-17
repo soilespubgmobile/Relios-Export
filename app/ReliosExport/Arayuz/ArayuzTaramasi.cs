@@ -440,22 +440,23 @@ internal static class ArayuzTaramasi
                 a.Ses.Kodlayici = SesKodlayici.Wav;
                 return a;
             }),
-            ("TikTok · NVENC CBR · WAV (GitHub'da ekran kartı yok: komut denetlenir)", ExportProfileId.TikTok, () => Ozel(Varsayilanlar.TikTok())),
+            ("TikTok · x264 CRF 24 · FDK AAC 44,1 kHz (varsayılan)", ExportProfileId.TikTok, () => Ozel(Varsayilanlar.TikTok())),
+            ("TikTok · NVENC CBR · WAV (0.10.0'ın varsayılanı; GitHub'da ekran kartı yok: komut denetlenir)", ExportProfileId.TikTok, () => Ozel(Varsayilanlar.TikTokNvenc())),
             ("TikTok · NVENC sabit kalite", ExportProfileId.TikTok, () =>
             {
-                var a = Ozel(Varsayilanlar.TikTok());
+                var a = Ozel(Varsayilanlar.TikTokNvenc());
                 a.Video.Nvenc.Mod = NvencModu.SabitKalite;
                 return a;
             }),
             ("TikTok · NVENC sabit QP", ExportProfileId.TikTok, () =>
             {
-                var a = Ozel(Varsayilanlar.TikTok());
+                var a = Ozel(Varsayilanlar.TikTokNvenc());
                 a.Video.Nvenc.Mod = NvencModu.SabitQp;
                 return a;
             }),
             ("TikTok · NVENC VBR", ExportProfileId.TikTok, () =>
             {
-                var a = Ozel(Varsayilanlar.TikTok());
+                var a = Ozel(Varsayilanlar.TikTokNvenc());
                 a.Video.Nvenc.Mod = NvencModu.DegiskenBitHizi;
                 return a;
             }),
@@ -533,7 +534,7 @@ internal static class ArayuzTaramasi
         Kontrol("Özel boyut 1080×1920: FFmpeg'de çalışıyor", "çalıştı", hataOzel ?? "çalıştı", hataOzel is null);
 
         // ------------------------------------------------------------------ 1c. NVENC kayıpsız (ana panel)
-        await BaglamaGec(ExportProfileId.TikTok, Ozel(Varsayilanlar.TikTok()));
+        await BaglamaGec(ExportProfileId.TikTok, Ozel(Varsayilanlar.TikTokNvenc()));
         await KayipsizDene("Ana panel", anaDenetimler, w, AnaDurum);
 
         // ------------------------------------------------------------------ 2. Kutularda Enter / Esc / odaktan çıkma
@@ -817,7 +818,7 @@ internal static class ArayuzTaramasi
             Durumlu("NVENC penceresi: Tamam ayar dosyasına yazıldı",
                 AyarDosyasiOku(ExportProfileId.TikTok)?.Contains($"\"GpuCozme\": {(!onceki).ToString().ToLowerInvariant()}", StringComparison.Ordinal) == true,
                 $"GpuCozme: {(!onceki).ToString().ToLowerInvariant()}", "yok");
-            w.KontrolAyarlari.Video.Nvenc = AyarDosyasi.Kopyala(Varsayilanlar.TikTok().Video.Nvenc);
+            w.KontrolAyarlari.Video.Nvenc = AyarDosyasi.Kopyala(Varsayilanlar.TikTokNvenc().Video.Nvenc);
             await Bosta(w);
         }
 

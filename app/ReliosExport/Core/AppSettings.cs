@@ -137,11 +137,43 @@ public sealed class AppSettings
                 a.Video.X264.VbvMaks = 34375;
                 a.Video.X264.VbvTampon = 55000;
             }
+
+            if (!onAyar && id == ExportProfileId.TikTok && a.Surum < 12)
+            {
+                // 0.10.0'a kadarki TikTok varsayılanı (NVENC CBR 34375 kb/s, 30 karede bir anahtar kare, WAV 16 bit
+                // 48 kHz): değiştirilmemiş kısımlar yeni varsayılana geçer (x264 veryslow CRF 24, en çok 10 saniyede bir
+                // anahtar kare, FDK AAC 128 kb/s 44,1 kHz). Kullanıcının değiştirdiği kısım, LUFS eşitleme seçimi ve ön
+                // ayarlar olduğu gibi kalır.
+                var eski = Varsayilanlar.TikTokNvenc();
+                var yeni = Varsayilanlar.TikTok();
+                if (AyniAyar(a.Video, eski.Video))
+                {
+                    a.Video = yeni.Video;
+                }
+
+                if (AyniAyar(a.AnahtarKare, eski.AnahtarKare))
+                {
+                    a.AnahtarKare = yeni.AnahtarKare;
+                }
+
+                if (a.Ses is
+                    {
+                        Kodlayici: SesKodlayici.Wav, WavBit: WavBitDerinligi.Bit16, OrnekHizi: 48000, Kanal: KanalModu.Stereo,
+                        Kalite: DonusumKalitesi.EnYuksek, Titresim: Titresim.Ucgen,
+                    })
+                {
+                    Varsayilanlar.TikTokSesi(a.Ses);
+                }
+            }
         }
 
         a.Surum = ProfilAyarlari.GuncelSurum;
         return a;
     }
+
+    /// <summary>İki ayar nesnesi (ör. kayıtlı video ayarı ve eski varsayılan) ayar dosyasında birebir aynı mı.</summary>
+    private static bool AyniAyar<T>(T x, T y) =>
+        JsonSerializer.Serialize(x, AyarDosyasi.Secenekler) == JsonSerializer.Serialize(y, AyarDosyasi.Secenekler);
 
     public static AppSettings Load()
     {

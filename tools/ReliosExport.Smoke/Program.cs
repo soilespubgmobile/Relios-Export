@@ -3,7 +3,7 @@ using ReliosExport.Core;
 using ReliosExport.Core.Ayarlar;
 
 // Relios Export'un kodlama kodunu (app/ReliosExport/Core) arayüz olmadan çalıştıran deneme aracı.
-// Kullanım: ReliosExport.Smoke.exe <kaynak video> <çıktı klasörü> [--profil tiktok|tiktok-916|youtube] [--ayar ayar.json]
+// Kullanım: ReliosExport.Smoke.exe <kaynak video> <çıktı klasörü> [--profil tiktok|tiktok-nvenc|tiktok-916|youtube] [--ayar ayar.json]
 //           [--ayarla Yol=Deger ...] [--sadece-komut]
 //           ReliosExport.Smoke.exe --birim-kontrol   (video gerektirmeyen kontroller)
 //   --ayar          profil ayarlarını JSON dosyasından alır (yoksa profilin fabrika ayarları)
@@ -22,7 +22,7 @@ if (args.Length >= 1 && args[0] == "--birim-kontrol")
 
 if (args.Length < 2)
 {
-    Console.Error.WriteLine("Kullanım: ReliosExport.Smoke <kaynak> <çıktı klasörü> [--profil tiktok|tiktok-916|youtube] [--ayar dosya.json] [--sadece-komut]");
+    Console.Error.WriteLine("Kullanım: ReliosExport.Smoke <kaynak> <çıktı klasörü> [--profil tiktok|tiktok-nvenc|tiktok-916|youtube] [--ayar dosya.json] [--sadece-komut]");
     return 2;
 }
 
@@ -43,6 +43,11 @@ for (var i = 2; i < args.Length; i++)
             {
                 // Hazır ön ayar: dikey 9:16 (x264, 1216x2160, 29,97 fps) — doğrulama bunu kullanır.
                 ayarlar = Varsayilanlar.Dikey916();
+            }
+            else if (ad == "tiktok-nvenc")
+            {
+                // 0.10.0'a kadar TikTok varsayılanı: NVENC CBR 34375 kb/s, 30 karede bir anahtar kare, WAV 16 bit 48 kHz.
+                ayarlar = Varsayilanlar.TikTokNvenc();
             }
             break;
         case "--ayar" when i + 1 < args.Length:

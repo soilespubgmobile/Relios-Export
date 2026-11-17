@@ -78,8 +78,10 @@ public sealed class ProfilAyarlari : Gozlenebilir
     /// 9: TikTok ve YouTube sesi WAV 16 bit 48 kHz, en yüksek dönüşüm kalitesi (soxr 33 bit), üçgen titreşim.
     /// 10: TikTok ve YouTube'da LUFS eşitleme varsayılan açık (-14, yalnızca kısık ses yükseltilir).
     /// 11: YouTube sesi FDK AAC 128 kb/s 48 kHz, en yüksek dönüşüm kalitesi, üçgen titreşim (TikTok WAV 16 bit kalır).
+    /// 12: TikTok varsayılanı x264 veryslow CRF 24 (High, 16 referans kare, önden bakış 250), anahtar kare en çok
+    ///     10 saniyede bir; ses FDK AAC 128 kb/s 44,1 kHz. Değiştirilmemiş eski TikTok ayarı yenisine geçer.
     /// </summary>
-    public const int GuncelSurum = 11;
+    public const int GuncelSurum = 12;
 
     public VideoAyarlari Video { get => _video; set => Bagla(ref _video, value); }
 

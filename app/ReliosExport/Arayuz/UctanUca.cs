@@ -13,8 +13,9 @@ namespace ReliosExport.Arayuz;
 /// Yalnızca GitHub'daki uçtan uca deneme (--uctan-uca). Gerçek ana pencereyi bir kullanıcı gibi kullanır: video ekler
 /// (sürükle-bırakla aynı yol), Başlat'a basar, bitmesini bekler, tekrar işler, iptal eder, platform değiştirir,
 /// listeyi temizler; her adımda satırları, durum yazısını, düğmeleri ve oluşan dosyaları (ffprobe ile) denetler.
-/// Deneme videoları iş akışında ffmpeg ile üretilir (medya klasörü). GitHub'da NVIDIA ekran kartı olmadığı için
-/// kodlama YouTube profilinde (x264) yapılır; TikTok (NVENC) adımında anlaşılır hata mesajı ve günlük denetlenir.
+/// Deneme videoları iş akışında ffmpeg ile üretilir (medya klasörü). Kodlama YouTube ve TikTok varsayılanlarıyla
+/// (x264) yapılır; GitHub'da NVIDIA ekran kartı olmadığı için TikTok'ta NVENC seçilince anlaşılır hata mesajı ve
+/// günlük denetlenir.
 /// </summary>
 internal static class UctanUca
 {
@@ -241,20 +242,29 @@ internal static class UctanUca
         Esit("Bitenlere dokunulmadı", "Done, Done, Done, Done",
             string.Join(", ", new[] { "ses_var.mp4", "sessiz.mov", "harici.mp4", Tr + ".mp4" }.Select(a => Satir(a)?.State.ToString())));
 
-        // ------------------------------------------------------------------ 6. TikTok (NVENC): ekran kartı yok
-        Bolum("6. TikTok'a geç: satırlar sıfırlanır; NVENC'siz bilgisayarda anlaşılır hata + günlük");
+        // ------------------------------------------------------------------ 6. TikTok: varsayılan x264; NVENC seçilince ekran kartı yok
+        Bolum("6. TikTok'a geç: satırlar sıfırlanır; varsayılan x264 CRF 24 + FDK AAC 44,1 kHz; NVENC seçilince (ekran kartı yok) anlaşılır hata + günlük");
         w.RbTikTok.IsChecked = true;
         await Task.Delay(300);
         Esit("Platform değişince satırlar bekliyor", "Waiting, Waiting, Waiting, Waiting, Waiting",
             string.Join(", ", w.KontrolSatirlar.Select(f => f.State.ToString())));
         Kontrol("Satır yazısı yeniden \"Bekliyor\"", "Bekliyor …", Durum("ses_var.mp4"),
             Durum("ses_var.mp4").StartsWith("Bekliyor", StringComparison.Ordinal));
-        Esit("TikTok kodlayıcısı (varsayılan)", VideoKodlayici.Nvenc, w.KontrolAyarlari.Video.Kodlayici);
-        Esit("TikTok: LUFS eşitleme varsayılan açık", true, w.KontrolAyarlari.Ses.Esitleme);
+        var ttAyar = w.KontrolAyarlari;
+        Esit("TikTok kodlayıcısı (varsayılan)", VideoKodlayici.X264, ttAyar.Video.Kodlayici);
+        Esit("TikTok x264 (varsayılan)", "Crf 24 veryslow high kaynak · ref 16 · önden bakış 250",
+            $"{ttAyar.Video.X264.Mod} {ttAyar.Video.X264.Crf} {ttAyar.Video.X264.OnAyar} {ttAyar.Video.X264.Profil} {ttAyar.Video.X264.Seviye} · ref {ttAyar.Video.X264.Ref} · önden bakış {ttAyar.Video.X264.IleriBakis}");
+        Esit("TikTok anahtar kare (varsayılan)", "Saniye 10", $"{ttAyar.AnahtarKare.Birim} {ttAyar.AnahtarKare.EnBuyuk}");
+        Esit("TikTok sesi (varsayılan)", "FdkAac 44100 128", $"{ttAyar.Ses.Kodlayici} {ttAyar.Ses.OrnekHizi} {ttAyar.Ses.Fdk.BitHizi}");
+        Esit("TikTok: LUFS eşitleme varsayılan açık", true, ttAyar.Ses.Esitleme);
+
+        // Kullanıcı NVENC'i seçer: GitHub'da NVIDIA ekran kartı yok.
+        ttAyar.Video.Kodlayici = VideoKodlayici.Nvenc;
+        await Task.Delay(300);
         Esit("Düğme", "Başlat", Dugme());
         if (await Tikla(w.BtnStart, "Başlat"))
         {
-            await Bitir("TikTok dışa aktarma", 300);
+            await Bitir("TikTok dışa aktarma (NVENC)", 300);
         }
 
         Esit("Hepsi hatalı (ekran kartı yok)", "Failed, Failed, Failed, Failed, Failed",
@@ -268,6 +278,35 @@ internal static class UctanUca
             && g.Contains("Komut 1/1:", StringComparison.Ordinal) && g.Contains("----- ffmpeg çıktısı -----", StringComparison.Ordinal));
         Esit("Durum yazısı", "5 video hatalı", w.KontrolDurum);
         Esit("Yarım dosya kalmadı (.part)", 0, Parcalar().Length);
+
+        // ------------------------------------------------------------------ 6b. TikTok varsayılanıyla kodlama
+        Bolum("6b. TikTok varsayılanı (x264 veryslow CRF 24, FDK AAC 128 kb/s 44,1 kHz) ile kodlama");
+        ttAyar.Video.Kodlayici = VideoKodlayici.X264;
+        await Task.Delay(300);
+        if (await Tikla(w.BtnClear, "Temizle"))
+        {
+            Esit("Liste boş", 0, w.KontrolSatirlar.Count);
+        }
+
+        w.KontrolEkle(M("ses_var.mp4"));
+        await Task.Delay(2000);
+        Esit("TikTok: tahmini boyut yazılmaz (CRF, bit hızı üst sınırı yok)", "Bekliyor", Durum("ses_var.mp4"));
+        if (await Tikla(w.BtnStart, "Başlat"))
+        {
+            await Bitir("TikTok dışa aktarma (x264)", 600);
+        }
+
+        var ttSatir = Satir("ses_var.mp4");
+        Esit("TikTok: durum", ItemState.Done, ttSatir?.State);
+        Esit("TikTok: çıktı adı", "ses_var_TikTok.mov", Path.GetFileName(ttSatir?.OutputPath));
+        Kontrol("TikTok: satırda -14,0 LUFS (kısık ses yükseltildi; AAC payı telafi edildi)", "… · -14,0 LUFS", ttSatir?.Status,
+            ttSatir?.Status?.Contains("-14,0 LUFS", StringComparison.Ordinal) == true);
+        var ttCikti = await Incele(ttSatir?.OutputPath);
+        Esit("TikTok: video (H.264 High)", "h264 High", $"{ttCikti?.VideoCodec} {ttCikti?.VideoProfil}");
+        Esit("TikTok: seviye (16 referans kare, 720p → 5.0)", 50, ttCikti?.VideoSeviye);
+        Esit("TikTok: ses (FDK AAC, 44,1 kHz, stereo)", "aac 44100 2",
+            ttCikti?.SesAkislari is [var t1] ? $"{t1.Codec} {t1.OrnekHizi} {t1.Kanal}" : "ses izi sayısı " + ttCikti?.SesAkislari.Count);
+        Kontrol("TikTok: süre (12 sn)", "12 ± 0,2", ttCikti?.DurationSeconds, ttCikti is { } tc && Math.Abs(tc.DurationSeconds - 12) <= 0.2);
 
         // ------------------------------------------------------------------ 7. Temizle, ayar dosyası
         Bolum("7. Temizle; ayarlar diske yazıldı");

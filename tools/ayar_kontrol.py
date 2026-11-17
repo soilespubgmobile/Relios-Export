@@ -9,6 +9,7 @@ Anahtarlar (sayilarda "±tolerans" eklenebilir; yuzde icin "±5%"):
   fps=N/D                kare hizi (r_frame_rate)
   vcodec=h264            video codec
   profil=High|Main       H.264 profili
+  seviye=5.1             H.264 seviyesi
   vbit=4000000±20%       video bit hizi (bit/s)
   x264:anahtar=deger     x264'un dosyaya yazdigi ayar satirindaki deger (or. x264:rc=2pass)
   ses=yok                ses akisi olmamali
@@ -77,6 +78,10 @@ for istek in istekler:
         chk("Video codec", deger, v.get("codec_name"), v.get("codec_name") == deger)
     elif anahtar == "profil":
         chk("Video profili", deger, v.get("profile"), v.get("profile") == deger)
+    elif anahtar == "seviye":
+        lv = v.get("level")
+        got = f"{lv // 10}.{lv % 10}" if isinstance(lv, int) and lv > 0 else str(lv)
+        chk("Video seviyesi", deger, got, got == deger)
     elif anahtar == "vbit":
         hedef, t = tolerans(deger)
         got = fnum(v.get("bit_rate"))

@@ -99,7 +99,7 @@ internal static class BirimKontrol
 
     private static string NvencKomutu(MediaInfo m, Action<ProfilAyarlari>? degistir = null, ProfilAyarlari? temel = null)
     {
-        var a = temel ?? Varsayilanlar.TikTok();
+        var a = temel ?? Varsayilanlar.TikTokNvenc();
         degistir?.Invoke(a);
         var plan = ArgsBuilder.Olustur(a, m, "KAYNAK.mp4", SesSecimi.Yok, "CIKTI.mp4", "GECIS");
         return " " + string.Join(' ', plan.Gecisler[0]) + " ";
@@ -114,7 +114,7 @@ internal static class BirimKontrol
     private static void NvencKomutlari()
     {
         Console.WriteLine();
-        Console.WriteLine("--- TikTok varsayılanı (NVENC CBR 34375 kb/s) komutları");
+        Console.WriteLine("--- TikTok NVENC ayarı (0.10.0'a kadar varsayılan: CBR 34375 kb/s) komutları");
 
         var k = NvencKomutu(Kaynak(1080, 1920, 60, "h264", "Main", 42));
         Iceriyor("Main@4.2 1080×1920@60", k, " -profile:v main -level:v 4.2 -rc cbr -b:v 34375k -bufsize 34375k ");
@@ -161,7 +161,7 @@ internal static class BirimKontrol
         Icermiyor("VBR'de tampon boşsa ffmpeg'e bırakılır", k, " -bufsize ");
 
         k = NvencKomutu(Kaynak(1920, 1080, 30, "h264", "High", 40));
-        Iceriyor("TikTok varsayılanı: tampon boş, bit hızı kadar", k, " -b:v 34375k -bufsize 34375k ");
+        Iceriyor("TikTok NVENC ayarı: tampon boş, bit hızı kadar", k, " -b:v 34375k -bufsize 34375k ");
 
         k = NvencKomutu(Kaynak(1920, 1080, 30, "h264", "High", 40), a => a.Video.Nvenc.Tampon = 20000);
         Iceriyor("Elle girilen tampon", k, " -bufsize 20000k ");
@@ -265,9 +265,9 @@ internal static class BirimKontrol
         Console.WriteLine("--- NVENC kayıpsız (tune lossless): sabit QP 0; kodlama modu, bit hızı, tampon, AQ ve profil verilmez");
         static void Kayipsiz(ProfilAyarlari a) => a.Video.Nvenc.Ayar = "lossless";
 
-        // TikTok varsayılanında AQ açık: kart "Adaptive quantization is not supported with lossless encoding" verip açılmıyordu.
+        // TikTok NVENC ayarında AQ açık: kart "Adaptive quantization is not supported with lossless encoding" verip açılmıyordu.
         k = NvencKomutu(hd, Kayipsiz);
-        Iceriyor("Kayıpsız (TikTok varsayılanı)", k,
+        Iceriyor("Kayıpsız (TikTok NVENC ayarı)", k,
             " -preset p7 -tune lossless -level:v 4.0 -rc constqp -qp 0 -b:v 0 -multipass fullres -rc-lookahead 32 -spatial-aq 0 -temporal-aq 0 -bf 0 -refs 3 -dpb_size 3 -coder cabac ");
         Icermiyor("Kayıpsız", k, " -profile:v ");
         Icermiyor("Kayıpsız", k, " -aq-strength ");
@@ -312,12 +312,12 @@ internal static class BirimKontrol
         k = NvencKomutu(Kaynak(1080, 1920, 60, "h264", "High", 40), Kayipsiz);
         Iceriyor("Kayıpsız 1080×1920@60, kaynak High@4.0", k, " -level:v 4.2 ");
 
-        var kayipsiz = Varsayilanlar.TikTok();
+        var kayipsiz = Varsayilanlar.TikTokNvenc();
         Kayipsiz(kayipsiz);
         Kontrol("Kayıpsız: kodlama özeti", "Kayıpsız", kayipsiz.Video.Nvenc.ModOzeti);
         Kontrol("Kayıpsız: özet", "NVENC · Kayıpsız · p7 · High 4:4:4 (seviye kaynakla aynı)", kayipsiz.Video.Nvenc.Ozet);
         Kontrol("Kayıpsız: tahmini boyut yok", "yok", BoyutTahmini.Hesapla(kayipsiz, hd, SesSecimi.Yok)?.Metin ?? "yok");
-        Kontrol("CBR (karşılaştırma): tahmini boyut var", "True", (BoyutTahmini.Hesapla(Varsayilanlar.TikTok(), hd, SesSecimi.Yok) is not null).ToString());
+        Kontrol("CBR (karşılaştırma): tahmini boyut var", "True", (BoyutTahmini.Hesapla(Varsayilanlar.TikTokNvenc(), hd, SesSecimi.Yok) is not null).ToString());
         Kontrol("Kayıpsız ayar dosyasına yazılmaz (yalnızca tune)", "False",
             AyarDosyasi.Yaz(kayipsiz).Contains("Kayipsiz", StringComparison.Ordinal).ToString());
 
@@ -605,8 +605,16 @@ internal static class BirimKontrol
         Iceriyor("YouTube x264 60 fps", x, ":keyint=100:min-keyint=51:");
         x = KomutMetni(Kaynak(1920, 1080, 30, "h264", "High", 40), Varsayilanlar.YouTube());
         Iceriyor("YouTube x264 30 fps", x, ":keyint=50:min-keyint=26:");
+        x = KomutMetni(Kaynak(1920, 1080, 60, "h264", "High", 42), Varsayilanlar.TikTokNvenc());
+        Iceriyor("TikTok NVENC ayarı 60 fps (30 kare, değişmez)", x, " -g 30 ");
+
+        // TikTok varsayılanı (x264): en çok 10 saniyede bir anahtar kare; en az ve sahne eşiği x264'ün (40).
         x = KomutMetni(Kaynak(1920, 1080, 60, "h264", "High", 42), Varsayilanlar.TikTok());
-        Iceriyor("TikTok NVENC 60 fps (30 kare, değişmez)", x, " -g 30 ");
+        Iceriyor("TikTok varsayılanı 60 fps (en çok 10 sn: 600 kare)", x, ":keyint=600:");
+        Icermiyor("TikTok varsayılanı: en az anahtar kare x264'ün", x, "min-keyint");
+        Icermiyor("TikTok varsayılanı: sahne eşiği x264'ün (40)", x, "scenecut");
+        x = KomutMetni(Kaynak(1080, 1920, 30000.0 / 1001, "h264", "High", 40), Varsayilanlar.TikTok());
+        Iceriyor("TikTok varsayılanı 29,97 fps (en çok 10 sn: 300 kare)", x, ":keyint=300:");
     }
 
     private static void SesKanallari()
@@ -633,8 +641,8 @@ internal static class BirimKontrol
         Iceriyor("Mono kaynak (YouTube)", k, " -af pan=stereo|c0=c0|c1=c0,aresample=48000:resampler=soxr:precision=33:dither_method=triangular ");
         Iceriyor("Mono kaynak (YouTube)", k, " -c:a libfdk_aac -profile:a aac_low -b:a 128k -ar 48000 -ac 2 ");
         k = Komut(1, Varsayilanlar.TikTok());
-        Iceriyor("Mono kaynak (TikTok)", k, " -af pan=stereo|c0=c0|c1=c0,aresample=48000:resampler=soxr:precision=33:dither_method=triangular ");
-        Iceriyor("Mono kaynak (TikTok)", k, " -c:a pcm_s16le -ar 48000 -ac 2 ");
+        Iceriyor("Mono kaynak (TikTok)", k, " -af pan=stereo|c0=c0|c1=c0,aresample=44100:resampler=soxr:precision=33:dither_method=triangular ");
+        Iceriyor("Mono kaynak (TikTok)", k, " -c:a libfdk_aac -profile:a aac_low -b:a 128k -ar 44100 -ac 2 ");
         k = Komut(2, Varsayilanlar.YouTube());
         Icermiyor("Stereo kaynak", k, "pan=");
         Iceriyor("Stereo kaynak", k, " -af aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac ");
@@ -646,11 +654,17 @@ internal static class BirimKontrol
         Icermiyor("YouTube varsayılanı: afterburner açık", k, "-afterburner");
         Icermiyor("YouTube varsayılanı: PCM yok", k, "pcm_");
 
-        // TikTok'ta FDK AAC seçilirse de aynı dönüşüm (en yüksek kalite, üçgen titreşim) kullanılır.
-        var fdk = Varsayilanlar.TikTok();
-        fdk.Ses.Kodlayici = SesKodlayici.FdkAac;
-        k = Komut(2, fdk);
-        Iceriyor("TikTok'ta FDK AAC seçilirse", k, " -af aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac -profile:a aac_low -b:a 128k ");
+        // TikTok varsayılanı: FDK AAC-LC 128 kb/s CBR, 44,1 kHz stereo; aynı dönüşüm (en yüksek kalite, üçgen titreşim).
+        k = Komut(2, Varsayilanlar.TikTok());
+        Iceriyor("TikTok varsayılanı: FDK AAC 128 kb/s, 44,1 kHz, en yüksek dönüşüm, üçgen titreşim", k,
+            " -af aresample=44100:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac -profile:a aac_low -b:a 128k -ar 44100 -ac 2 -metadata:s:a:0 language=eng ");
+        Icermiyor("TikTok varsayılanı: afterburner açık", k, "-afterburner");
+
+        // TikTok'ta WAV seçilirse de aynı dönüşüm, 16 bit 44,1 kHz.
+        var wav = Varsayilanlar.TikTok();
+        wav.Ses.Kodlayici = SesKodlayici.Wav;
+        k = Komut(2, wav);
+        Iceriyor("TikTok'ta WAV seçilirse (16 bit, 44,1 kHz)", k, " -af aresample=44100:resampler=soxr:precision=33:dither_method=triangular -c:a pcm_s16le -ar 44100 -ac 2 ");
         var kaynakKanal = Varsayilanlar.YouTube();
         kaynakKanal.Ses.Kanal = KanalModu.Kaynak;
         k = Komut(1, kaynakKanal);
@@ -688,8 +702,8 @@ internal static class BirimKontrol
             Icermiyor(ad + " varsayılanı (ses yükseltilmiyor)", k, "alimiter");
             Icermiyor(ad + " varsayılanı", k, "loudnorm");
             Icermiyor(ad + " varsayılanı", k, "ebur128");
-            Iceriyor(ad + " varsayılanı: ses filtresi değişmedi", k, " -af aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a "
-                + (ad == "TikTok" ? "pcm_s16le " : "libfdk_aac "));
+            Iceriyor(ad + " varsayılanı: ses filtresi değişmedi", k, " -af aresample=" + (ad == "TikTok" ? "44100" : "48000")
+                + ":resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac ");
         }
 
         var arti = Varsayilanlar.YouTube();
@@ -715,7 +729,8 @@ internal static class BirimKontrol
         eksi.Ses.Seviye = -6;
         Icermiyor("-6 dB (kısılıyor)", Komut(eksi), "alimiter");
 
-        var esit = Varsayilanlar.TikTok();
+        // Zincir denemeleri WAV 16 bit 48 kHz sesle (0.10.0'ın TikTok sesi): örnekler kayıpsız, hız belli.
+        var esit = Varsayilanlar.TikTokNvenc();
         esit.Ses.Esitleme = true;
         var olcum = new SesOlcum(-21.37, -3.2, 6.4);
         // Eşitleme: bütün ses aynı miktarda (sabit kazanç, -14 - (-21,37) = +7,37 dB). Tepe -3,2 + 7,37 = +4,17 > -1:
@@ -729,7 +744,7 @@ internal static class BirimKontrol
         Iceriyor("Eşitleme: tepe aşmıyor (-10 + 7,37 = -2,63), ses aralığı 25 LU: yalnızca sabit kazanç", Komut(esit, olcumAlcak),
             " -af volume=7.37dB,aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a pcm_s16le ");
         Icermiyor("Eşitleme: tepe aşmıyorsa sınırlayıcı yok", Komut(esit, olcumAlcak), "alimiter");
-        var esitKapali = Varsayilanlar.TikTok();
+        var esitKapali = Varsayilanlar.TikTokNvenc();
         esitKapali.Ses.Esitleme = true;
         esitKapali.Ses.Sinirlayici = false;
         Iceriyor("Eşitleme: sınırlayıcı kutusu kapalı olsa da tepe aşıyorsa tutulur", Komut(esitKapali, olcum), ",alimiter=limit=0.891251:");
@@ -744,6 +759,14 @@ internal static class BirimKontrol
         Iceriyor("Eşitleme + örnekleme 'kaynakla aynı': 192 kHz'ten kaynağın hızına", Komut(esit, olcum), ",aresample=44100:resampler=soxr");
         Iceriyor("Eşitleme + örnekleme 'kaynakla aynı'", Komut(esit, olcum), " -ar 44100 ");
         Icermiyor("Eşitleme (sınırlayıcısız) + örnekleme 'kaynakla aynı': hız değişmez", Komut(esit, olcumAlcak), " -ar ");
+
+        // TikTok varsayılanı (FDK AAC 128 kb/s 44,1 kHz): aynı sabit kazanç; 44,1 kHz'e dönüş (sınırlayıcı 192 kHz'te).
+        var esitTt = Varsayilanlar.TikTok();
+        Iceriyor("TikTok varsayılanı + eşitleme: sabit kazanç, 44,1 kHz, FDK AAC", Komut(esitTt, olcumAlcak),
+            " -af volume=7.37dB,aresample=44100:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac -profile:a aac_low -b:a 128k -ar 44100 -ac 2 ");
+        Iceriyor("TikTok varsayılanı + eşitleme, tepe aşıyor: 192 kHz sınırlayıcı, sonra 44,1 kHz", Komut(esitTt, olcum),
+            " -af volume=7.37dB,aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.891251:level=0:latency=1,"
+            + "aresample=44100:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac ");
 
         // Mono çıktı: kanal indirme ölçümden ve eşitlemeden önce (stereo ölçülüp mono'ya inilince sonuç 3–6 dB düşük kalırdı).
         var mono = Varsayilanlar.YouTube();
@@ -829,7 +852,8 @@ internal static class BirimKontrol
         Kontrol("AAC telafi: AAC yüksekliği artırdı (-13,9) → -0,10", "-0.10", AdimAac(0, -13.9));
         Kontrol("AAC telafi: en çok 6 dB", "6.00/sinir", AdimAac(0, -24));
         Kontrol("Sınırlayıcı telafisi (WAV): -14,16 (0,2 içinde) → dur", "dur", Adim(0, -14.16));
-        Kontrol("Kayıplı mı: TikTok sesi (WAV)", "False", Esitleme.KayipliMi(Varsayilanlar.TikTok().Ses).ToString());
+        Kontrol("Kayıplı mı: TikTok sesi (FDK AAC 44,1 kHz)", "True", Esitleme.KayipliMi(Varsayilanlar.TikTok().Ses).ToString());
+        Kontrol("Kayıplı mı: TikTok NVENC ayarının sesi (WAV)", "False", Esitleme.KayipliMi(Varsayilanlar.TikTokNvenc().Ses).ToString());
         Kontrol("Kayıplı mı: YouTube sesi (FDK AAC)", "True", Esitleme.KayipliMi(Varsayilanlar.YouTube().Ses).ToString());
         Kontrol("Telafi tepeyi tavana çıkarırsa sınırlayıcı (tepe -12,1 + 11 + 0,2 > -1)", "True", (rd with { Telafi = 0.2 }).Sinirli.ToString());
         var rAac = Esitleme.KararVer(ka, new SesOlcum(-25, -20, 5)) with { Telafi = 0.16, Kayipli = true };
@@ -890,10 +914,13 @@ internal static class BirimKontrol
         {
             SesAkislari = [new SesAkisi(1, "aac", 44100, 2, null, 128)],
         };
-        var tt = Varsayilanlar.TikTok();
+        var tt = Varsayilanlar.TikTokNvenc();
         var ses = ArgsBuilder.SesSec(tt.Ses, m, "YOK.mp4");
         // (34375 + 48000 × 16 × 2 / 1000) kb/s × 60 s = 269 332 500 bayt = 256,9 MB
-        Kontrol("TikTok 60 sn (CBR 34375 + WAV 16 bit 48 kHz stereo)", "tahmini 257 MB", BoyutTahmini.Hesapla(tt, m, ses)?.Metin ?? "yok");
+        Kontrol("TikTok NVENC ayarı 60 sn (CBR 34375 + WAV 16 bit 48 kHz stereo)", "tahmini 257 MB", BoyutTahmini.Hesapla(tt, m, ses)?.Metin ?? "yok");
+        var ttVar = Varsayilanlar.TikTok();
+        Kontrol("TikTok varsayılanı (x264 CRF 24, bit hızı üst sınırı yok): tahmin yapılmaz", "yok",
+            BoyutTahmini.Hesapla(ttVar, m, ArgsBuilder.SesSec(ttVar.Ses, m, "YOK.mp4"))?.Metin ?? "yok");
         var yt = Varsayilanlar.YouTube();
         // (34375 + 128 FDK AAC) × 60 = 2 070 180 kbit + tampon payı: 55000 kbit × 0,9 (x264 vbv-init varsayılanı)
         // = 49 500 kbit → 2 119 680 kbit = 264 960 000 bayt = 252,7 MB
@@ -903,7 +930,7 @@ internal static class BirimKontrol
         Kontrol("YouTube 5 sn: tampon payı kısa videoda büyük", "en çok 26,5 MB", BoyutTahmini.Hesapla(yt, kisa, ses)?.Metin ?? "yok");
         yt.Video.X264.VbvMaks = null;
         Kontrol("CRF, üst sınır yok: tahmin yapılmaz", "yok", BoyutTahmini.Hesapla(yt, m, ses)?.Metin ?? "yok");
-        var cq = Varsayilanlar.TikTok();
+        var cq = Varsayilanlar.TikTokNvenc();
         cq.Video.Nvenc.Mod = NvencModu.SabitKalite;
         cq.Video.Nvenc.MaksBitHizi = 30000;
         cq.Video.Nvenc.Tampon = 40000;
@@ -913,7 +940,7 @@ internal static class BirimKontrol
         Kontrol("NVENC sabit kalite, en yüksek 30000 (tampon 40000 yok sayılır)", "en çok 233 MB", BoyutTahmini.Hesapla(cq, m, ses)?.Metin ?? "yok");
         cq.Video.Nvenc.MaksBitHizi = null;
         Kontrol("NVENC sabit kalite, üst sınır yok: tahmin yapılmaz", "yok", BoyutTahmini.Hesapla(cq, m, ses)?.Metin ?? "yok");
-        var sessiz = Varsayilanlar.TikTok();
+        var sessiz = Varsayilanlar.TikTokNvenc();
         sessiz.Ses.Kaynak = SesKaynagi.Sessiz;
         Kontrol("Sessiz (yalnızca video)", "tahmini 246 MB",
             BoyutTahmini.Hesapla(sessiz, m, ArgsBuilder.SesSec(sessiz.Ses, m, "YOK.mp4"))?.Metin ?? "yok");
@@ -1000,6 +1027,7 @@ internal static class BirimKontrol
         static string FdkOzeti(FdkAyarlari f) => $"{f.Profil} {f.Mod} {f.BitHizi} {f.Afterburner}";
         const string YeniSes = "Wav Bit16 48000 EnYuksek Ucgen";
         const string YouTubeSes = "FdkAac Bit16 48000 EnYuksek Ucgen";
+        const string TikTokSes = "FdkAac Bit16 44100 EnYuksek Ucgen";
 
         var eskiYt = Varsayilanlar.YouTube();
         eskiYt.Surum = 4;
@@ -1009,7 +1037,7 @@ internal static class BirimKontrol
         eskiYt.Video.X264.Crf = 20; // kullanıcının kendi değişikliği korunmalı
         eskiYt.Video.X264.VbvMaks = 14000; // 0.8.6'ya kadar YouTube VBV'si 14000 / 28000
         eskiYt.Video.X264.VbvTampon = 28000;
-        var eskiTt = Varsayilanlar.TikTok();
+        var eskiTt = Varsayilanlar.TikTokNvenc(); // 0.10.0'a kadar TikTok varsayılanı (NVENC)
         eskiTt.Surum = 5;
         eskiTt.Video.Kap = KapBicimi.Mp4;
         EskiSes(eskiTt.Ses);
@@ -1025,12 +1053,14 @@ internal static class BirimKontrol
         Kontrol("YouTube sürüm", ProfilAyarlari.GuncelSurum.ToString(), yt.Surum.ToString());
         var tt = ayarlar.ProfilAyari(ExportProfileId.TikTok);
         Kontrol("TikTok 5 → 9: dosya biçimi", "Mov", tt.Video.Kap.ToString());
-        Kontrol("TikTok 5 → 9: NVENC kalır", "Nvenc", tt.Video.Kodlayici.ToString());
+        Kontrol("TikTok 5 → 12: değiştirilmemiş video yeni varsayılana geçer (x264)", "X264", tt.Video.Kodlayici.ToString());
         Kontrol("TikTok 5 → 9: tampon boş (bit hızı kadar)", "boş", tt.Video.Nvenc.Tampon?.ToString() ?? "boş");
-        Kontrol("TikTok 5 → 11: ses WAV 16 bit, en yüksek kalite, üçgen titreşim", YeniSes, SesOzeti(tt.Ses));
+        Kontrol("TikTok 5 → 12: ses FDK AAC 128 kb/s 44,1 kHz, en yüksek kalite, üçgen titreşim", TikTokSes + " 128",
+            SesOzeti(tt.Ses) + " " + tt.Ses.Fdk.BitHizi);
         Kontrol("YouTube 4 → 11: ses FDK AAC 128 kb/s, en yüksek kalite, üçgen titreşim", YouTubeSes + " 128",
             SesOzeti(yt.Ses) + " " + yt.Ses.Fdk.BitHizi);
-        Kontrol("TikTok varsayılanı: ses", YeniSes, SesOzeti(Varsayilanlar.TikTok().Ses));
+        Kontrol("TikTok varsayılanı: ses FDK AAC 128 kb/s CBR 44,1 kHz, afterburner açık", TikTokSes + " aac_low Cbr 128 True",
+            SesOzeti(Varsayilanlar.TikTok().Ses) + " " + FdkOzeti(Varsayilanlar.TikTok().Ses.Fdk));
         Kontrol("YouTube varsayılanı: ses FDK AAC 128 kb/s CBR, afterburner açık", YouTubeSes + " aac_low Cbr 128 True",
             SesOzeti(Varsayilanlar.YouTube().Ses) + " " + FdkOzeti(Varsayilanlar.YouTube().Ses.Fdk));
 
@@ -1054,11 +1084,12 @@ internal static class BirimKontrol
         ayar10Kendi.Profiller[ExportProfileId.YouTube] = yt10Kendi;
         Kontrol("YouTube 10 → 11: kendi ses ayarı (WAV 24 bit) korunur", "Wav Bit24 48000 EnYuksek Ucgen",
             SesOzeti(ayar10Kendi.ProfilAyari(ExportProfileId.YouTube).Ses));
-        var tt10 = Varsayilanlar.TikTok();
+        var tt10 = Varsayilanlar.TikTokNvenc();
         tt10.Surum = 10;
         var ayarTt10 = new AppSettings();
         ayarTt10.Profiller[ExportProfileId.TikTok] = tt10;
-        Kontrol("TikTok 10 → 11: ses WAV 16 bit kalır", YeniSes, SesOzeti(ayarTt10.ProfilAyari(ExportProfileId.TikTok).Ses));
+        Kontrol("TikTok 10 → 12: 0.10.0'ın sesi (WAV 16 bit 48 kHz) FDK AAC 128 kb/s 44,1 kHz olur", TikTokSes,
+            SesOzeti(ayarTt10.ProfilAyari(ExportProfileId.TikTok).Ses));
         var onYt10 = Varsayilanlar.YouTube();
         onYt10.Surum = 10;
         Varsayilanlar.PlatformSesi(onYt10.Ses);
@@ -1067,7 +1098,7 @@ internal static class BirimKontrol
 
         // 0.8.6'nın (sürüm 7) kendiliğinden yazdığı 55000 kb geri alınır; kullanıcının kendi VBV'si ve
         // yeni sürümde elle girilen tampon korunur.
-        var tt7 = Varsayilanlar.TikTok();
+        var tt7 = Varsayilanlar.TikTokNvenc();
         tt7.Surum = 7;
         tt7.Video.Nvenc.Tampon = 55000;
         var yt7 = Varsayilanlar.YouTube();
@@ -1090,7 +1121,7 @@ internal static class BirimKontrol
         ayarlarKendi.Profiller[ExportProfileId.YouTube] = ytKendi;
         var sesKendi = ayarlarKendi.ProfilAyari(ExportProfileId.YouTube).Ses;
         Kontrol("YouTube 8 → 9: kendi ses ayarı (FDK AAC 256) korunur", "FdkAac 256", $"{sesKendi.Kodlayici} {sesKendi.Fdk.BitHizi}");
-        var ttKendi = Varsayilanlar.TikTok();
+        var ttKendi = Varsayilanlar.TikTokNvenc();
         ttKendi.Surum = 8;
         EskiSes(ttKendi.Ses);
         ttKendi.Ses.Fdk.Afterburner = false;
@@ -1145,11 +1176,70 @@ internal static class BirimKontrol
                 new AppSettings().OnAyariYukle(pid, on8).Ses.Esitleme.ToString());
         }
 
-        var tt8 = Varsayilanlar.TikTok();
+        var tt8 = Varsayilanlar.TikTokNvenc();
         tt8.Video.Nvenc.Tampon = 55000;
         var ayarlar8 = new AppSettings();
         ayarlar8.Profiller[ExportProfileId.TikTok] = tt8;
         Kontrol("TikTok 8: elle girilen 55000 korunur", "55000", ayarlar8.ProfilAyari(ExportProfileId.TikTok).Video.Nvenc.Tampon?.ToString() ?? "boş");
+
+        // Sürüm 12: TikTok varsayılanı x264 veryslow CRF 24 + FDK AAC 128 kb/s 44,1 kHz (kullanıcının bilgisayarında
+        // denenen ayar). 0.10.0'ın değiştirilmemiş TikTok ayarı yenisine geçer; kullanıcının değiştirdiği kısım, LUFS
+        // eşitleme seçimi ve ön ayar olduğu gibi kalır.
+        static string Json<T>(T x) => System.Text.Json.JsonSerializer.Serialize(x, AyarDosyasi.Secenekler);
+        static string Bos(object? x) => x?.ToString() ?? "boş";
+        var yeniTt = Varsayilanlar.TikTok();
+        var x264Tt = yeniTt.Video.X264;
+        Kontrol("TikTok varsayılanı: x264", "X264 Crf 24 veryslow high kaynak · ref 16 · önden bakış 250 · iş parçacığı 8",
+            $"{yeniTt.Video.Kodlayici} {x264Tt.Mod} {x264Tt.Crf} {x264Tt.OnAyar} {x264Tt.Profil} {x264Tt.Seviye} · ref {x264Tt.Ref} · önden bakış {x264Tt.IleriBakis} · iş parçacığı {x264Tt.IsParcacigi}");
+        Kontrol("TikTok varsayılanı: diğer x264 ayarları hız ayarının (B-kare, me, VBV, qpmax, 8x8 DCT boş)", "boş boş boş boş boş",
+            $"{Bos(x264Tt.BKare)} {Bos(x264Tt.Me)} {Bos(x264Tt.VbvMaks)} {Bos(x264Tt.QpMax)} {Bos(x264Tt.Dct8x8)}");
+        Kontrol("TikTok varsayılanı: boyut ve kare hızı kaynakla aynı, MOV", "Kaynak Kaynak Mov",
+            $"{yeniTt.Video.Cozunurluk} {yeniTt.Video.KareHiziModu} {yeniTt.Video.Kap}");
+        Kontrol("TikTok varsayılanı: anahtar kare en çok 10 sn (en az ve sahne eşiği x264'ün)", "Saniye 10 boş boş",
+            $"{yeniTt.AnahtarKare.Birim} {yeniTt.AnahtarKare.EnBuyuk} {Bos(yeniTt.AnahtarKare.EnKucuk)} {Bos(yeniTt.AnahtarKare.SahneDegisimi)}");
+        Kontrol("TikTok varsayılanı: NVENC'e geçilirse 0.10.0'ın ayarı (CBR 34375)", "Cbr 34375", $"{yeniTt.Video.Nvenc.Mod} {yeniTt.Video.Nvenc.BitHizi}");
+        Kontrol("TikTok varsayılanı: LUFS eşitleme açık, -14", "True -14",
+            $"{yeniTt.Ses.Esitleme} {yeniTt.Ses.EsitlemeHedef.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+
+        var tt11 = Varsayilanlar.TikTokNvenc();
+        tt11.Surum = 11;
+        tt11.Ses.EsitlemeHedef = -16; // kullanıcının seçimi korunmalı
+        var ayar11 = new AppSettings();
+        ayar11.Profiller[ExportProfileId.TikTok] = tt11;
+        var g11 = ayar11.ProfilAyari(ExportProfileId.TikTok);
+        Kontrol("TikTok 11 → 12: 0.10.0 varsayılanının videosu yeni varsayılan olur", Json(yeniTt.Video), Json(g11.Video));
+        Kontrol("TikTok 11 → 12: anahtar kare yeni varsayılan olur", Json(yeniTt.AnahtarKare), Json(g11.AnahtarKare));
+        Kontrol("TikTok 11 → 12: ses FDK AAC 128 kb/s 44,1 kHz", TikTokSes + " aac_low Cbr 128 True", SesOzeti(g11.Ses) + " " + FdkOzeti(g11.Ses.Fdk));
+        Kontrol("TikTok 11 → 12: LUFS hedefi (-16) korunur", "-16", g11.Ses.EsitlemeHedef.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Kontrol("TikTok 11 → 12: sürüm", ProfilAyarlari.GuncelSurum.ToString(), g11.Surum.ToString());
+
+        // Kullanıcının bilgisayarındaki ayar (17 Kasım): x264 CRF 24 elle kurulmuş, ses WAV 16 bit 48 kHz.
+        var ttPc = Varsayilanlar.TikTok();
+        ttPc.Surum = 11;
+        Varsayilanlar.PlatformSesi(ttPc.Ses);
+        var ayarPc = new AppSettings();
+        ayarPc.Profiller[ExportProfileId.TikTok] = ttPc;
+        var gPc = ayarPc.ProfilAyari(ExportProfileId.TikTok);
+        Kontrol("TikTok 11 → 12 (elle kurulmuş x264 CRF 24): video olduğu gibi kalır (yeni varsayılanla aynı)", Json(yeniTt.Video), Json(gPc.Video));
+        Kontrol("TikTok 11 → 12 (elle kurulmuş x264 CRF 24): ses FDK AAC 44,1 kHz olur", TikTokSes, SesOzeti(gPc.Ses));
+
+        var ttKendiVideo = Varsayilanlar.TikTokNvenc();
+        ttKendiVideo.Surum = 11;
+        ttKendiVideo.Video.Nvenc.BitHizi = 20000;
+        ttKendiVideo.AnahtarKare.EnBuyuk = 60;
+        ttKendiVideo.Ses.WavBit = WavBitDerinligi.Bit24;
+        var ayarKendiVideo = new AppSettings();
+        ayarKendiVideo.Profiller[ExportProfileId.TikTok] = ttKendiVideo;
+        var gKendi = ayarKendiVideo.ProfilAyari(ExportProfileId.TikTok);
+        Kontrol("TikTok 11 → 12: kendi NVENC ayarı (CBR 20000) korunur", "Nvenc 20000", $"{gKendi.Video.Kodlayici} {gKendi.Video.Nvenc.BitHizi}");
+        Kontrol("TikTok 11 → 12: kendi anahtar karesi (60 kare) korunur", "Kare 60", $"{gKendi.AnahtarKare.Birim} {gKendi.AnahtarKare.EnBuyuk}");
+        Kontrol("TikTok 11 → 12: kendi sesi (WAV 24 bit) korunur", "Wav Bit24 48000 EnYuksek Ucgen", SesOzeti(gKendi.Ses));
+
+        var onTt11 = Varsayilanlar.TikTokNvenc();
+        onTt11.Surum = 11;
+        var gOn = new AppSettings().OnAyariYukle(ExportProfileId.TikTok, onTt11);
+        Kontrol("TikTok ön ayarı (sürüm 11) kaydedildiği gibi kalır", "Nvenc Kare 30 " + YeniSes,
+            $"{gOn.Video.Kodlayici} {gOn.AnahtarKare.Birim} {gOn.AnahtarKare.EnBuyuk} {SesOzeti(gOn.Ses)}");
     }
 
     private static string KomutMetni(MediaInfo m, ProfilAyarlari a)

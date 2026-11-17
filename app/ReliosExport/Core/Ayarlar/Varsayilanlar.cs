@@ -8,11 +8,51 @@ namespace ReliosExport.Core.Ayarlar;
 public static class Varsayilanlar
 {
     /// <summary>
-    /// TikTok: ekran kartıyla (NVENC H.264) sabit bit hızı CBR 34375 kb/s (tampon boş: bit hızı kadar, 1 saniye);
-    /// çözünürlük, kare hızı, H.264 profili ve seviyesi kaynakla aynı; B-kare yok, 3 referans kare, 30 karede bir
-    /// anahtar kare; MOV. Ses: WAV 16 bit 48 kHz (bkz. <see cref="PlatformSesi"/>).
+    /// TikTok (0.11.0, kullanıcının isteği; bilgisayarında denendi): x264 veryslow, CRF 24, High profil, seviye kaynakla
+    /// aynı (16 referans kare yetmezse yükselir: 1080p'de 5.1). Diğer x264 ayarları hız ayarının (8 B-kare, piramit,
+    /// uyarlamalı B-kare 2, umh, subme 10, trellis 2, 8x8 DCT); 16 referans kare, önden bakış 250; bit hızı üst sınırı
+    /// yok. Anahtar kare en çok 10 saniyede bir (en az: x264'ün kendisi), sahne değişiminde x264'ün eşiği (40).
+    /// Çözünürlük ve kare hızı kaynakla aynı (60 fps korunur); MOV. Ses FDK AAC-LC 128 kb/s 44,1 kHz (bkz.
+    /// <see cref="TikTokSesi"/>), LUFS eşitleme açık. TikTok yüklenen videoyu kendisi yeniden kodlar (1080p'yi H.265
+    /// ile; dikey 60 fps'te ~2,3 Mb/s): CRF 24 bunun 4–5 katıdır, TikTok'un sonucunda kaynağı yüklemekten farkı
+    /// ölçülemedi. NVENC'e geçilirse 0.10.0'ın NVENC ayarları (CBR 34375 kb/s) kullanılır.
     /// </summary>
     public static ProfilAyarlari TikTok()
+    {
+        var a = TikTokNvenc();
+        var v = a.Video;
+        v.Kodlayici = VideoKodlayici.X264;
+        v.X264 = new X264Ayarlari
+        {
+            OnAyar = "veryslow",
+            Ayar = string.Empty,
+            Profil = "high",
+            Seviye = "kaynak",
+            Mod = X264Modu.Crf,
+            Crf = 24,
+            IsParcacigi = 8, // Ryzen 7 5700X: 8 çekirdek
+            Ref = 16,
+            IleriBakis = 250,
+        };
+
+        var k = a.AnahtarKare;
+        k.Birim = AralikBirimi.Saniye;
+        k.EnBuyuk = 10;
+        k.EnKucuk = null;
+        k.SahneDegisimi = null;
+
+        TikTokSesi(a.Ses);
+        a.Ses.Esitleme = true;
+        return a;
+    }
+
+    /// <summary>
+    /// 0.10.0'a kadar TikTok varsayılanı (ayar geçişi ve NVENC denemeleri için): ekran kartıyla (NVENC H.264) sabit bit
+    /// hızı CBR 34375 kb/s (tampon boş: bit hızı kadar, 1 saniye); çözünürlük, kare hızı, H.264 profili ve seviyesi
+    /// kaynakla aynı; B-kare yok, 3 referans kare, 30 karede bir anahtar kare; MOV. Ses: WAV 16 bit 48 kHz (bkz.
+    /// <see cref="PlatformSesi"/>).
+    /// </summary>
+    public static ProfilAyarlari TikTokNvenc()
     {
         var a = Dikey916();
         var v = a.Video;
@@ -46,7 +86,7 @@ public static class Varsayilanlar
     }
 
     /// <summary>
-    /// TikTok sesi (0.8.9'da YouTube'un da): WAV (PCM) 16 bit, 48 kHz, stereo (dosya MOV). Platform sesi zaten kendisi
+    /// 0.10.0'a kadar TikTok sesi (0.8.9'da YouTube'un da): WAV (PCM) 16 bit, 48 kHz, stereo (dosya MOV). Platform sesi zaten kendisi
     /// sıkıştırır; 16 bit PCM, FDK AAC'nin de girişte kullandığı 16 bitlik sesi hiç sıkıştırmadan verir. Dönüşüm en
     /// yüksek kalitede (soxr 33 bit). 24 / 32 bit ya da kayan noktalı kaynak 16 bite üçgen titreşimle iner: çok kısık
     /// yerlerde ve sönen seslerde yuvarlama bozulması olmaz. Kaynak zaten 16 bit 48 kHz ise ses bit bit aynı kalır.
@@ -70,11 +110,20 @@ public static class Varsayilanlar
     /// kayan noktalı kaynak 16 bite üçgen titreşimle iner. WAV seçilirse 16 bit. LUFS eşitlemeye dokunmaz (ayar
     /// geçişinde kullanıcının seçimi kalsın; varsayılan <see cref="YouTube"/>'da açık).
     /// </summary>
-    public static void YouTubeSesi(SesAyarlari s)
+    public static void YouTubeSesi(SesAyarlari s) => FdkAac128(s, 48000);
+
+    /// <summary>
+    /// TikTok sesinin biçimi (kullanıcının isteği, sürüm 12): FDK AAC-LC 128 kb/s CBR, 44,1 kHz, stereo; afterburner
+    /// açık. Dönüşüm en yüksek kalitede (soxr 33 bit), 16 bite üçgen titreşimle; WAV seçilirse 16 bit. LUFS eşitlemeye
+    /// dokunmaz (ayar geçişinde kullanıcının seçimi kalsın; varsayılan <see cref="TikTok"/>'ta açık).
+    /// </summary>
+    public static void TikTokSesi(SesAyarlari s) => FdkAac128(s, 44100);
+
+    private static void FdkAac128(SesAyarlari s, int ornekHizi)
     {
         s.Kodlayici = SesKodlayici.FdkAac;
         s.WavBit = WavBitDerinligi.Bit16;
-        s.OrnekHizi = 48000;
+        s.OrnekHizi = ornekHizi;
         s.Kanal = KanalModu.Stereo;
         s.Kalite = DonusumKalitesi.EnYuksek;
         s.Titresim = Titresim.Ucgen;
