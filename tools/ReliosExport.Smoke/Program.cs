@@ -128,6 +128,12 @@ try
                 Console.WriteLine("ESITLEME_SONUC=" + sy.ToString("0.00", CultureInfo.InvariantCulture));
             }
 
+            // Tepe koruması: sınırlayıcının tavandan aşağı çekildiği pay, sınırlayıcıyı koruma mı koydu, ilk denemenin tepesi.
+            Console.WriteLine("TEPE_PAYI=" + r.TasmaPayi.ToString("0.00", CultureInfo.InvariantCulture)
+                              + " TEPE_ZORLA=" + r.TepeZorla
+                              + " TEPE_ILK=" + (r.IlkTepe?.ToString("0.000", CultureInfo.InvariantCulture) ?? "-")
+                              + " TEPE_SONUC=" + (r.SonucTepe?.ToString("0.000", CultureInfo.InvariantCulture) ?? "-"));
+
             Console.WriteLine("Eşitleme kararı: " + r.Karar + (r.Sinirli ? " (sınırlayıcı, telafi " + r.Telafi.ToString("0.00", CultureInfo.InvariantCulture) + " dB)" : string.Empty));
             Console.WriteLine("Eşitleme satırı: " + (r.SatirMetni ?? "-"));
             if (r.SonucYukseklik is { } y)

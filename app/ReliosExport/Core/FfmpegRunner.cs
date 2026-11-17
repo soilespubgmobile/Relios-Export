@@ -211,13 +211,16 @@ public static class Exporter
         var ses = await ArgsBuilder.SesSecAsync(Tools.Ffprobe, a.Ses, media, input, ct);
         onInfo?.Invoke(Describe(media, a, ses));
         EsitlemeRaporu? rapor = null;
-        if (a.Ses.Esitleme && ses.Tur != SesSecimTuru.Yok)
+        SesOlcum? olcum = null;
+        var duzeltme = new SesDuzeltme();
+        if (ses.Tur != SesSecimTuru.Yok && (a.Ses.Esitleme || a.Ses.Sinirlayici))
         {
-            // LUFS eşitleme, 1. geçiş: sesin yüksekliği ölçülür (yalnızca ses okunur, kısa sürer); sonra karar:
-            // dokunulmaz ya da bütün ses aynı miktarda (sabit kazanç) hedefe.
+            // 1. geçiş: sesin yüksekliği ve gerçek tepesi ölçülür (yalnızca ses okunur, kısa sürer). LUFS eşitleme açıksa
+            // karar: dokunulmaz ya da bütün ses aynı miktarda (sabit kazanç) hedefe. Tepe koruması kaynağın tepesiyle
+            // başlar (sınırlayıcı açıksa ya da eşitleme sesi değiştiriyorsa).
             onInfo?.Invoke(Describe(media, a, ses) + " · ses ölçülüyor");
             var cikti = new List<string>();
-            // Ölçüm, telafi denemesi ve kodlama aynı süreyle (aynı adlı harici ses videonun süresine tam getirilir).
+            // Ölçüm, denemeler ve kodlama aynı süreyle (aynı adlı harici ses videonun süresine tam getirilir).
             var sesSuresi = ArgsBuilder.SesSuresi(media, ses);
             var olcumKomutu = ArgsBuilder.OlcumKomutu(a.Ses, input, ses, sesSuresi);
             try
@@ -231,18 +234,51 @@ public static class Exporter
                 throw;
             }
 
-            rapor = Esitleme.KararVer(a.Ses, ArgsBuilder.OlcumOku(string.Join('\n', cikti)));
-            onInfo?.Invoke(Describe(media, a, ses, rapor));
-
-            var kayipli = Esitleme.KayipliMi(a.Ses);
-            if (rapor is { Uygulandi: true, Olcum: { } o } && (rapor.Sinirli || kayipli))
+            var olcumGunlugu = string.Join('\n', cikti);
+            var kaynakOlcum = ArgsBuilder.OlcumOku(olcumGunlugu);
+            var kaynakTepe = ArgsBuilder.TepeOku(olcumGunlugu)?.Db;
+            if (a.Ses.Esitleme)
             {
-                // Telafi denemesi (yalnızca ses): kodlamadaki ses zinciriyle sesin yüksekliği ölçülür, eksik kadar telafi
-                // eklenip yeniden denenir. Kazanç tepeyi tavanın üstüne çıkarıyorsa tepeleri sınırlayıcı tutar, kıstığı
-                // kadar yükseklik eksik kalır. Çıktının sesi AAC ise ses AAC'ye de çevrilip ölçülür: AAC tizleri kestiği
-                // için yükseklik biraz düşer (kullanıcının OBS kaydında 128 kb/s'de 0,16 LU), o da telafi edilir.
-                var telafi = 0.0;
-                var sinir = false;
+                rapor = Esitleme.KararVer(a.Ses, kaynakOlcum);
+                onInfo?.Invoke(Describe(media, a, ses, rapor));
+            }
+
+            // Ölçüm yalnızca ses yükseltilecek / kısılacaksa zincire girer (dokunulmayan sesin yüksekliği aynı kalır).
+            var uygulandi = rapor is { Uygulandi: true };
+            olcum = uygulandi ? rapor!.Olcum : null;
+            var hedef = a.Ses.EsitlemeHedef;
+            var tavan = a.Ses.SinirlayiciTavan;
+            var kayipli = Esitleme.KayipliMi(a.Ses);
+
+            // Tepe koruması: sınırlayıcı açıksa (ya da eşitleme sesi değiştiriyorsa: kutu kapalı olsa da) çıktının gerçek
+            // tepesi tavanı aşmaz; AAC'de çözülen sesinki. AAC kodlaması ve örnekleme hızı dönüşümü tepeyi biraz
+            // yükseltir (kullanıcının videolarında AAC 128 kb/s 0,1–1 dB): ses kodlanıp ölçülür, aşarsa sınırlayıcı
+            // aşağı çekilip yeniden denenir. Tepesi tavanın altında kalan sese dokunulmaz (WAV'da bit bit aynı).
+            var koruma = a.Ses.Sinirlayici || uygulandi;
+            double Kazanc(SesDuzeltme d) => uygulandi ? hedef - olcum!.Yukseklik + d.Telafi : 0;
+            bool Sinirlayici(SesDuzeltme d) => ArgsBuilder.SinirlayiciVar(a.Ses, olcum, d.Telafi, d.TasmaPayi, d.Sinirla);
+            // Yükseklik denemesi: sınırlayıcı tepeleri kıstıkça yükseklik hedefin altında kalır; AAC tizleri kestiği için
+            // yükseklik biraz düşer (kullanıcının OBS kaydında 128 kb/s'de 0,16 LU): ölçülen eksik kadar telafi edilir.
+            bool YukseklikDenemesi(SesDuzeltme d) => uygulandi && (kayipli || Sinirlayici(d));
+
+            // Kaynağın tepesi (kazançla) tavanı zaten aşıyorsa sınırlayıcı baştan zincirde (ses yükseltilmese de).
+            if (koruma && kaynakTepe is { } kt && !Sinirlayici(duzeltme) && kt + Kazanc(duzeltme) + Esitleme.TepePayi > tavan)
+            {
+                duzeltme = duzeltme with { Sinirla = true };
+            }
+
+            // Tepe denemesi gerekmez: ses sessiz ya da tavandan çok kısık (kodlama tepeyi en çok EnCokTasmaPayi kadar
+            // yükseltse de tavanı aşmaz).
+            var tepeDenemesi = koruma && kaynakTepe is { } kt2 && kt2 + Kazanc(duzeltme) + Esitleme.EnCokTasmaPayi > tavan;
+            double? ilkTepe = null;
+            var tasma = 0.0;
+            var sinir = false;
+            var denendi = false;
+            if (tepeDenemesi || YukseklikDenemesi(duzeltme))
+            {
+                // Deneme (yalnızca ses): kodlamadaki ses zinciriyle sesin yüksekliği ve gerçek tepesi ölçülür; çıktının
+                // sesi AAC ise ses önce AAC'ye çevrilir (ölçülen, çözülen sesinki). Gerekirse telafi ve sınırlayıcının
+                // tavanı düzeltilip yeniden denenir; kodlama son denemenin ayarıyla yapılır.
                 var denemeDosyasi = kayipli
                     ? Path.Combine(Path.GetTempPath(), "Relios Export", "deneme-" + Guid.NewGuid().ToString("N") + ".m4a")
                     : null;
@@ -250,19 +286,24 @@ public static class Exporter
                 {
                     for (var d = 0; d < Esitleme.EnCokDeneme; d++)
                     {
-                        onInfo?.Invoke(Describe(media, a, ses, rapor) + (kayipli
-                            ? (rapor.Sinirli ? " · sınırlayıcının ve AAC'nin payı ölçülüyor" : " · AAC'nin payı ölçülüyor")
-                            : " · sınırlayıcının payı ölçülüyor"));
+                        var yukseklikDenemesi = YukseklikDenemesi(duzeltme);
+                        onInfo?.Invoke(Describe(media, a, ses, rapor) + (yukseklikDenemesi
+                            ? (kayipli
+                                ? (Sinirlayici(duzeltme) ? " · sınırlayıcının ve AAC'nin payı ölçülüyor" : " · AAC'nin payı ölçülüyor")
+                                : " · sınırlayıcının payı ölçülüyor")
+                            : (kayipli ? " · AAC'nin tepeye etkisi ölçülüyor" : " · tepe ölçülüyor")));
                         var denemeCikti = new List<string>();
                         var denemeler = new List<List<string>>();
                         if (denemeDosyasi is not null)
                         {
-                            denemeler.Add(ArgsBuilder.DenemeKodlamaKomutu(a.Ses, input, ses, sesSuresi, o, telafi, denemeDosyasi));
+                            denemeler.Add(ArgsBuilder.DenemeKodlamaKomutu(a.Ses, input, ses, sesSuresi, olcum, duzeltme.Telafi, denemeDosyasi,
+                                duzeltme.TasmaPayi, duzeltme.Sinirla));
                             denemeler.Add(Esitleme.SonucOlcumKomutu(denemeDosyasi));
                         }
                         else
                         {
-                            denemeler.Add(ArgsBuilder.DenemeOlcumKomutu(a.Ses, input, ses, sesSuresi, o, telafi));
+                            denemeler.Add(ArgsBuilder.DenemeOlcumKomutu(a.Ses, input, ses, sesSuresi, olcum, duzeltme.Telafi,
+                                duzeltme.TasmaPayi, duzeltme.Sinirla));
                         }
 
                         try
@@ -281,20 +322,45 @@ public static class Exporter
                             throw;
                         }
 
-                        if (ArgsBuilder.OlcumOku(string.Join('\n', denemeCikti)) is not { } olculen)
+                        denendi = true;
+                        var denemeGunlugu = string.Join('\n', denemeCikti);
+                        var tepe = tepeDenemesi ? ArgsBuilder.TepeOku(denemeGunlugu) : null;
+                        double? yukseklik = null;
+                        if (yukseklikDenemesi)
+                        {
+                            if (ArgsBuilder.OlcumOku(denemeGunlugu) is not { } olculen)
+                            {
+                                break;
+                            }
+
+                            yukseklik = olculen.Yukseklik;
+                        }
+
+                        if (tepeDenemesi && tepe is null)
                         {
                             break;
                         }
 
-                        var (yeni, sinirda) = Esitleme.TelafiAdimi(telafi, olculen.Yukseklik, a.Ses.EsitlemeHedef, kayipli);
-                        sinir = sinirda;
-                        if (yeni is not { } t)
+                        ilkTepe ??= tepe?.Db;
+                        var giris = Esitleme.GirisTepesi(kaynakTepe, Kazanc(duzeltme), Sinirlayici(duzeltme), tavan - duzeltme.TasmaPayi);
+                        var (yeni, sinirda, gorulen) = Esitleme.DenemeAdimi(
+                            duzeltme, tasma, yukseklik, hedef, kayipli, tepe?.Db, tepe?.Hassas ?? false, tavan, giris);
+                        tasma = gorulen;
+                        if (yukseklikDenemesi)
+                        {
+                            sinir = sinirda;
+                        }
+
+                        if (yeni is null)
                         {
                             break;
                         }
 
-                        telafi = t;
-                        rapor = rapor with { Telafi = telafi, TelafiSiniri = sinir, Kayipli = kayipli };
+                        duzeltme = yeni;
+                        if (rapor is not null)
+                        {
+                            rapor = rapor with { Telafi = duzeltme.Telafi, TelafiSiniri = sinir, Kayipli = kayipli, TasmaPayi = duzeltme.TasmaPayi };
+                        }
                     }
                 }
                 finally
@@ -304,21 +370,41 @@ public static class Exporter
                         DeleteQuietly(denemeDosyasi);
                     }
                 }
+            }
 
-                rapor = rapor with { Telafi = telafi, TelafiSiniri = sinir, Kayipli = kayipli };
+            // Sınırlayıcıyı tepe koruması mı koydu (yoksa zincirde olmayacaktı: ses yükseltilmiyor ya da tepe aşmıyordu).
+            var sinirlayici = Sinirlayici(duzeltme);
+            var tepeZorla = sinirlayici && !ArgsBuilder.SinirlayiciVar(a.Ses, olcum, duzeltme.Telafi);
+            if (rapor is null && (tepeZorla || duzeltme.TasmaPayi > 0))
+            {
+                // Eşitleme kapalı: yalnızca tepe koruması çalıştı, satıra ve ipucuna yazılsın.
+                rapor = new EsitlemeRaporu(EsitlemeKarari.Kapali, kaynakOlcum, hedef, tavan);
+            }
+
+            if (rapor is not null)
+            {
+                rapor = rapor with
+                {
+                    Telafi = duzeltme.Telafi,
+                    TelafiSiniri = sinir,
+                    Kayipli = kayipli && denendi,
+                    TasmaPayi = duzeltme.TasmaPayi,
+                    Tasma = tasma,
+                    TepeZorla = tepeZorla,
+                    IlkTepe = ilkTepe,
+                    SinirlayiciCalisti = sinirlayici,
+                };
                 onInfo?.Invoke(Describe(media, a, ses, rapor));
             }
         }
-
-        // Ölçüm yalnızca ses değiştirilecekse komuta girer (dokunulmayan ses olduğu gibi kalır).
-        var olcum = rapor is { Uygulandi: true } ? rapor.Olcum : null;
 
         Directory.CreateDirectory(outputFolder);
         var output = OutputPathFor(input, outputFolder, profile, ArgsBuilder.Uzanti(a));
         var temp = output + ".part" + ArgsBuilder.Uzanti(a);
         var gecisKlasoru = Path.Combine(Path.GetTempPath(), "Relios Export", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(gecisKlasoru);
-        var plan = ArgsBuilder.Olustur(a, media, input, ses, temp, Path.Combine(gecisKlasoru, "gecis"), olcum, rapor?.Telafi ?? 0);
+        var plan = ArgsBuilder.Olustur(a, media, input, ses, temp, Path.Combine(gecisKlasoru, "gecis"), olcum,
+            duzeltme.Telafi, duzeltme.TasmaPayi, duzeltme.Sinirla);
         try
         {
             var n = plan.Gecisler.Count;
@@ -350,9 +436,10 @@ public static class Exporter
             }
         }
 
-        if (rapor is { Uygulandi: true })
+        if (rapor is { Uygulandi: true } or { TepeZorla: true } or { TasmaPayi: > 0 })
         {
-            // Eşitlemenin sonucu: çıktının sesi bir kez daha ölçülür (yalnızca ses okunur). Ölçülemese de video hazırdır.
+            // Ses değiştirildiyse (eşitleme ya da tepe koruması) sonucu: çıktının sesi bir kez daha ölçülür (yalnızca ses
+            // okunur). Ölçülemese de video hazırdır.
             onInfo?.Invoke(Describe(media, a, ses, rapor) + " · çıktının sesi ölçülüyor");
             try
             {

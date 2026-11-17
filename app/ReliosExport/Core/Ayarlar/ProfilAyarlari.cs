@@ -639,8 +639,10 @@ public sealed class SesAyarlari : Gozlenebilir
     public WavBitDerinligi WavBit { get => _wavBit; set => Set(ref _wavBit, value); }
 
     /// <summary>
-    /// Tepe sınırlayıcı: ses yükseltildiğinde (seviye artı dB ya da LUFS eşitleme) tepeleri tavanda tutar, taşma
-    /// (cızırtı) olmaz. Ses yükseltilmezse hiç devreye girmez; ses olduğu gibi kalır.
+    /// Tepe sınırlayıcı: çıktının gerçek tepesi (örneklerin arası dahil; AAC'de çözülen sesinki) hiçbir zaman tavanı
+    /// aşmaz, taşma (cızırtı) olmaz. Ses önce kodlanıp ölçülür: AAC kodlaması ya da örnekleme hızı dönüşümü tepeyi
+    /// yükseltiyorsa sınırlayıcı o kadar aşağıda çalışır; ses yükseltilmese de tepesi tavanı aşan seste tepeleri tutar.
+    /// Tepesi tavanın altında kalan sese dokunmaz.
     /// </summary>
     public bool Sinirlayici { get => _sinirlayici; set => Set(ref _sinirlayici, value); }
 
@@ -660,9 +662,12 @@ public sealed class SesAyarlari : Gozlenebilir
     /// <summary>LUFS eşitlemenin yönü: yalnızca kısık sesi yükselt (varsayılan) ya da iki yönde.</summary>
     public EsitlemeYonu EsitlemeYonu { get => _esitlemeYonu; set => Set(ref _esitlemeYonu, value); }
 
-    /// <summary>Sınırlayıcı bu ayarlarla devreye girer mi (açık ve ses yükseltiliyor).</summary>
+    /// <summary>
+    /// Sınırlayıcı bu ayarlarla devreye girebilir mi: açık (tepesi tavanı aşan seste) ya da LUFS eşitleme sesi
+    /// yükseltiyor (kutu kapalı olsa da).
+    /// </summary>
     [JsonIgnore]
-    public bool SinirlayiciEtkin => Sinirlayici && (Seviye > 0 || Esitleme);
+    public bool SinirlayiciEtkin => Sinirlayici || Esitleme;
 
     [JsonIgnore]
     public string KaynakOzeti => Kaynak switch

@@ -362,7 +362,7 @@ jobs:
           "`n24 bit kaynak 16 bit'e ucgen titresimle indirildi; 16 bit 48 kHz kaynagin sesi bit bit ayni kaldi."
           exit 0
 
-      - name: Ses yuksekligi denemesi (tepe sinirlayici -1 dB; LUFS esitleme -14 sabit kazanc / sinirlayici + telafi / dokunulmadi)
+      - name: Ses yuksekligi denemesi (tepe sinirlayici -1 dB, cozulen sesin gercek tepesi de; LUFS esitleme -14 sabit kazanc / sinirlayici + telafi / dokunulmadi)
         if: always()
         run: |
           [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -375,6 +375,11 @@ jobs:
           # ~2,9 sn'sini iki kez sayar: bu seslerde cikti -13,4 / -15,0 olurdu; BS.1770 olceriyle tam -14 olmali.
           # Tizli pembe / beyaz gurultu (iki kanal ayni): tizi bol ses. AAC 128 kb/s ~17 kHz ustunu keser, olculen yukseklik duser (kullanicinin
           # OBS kaydinda 0,16 LU; beyaz gurultude ~1,5 LU). Program sesi AAC'ye cevirip dener ve kaybi telafi eder: tam -14.
+          # Tepe korumasi (0.12.0): cozulen sesin gercek tepesi -1'i asmamali. AAC kodlamasi ve ornekleme hizi donusumu tepeyi
+          # yukseltir (kullanicinin 14_tepeli'sinde AAC 128 kb/s -1,00 -> -0,92): program sesi kodlayip olcer, asarsa sinirlayiciyi
+          # asagi ceker. Hazir yuksek: -10 LUFS, tepe ~0 dBTP (yalnizca yukselt: yuksekligine dokunulmaz, tepeleri tutulur; kutu
+          # kapaliysa bit bit ayni). Tepeli gurultu: kisik beyaz gurultu + 2 sn'de bir 10 ms'lik yuksek gurultu vurusu (cok tiz).
+          # Kisik tiz 48k: cok kisik beyaz gurultu + 2 ms'lik vuruslar (+34 dB; 44,1 kHz'e donusum sinirlayicidan sonra tepeyi yukseltir).
           $deg = '(0.03+0.015*sin(2*PI*0.1*t))'
           $kaynaklar = @(
             @{ ad = 'yuksek_ton'; ses = 'aevalsrc=if(gte(t\,1)\,0.9*sin(2*PI*440*t)\,0)|if(gte(t\,1)\,0.9*sin(2*PI*660*t)\,0):s=48000:d=4'; d = 4; c = 'pcm_s24le' },
@@ -388,7 +393,10 @@ jobs:
             @{ ad = 'kisik_son'; ses = 'aevalsrc=if(lt(t\,9)\,0.03\,0.015)*sin(2*PI*440*t)|if(lt(t\,9)\,0.03\,0.015)*sin(2*PI*550*t):s=48000:d=12'; d = 12; c = 'pcm_s24le' },
             @{ ad = 'yuksek_son'; ses = 'aevalsrc=if(lt(t\,9)\,0.015\,0.03)*sin(2*PI*440*t)|if(lt(t\,9)\,0.015\,0.03)*sin(2*PI*550*t):s=48000:d=12'; d = 12; c = 'pcm_s24le' },
             @{ ad = 'tizli_pembe'; ses = 'anoisesrc=c=pink:r=48000:a=0.1:s=1234:d=12,pan=stereo|c0=c0|c1=c0'; d = 12; c = 'pcm_s24le' },
-            @{ ad = 'tizli_beyaz'; ses = 'anoisesrc=c=white:r=48000:a=0.02:s=4321:d=12,pan=stereo|c0=c0|c1=c0'; d = 12; c = 'pcm_s24le' }
+            @{ ad = 'tizli_beyaz'; ses = 'anoisesrc=c=white:r=48000:a=0.02:s=4321:d=12,pan=stereo|c0=c0|c1=c0'; d = 12; c = 'pcm_s24le' },
+            @{ ad = 'hazir_yuksek'; ses = 'anoisesrc=c=pink:r=48000:a=0.6:s=99:d=12,volume=6dB,pan=stereo|c0=c0|c1=c0,aresample=192000,alimiter=limit=0.988553:level=0,aresample=48000'; d = 12; c = 'pcm_s16le' },
+            @{ ad = 'tepeli_gurultu'; ses = 'aevalsrc=0.05*(2*random(0)-1)+if(lt(mod(t\,2)\,0.01)\,0.6*(2*random(1)-1)\,0)|0.05*(2*random(2)-1)+if(lt(mod(t\,2)\,0.01)\,0.6*(2*random(3)-1)\,0):s=48000:d=12'; d = 12; c = 'pcm_s24le' },
+            @{ ad = 'kisik_tiz_48k'; ses = 'aevalsrc=0.003*(2*random(0)-1)+if(lt(mod(t\,2)\,0.002)\,0.05\,0)|0.003*(2*random(1)-1)+if(lt(mod(t\,2)\,0.002)\,0.05\,0):s=48000:d=12'; d = 12; c = 'pcm_s24le' }
           )
           $Kay = @{}  # (PowerShell degisken adlarinda buyuk / kucuk harf ayirmaz: $k ile ayni olmasin)
           foreach ($k in $kaynaklar) {
@@ -445,7 +453,16 @@ jobs:
             @{ ad = 'Esitleme: sonu yuksek ses (son 3 sn +6 dB) -> tam -14 (loudnorm olcumuyle -15,0 olurdu)'; src = $Kay.yuksek_son; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.yuksek_son); karar = 'Dogrusal' },
             @{ ad = 'Esitleme + x264 2 gecis (4000 kb/s) -> yalnizca yukseltildi'; src = $Kay.kisik_degisken; arg = $yt + $esit + @('--ayarla', 'Video.X264.Mod=IkiGecis', '--ayarla', 'Video.X264.BitHizi=4000'); arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.kisik_degisken); karar = 'Dogrusal' },
             @{ ad = 'Esitleme + ses gecikmesi +250 ms'; src = $Kay.kisik_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.Gecikme=250'); arac = 'yukseklik'; kip = @('lufs'); karar = 'Dogrusal' },
-            @{ ad = 'Esitleme: yuksek ses (-7), iki yon -> dogrusal, yalnizca kisildi'; src = $Kay.yuksek_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.EsitlemeYonu=IkiYon'); arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.yuksek_degisken); karar = 'Dogrusal' }
+            @{ ad = 'Esitleme: yuksek ses (-7), iki yon -> dogrusal, yalnizca kisildi'; src = $Kay.yuksek_degisken; arg = $yt + $esit + @('--ayarla', 'Ses.EsitlemeYonu=IkiYon'); arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.yuksek_degisken); karar = 'Dogrusal' },
+            @{ ad = 'Tepe korumasi: kisik + ani tepeler, TikTok varsayilani (AAC 44,1 kHz) -> -14, cozulen ses <= -1 dBTP (0.11.1: -0,9)'; src = $Kay.tepeli; arg = @(); arac = 'yukseklik'; kip = @('tepeli', '--codec', 'aac', '--hz', '44100', '--pay', '0.05'); karar = 'Dogrusal/Sinirli' },
+            @{ ad = 'Tepe korumasi: kisik tizli ses + vuruslar (48 kHz, +34 dB), TikTok varsayilani (AAC 44,1 kHz) -> -14, cozulen ses <= -1 dBTP'; src = $Kay.kisik_tiz_48k; arg = @(); arac = 'yukseklik'; kip = @('tepeli', '--codec', 'aac', '--hz', '44100', '--pay', '0.05'); karar = 'Dogrusal/Sinirli' },
+            @{ ad = 'Tepe korumasi: kisik tizli ses + vuruslar (48 kHz), TikTok + WAV 44,1 kHz (donusum tepeyi yukseltir) -> -14, <= -1 dBTP'; src = $Kay.kisik_tiz_48k; arg = @('--ayarla', 'Ses.Kodlayici=Wav'); arac = 'yukseklik'; kip = @('tepeli', '--hz', '44100'); karar = 'Dogrusal/Sinirli' },
+            @{ ad = 'Tepe korumasi: beyaz gurultu vuruslari (cok tiz), TikTok varsayilani (AAC 44,1 kHz) -> cozulen ses <= -1 dBTP'; src = $Kay.tepeli_gurultu; arg = @(); arac = 'yukseklik'; kip = @('tepe', '--codec', 'aac', '--hz', '44100'); karar = 'Dogrusal/Sinirli' },
+            @{ ad = 'Tepe korumasi: beyaz gurultu vuruslari, TikTok + WAV 44,1 kHz -> <= -1 dBTP'; src = $Kay.tepeli_gurultu; arg = @('--ayarla', 'Ses.Kodlayici=Wav'); arac = 'yukseklik'; kip = @('tepe', '--hz', '44100'); karar = 'Dogrusal/Sinirli' },
+            @{ ad = 'Tepe korumasi: hazir yuksek ses (-10 LUFS, tepe ~0), TikTok varsayilani (AAC 44,1 kHz) -> yalnizca tepeler, cozulen ses <= -1 dBTP'; src = $Kay.hazir_yuksek; arg = @(); arac = 'yukseklik'; kip = @('tepe', '--codec', 'aac', '--hz', '44100'); karar = 'ZatenYuksek/Sinirli' },
+            @{ ad = 'Tepe korumasi: hazir yuksek ses, YouTube + WAV -> yalnizca tepeler, <= -1 dBTP'; src = $Kay.hazir_yuksek; arg = $yt + $esit; arac = 'yukseklik'; kip = @('tepe'); karar = 'ZatenYuksek/Sinirli' },
+            @{ ad = 'Tepe korumasi: hazir yuksek ses, esitleme kapali (YouTube + WAV) -> yalnizca tepe korumasi, <= -1 dBTP'; src = $Kay.hazir_yuksek; arg = $yt + @('--ayarla', 'Ses.Esitleme=false'); arac = 'yukseklik'; kip = @('tepe'); karar = 'Kapali/Sinirli' },
+            @{ ad = 'Tepe korumasi: hazir yuksek ses, sinirlayici kapali -> dokunulmadi (bit bit ayni)'; src = $Kay.hazir_yuksek; arg = $yt + $esit + @('--ayarla', 'Ses.Sinirlayici=false'); arac = 'donusum'; kip = @('ayni'); karar = 'ZatenYuksek' }
           )
           $satirlar = @(); $hatali = 0; $i = 0
           foreach ($d in $durumlar) {
@@ -485,7 +502,7 @@ jobs:
           $tablo | ForEach-Object { $_ }
           $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           if ($hatali) { "`n$hatali ses yuksekligi denemesinde sorun var."; exit 1 }
-          "`nSinirlayici tepeyi (orneklerin arasindaki gercek tepe dahil) -1 dB'de tuttu; esitleme butun sese yalnizca sabit kazanc uyguladi, tepeyi asan seste sinirlayici + telafiyle -14'e ulasti, yuksek sese dokunmadi."
+          "`nCiktinin gercek tepesi (orneklerin arasi dahil; AAC'de cozulen sesin) -1 dB'yi asmadi; esitleme butun sese yalnizca sabit kazanc uyguladi, tepeyi asan seste sinirlayici + telafiyle -14'e ulasti, yuksek sesin yuksekligine dokunmadi (kutu kapaliyken bit bit ayni)."
           exit 0
 
       - name: Tahmini boyut denemesi (programin yazdigi tahmin gercek dosyayla karsilastirilir)

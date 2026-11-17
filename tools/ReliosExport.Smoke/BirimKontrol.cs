@@ -21,6 +21,7 @@ internal static class BirimKontrol
         SesIzleri();
         HariciSes();
         SesYuksekligi();
+        TepeKorumasi();
         Boyutlar();
         Kaplar();
         AyarGecisi();
@@ -755,7 +756,7 @@ internal static class BirimKontrol
         Iceriyor("Telafi ölçümü: kodlamadaki ses zinciri + ölçüm", " " + string.Join(' ', ArgsBuilder.DenemeOlcumKomutu(esit.Ses, "KAYNAK.mp4",
             ArgsBuilder.SesSec(esit.Ses, Kaynak48(), "KAYNAK.mp4"), 10, olcum, 2.5)) + " ",
             " -map 0:a:0 -vn -sn -dn -t 10 -af volume=9.87dB,aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.891251:level=0:latency=1,"
-            + "aresample=48000:resampler=soxr:precision=33:dither_method=triangular,ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I -f null - ");
+            + "aresample=48000:resampler=soxr:precision=33:dither_method=triangular,ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I,ametadata=mode=print:key=lavfi.r128.true_peak -f null - ");
         esit.Ses.OrnekHizi = null;
         Iceriyor("Eşitleme + örnekleme 'kaynakla aynı': 192 kHz'ten kaynağın hızına", Komut(esit, olcum), ",aresample=44100:resampler=soxr");
         Iceriyor("Eşitleme + örnekleme 'kaynakla aynı'", Komut(esit, olcum), " -ar 44100 ");
@@ -779,12 +780,12 @@ internal static class BirimKontrol
             " -af pan=mono|c0=0.5*c0+0.5*c1,volume=7.37dB,");
         Iceriyor("Mono + eşitleme: ölçüm de mono", " " + string.Join(' ', ArgsBuilder.OlcumKomutu(mono.Ses, "KAYNAK.mp4",
             ArgsBuilder.SesSec(mono.Ses, Kaynak48(), "KAYNAK.mp4"), 10)) + " ",
-            " -af pan=mono|c0=0.5*c0+0.5*c1,ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I ");
+            " -af pan=mono|c0=0.5*c0+0.5*c1,ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I,ametadata=mode=print:key=lavfi.r128.true_peak ");
         Icermiyor("Mono + eşitleme, ses dokunulmadı (ölçüm yok): indirme yine -ac 1 ile", Komut(mono), "pan=mono");
 
         var olc = ArgsBuilder.OlcumKomutu(esit.Ses, "KAYNAK.mp4", ArgsBuilder.SesSec(esit.Ses, Kaynak48(), "KAYNAK.mp4"), 10);
         Iceriyor("Ölçüm komutu (BS.1770 ölçeri, loudnorm değil)", " " + string.Join(' ', olc) + " ",
-            " -map 0:a:0 -vn -sn -dn -t 10 -af ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I -f null - ");
+            " -map 0:a:0 -vn -sn -dn -t 10 -af ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I,ametadata=mode=print:key=lavfi.r128.true_peak -f null - ");
         Icermiyor("Ölçüm komutunda loudnorm yok (sesin son ~2,9 sn'sini iki kez sayar)", " " + string.Join(' ', olc) + " ", "loudnorm");
 
         foreach (var (ad, a) in new[] { ("TikTok", Varsayilanlar.TikTok()), ("YouTube", Varsayilanlar.YouTube()) })
@@ -882,7 +883,7 @@ internal static class BirimKontrol
         Kontrol("Biten satır (zaten yüksek)", "-9,2 LUFS (dokunulmadı)",
             Esitleme.KararVer(ka, new SesOlcum(-9.2, -3, 5)).SatirMetni ?? "yok");
         Iceriyor("Sonuç ölçüm komutu (ölçümle aynı ölçer)", " " + string.Join(' ', Esitleme.SonucOlcumKomutu("CIKTI.mov")) + " ",
-            " -i CIKTI.mov -map 0:a:0 -vn -sn -dn -af ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I -f null - ");
+            " -i CIKTI.mov -map 0:a:0 -vn -sn -dn -af ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I,ametadata=mode=print:key=lavfi.r128.true_peak -f null - ");
 
         // Ölçerin gerçek çıktısı (FFmpeg ebur128 + ametadata): yükseklik son "lavfi.r128.I=" satırından (0,001),
         // gerçek tepe ve aralık en sondaki özetten.
@@ -905,6 +906,184 @@ internal static class BirimKontrol
         Kontrol("Özet yoksa (ölçüm yarıda kaldı) okunmaz", "yok",
             ArgsBuilder.OlcumOku(olcer[..olcer.IndexOf("[Parsed_ebur128_0", StringComparison.Ordinal)]) is null ? "yok" : "var");
         Kontrol("Yükseklik satırı yoksa okunmaz", "yok", ArgsBuilder.OlcumOku(olcer.Replace("lavfi.r128.I=", "lavfi.r128.M=")) is null ? "yok" : "var");
+    }
+
+    private static void TepeKorumasi()
+    {
+        Console.WriteLine();
+        Console.WriteLine("--- Tepe koruması (0.12.0): çıktının gerçek tepesi (AAC'de çözülen sesinki) tavanı aşmaz; ölçülüp düzeltilir");
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        static MediaInfo Kaynak() => new(1920, 1080, 1, 1, 0, 10, true, 60, "bt709", "bt709", "tv")
+        {
+            VideoCodec = "h264",
+            VideoProfil = "High",
+            VideoSeviye = 42,
+            SesAkislari = [new SesAkisi(1, "pcm_s24le", 48000, 2, 24, null)],
+        };
+
+        string Komut(ProfilAyarlari a, SesOlcum? olcum = null, double telafi = 0, double tasmaPayi = 0, bool sinirla = false)
+        {
+            var m = Kaynak();
+            var ses = ArgsBuilder.SesSec(a.Ses, m, "KAYNAK.mp4");
+            return " " + string.Join(' ', ArgsBuilder.Olustur(a, m, "KAYNAK.mp4", ses, "CIKTI.mov", "GECIS", olcum, telafi, tasmaPayi, sinirla).Gecisler[0]) + " ";
+        }
+
+        // Komutlar: tepe koruması sınırlayıcıyı tavanın altına çeker ya da dokunulmayan sese koyar.
+        var tt = Varsayilanlar.TikTok();
+        Iceriyor("TikTok, dokunulmayan yüksek ses, sınırlayıcı zorla, pay 0,91: 192 kHz sınırlayıcı -1,91 dB, kazanç yok", Komut(tt, null, 0, 0.91, true),
+            " -af aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.802602:level=0:latency=1,"
+            + "aresample=44100:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac ");
+        Icermiyor("TikTok, dokunulmayan ses + sınırlayıcı: yükseklik değişmez (volume yok)", Komut(tt, null, 0, 0.91, true), "volume=");
+        Iceriyor("TikTok, düzeltme yok: ses zinciri değişmedi (sınırlayıcı yok)", Komut(tt),
+            " -af aresample=44100:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac ");
+        var tepeli = new SesOlcum(-21.37, -3.2, 6.4);
+        Iceriyor("TikTok + eşitleme, telafi 0,16, pay 0,18: kazanç 7,53 dB, sınırlayıcı -1,18 dB", Komut(tt, tepeli, 0.16, 0.18),
+            " -af volume=7.53dB,aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.872971:level=0:latency=1,aresample=44100:");
+        var sinirda = new SesOlcum(-21.37, -8.5, 6);
+        Icermiyor("Eşitleme: tepe -8,5 + 7,37 = -1,13 (tavanın altında): sınırlayıcı yok", Komut(tt, sinirda), "alimiter");
+        Iceriyor("Eşitleme: aynı ses, pay 0,3 (tavan -1,3): sınırlayıcı girer", Komut(tt, sinirda, 0, 0.3), ",alimiter=limit=0.860994:level=0:latency=1,");
+        var elle = Varsayilanlar.YouTube();
+        elle.Ses.Seviye = 6;
+        Iceriyor("Elle +6 dB, pay 0,18: sınırlayıcı -1,18 dB", Komut(elle, null, 0, 0.18), " -af volume=6dB,aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.872971:");
+
+        // Zincirde sınırlayıcı var mı (kodlama, denemeler ve rapor aynı kuralla).
+        var s = Varsayilanlar.TikTok().Ses;
+        Kontrol("Sınırlayıcı: varsayılan, ölçüm yok", "False", ArgsBuilder.SinirlayiciVar(s, null).ToString());
+        Kontrol("Sınırlayıcı: tepe koruması zorladı", "True", ArgsBuilder.SinirlayiciVar(s, null, sinirla: true).ToString());
+        Kontrol("Sınırlayıcı: eşitleme tepeyi aşırıyor (-3,2 + 7,37)", "True", ArgsBuilder.SinirlayiciVar(s, tepeli).ToString());
+        Kontrol("Sınırlayıcı: eşitleme, tepe -1,13 (aşmıyor)", "False", ArgsBuilder.SinirlayiciVar(s, sinirda).ToString());
+        Kontrol("Sınırlayıcı: aynı ses, pay 0,3", "True", ArgsBuilder.SinirlayiciVar(s, sinirda, tasmaPayi: 0.3).ToString());
+        var kapali = Varsayilanlar.TikTok().Ses;
+        kapali.Seviye = 6;
+        Kontrol("Sınırlayıcı: elle +6 dB, kutu açık", "True", ArgsBuilder.SinirlayiciVar(kapali, null).ToString());
+        kapali.Sinirlayici = false;
+        Kontrol("Sınırlayıcı: elle +6 dB, kutu kapalı", "False", ArgsBuilder.SinirlayiciVar(kapali, null).ToString());
+        kapali.Seviye = 0;
+        Kontrol("Sınırlayıcı: kutu kapalı, eşitleme tepeyi aşırıyor (eskisi gibi tutulur)", "True", ArgsBuilder.SinirlayiciVar(kapali, tepeli).ToString());
+
+        // Denemeler: dokunulmayan seste kazanç yok; WAV denemesinde kanal indirme zincirde (kodlamadaki -ac'nin aynısı).
+        var tts = Varsayilanlar.TikTok().Ses;
+        var ic = ArgsBuilder.SesSec(tts, Kaynak(), "KAYNAK.mp4");
+        var aac = " " + string.Join(' ', ArgsBuilder.DenemeKodlamaKomutu(tts, "KAYNAK.mp4", ic, 10, null, 0, "DENEME.m4a", 0.91, true)) + " ";
+        Iceriyor("AAC denemesi, dokunulmayan ses + sınırlayıcı: kodlamadaki zincir", aac,
+            " -t 10 -af aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.802602:level=0:latency=1,"
+            + "aresample=44100:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac -profile:a aac_low -b:a 128k -ar 44100 -ac 2 ");
+        var aacDuz = " " + string.Join(' ', ArgsBuilder.DenemeKodlamaKomutu(tts, "KAYNAK.mp4", ic, 10, null, 0, "DENEME.m4a")) + " ";
+        Iceriyor("AAC denemesi, dokunulmayan ses: kodlamadaki zincirle aynı (yalnızca dönüşüm)", aacDuz,
+            " -t 10 -af aresample=44100:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac ");
+        var wav = Varsayilanlar.YouTube().Ses;
+        wav.Kodlayici = SesKodlayici.Wav;
+        wav.Kanal = KanalModu.Mono;
+        var wavSes = ArgsBuilder.SesSec(wav, Kaynak(), "KAYNAK.mp4");
+        var wavDeneme = " " + string.Join(' ', ArgsBuilder.DenemeOlcumKomutu(wav, "KAYNAK.mp4", wavSes, 10, null, 0)) + " ";
+        Iceriyor("WAV denemesi, dokunulmayan mono çıktı: kanal indirme zincirde, kazanç yok, ölçer", wavDeneme,
+            " -t 10 -af pan=mono|c0=0.5*c0+0.5*c1,aresample=48000:resampler=soxr:precision=33:dither_method=triangular,ebur128=peak=true:metadata=1,");
+        Icermiyor("WAV denemesi, dokunulmayan ses: kazanç yok", wavDeneme, "volume=");
+        Iceriyor("Ölçer: yükseklik ve gerçek tepe çerçeve bilgisinden", " " + Esitleme.OlcumFiltresi + " ",
+            " ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I,ametadata=mode=print:key=lavfi.r128.true_peak ");
+
+        // Ölçerin gerçek tepesi: çerçeve bilgisinden (0,001 doğrusal), sondaki 100 ms özette daha yüksekse özetten.
+        const string olcer = "[Parsed_ametadata_1 @ 0x1] lavfi.r128.I=-14.020\n[Parsed_ametadata_2 @ 0x2] lavfi.r128.true_peak=0.884\n"
+            + "[Parsed_ametadata_1 @ 0x1] lavfi.r128.I=-14.004\n[Parsed_ametadata_2 @ 0x2] lavfi.r128.true_peak=0.891\n"
+            + "[Parsed_ebur128_0 @ 0x3] Summary:\n\n  Integrated loudness:\n    I:         -14.0 LUFS\n    Threshold: -24.0 LUFS\n\n"
+            + "  Loudness range:\n    LRA:         5.1 LU\n    Threshold: -34.0 LUFS\n    LRA low:   -17.0 LUFS\n    LRA high:  -12.0 LUFS\n\n"
+            + "  True peak:\n    Peak:       -1.0 dBFS";
+        string Tepe(string g) => ArgsBuilder.TepeOku(g) is { } t
+            ? (double.IsNegativeInfinity(t.Db) ? "-inf" : t.Db.ToString("0.0000", inv)) + (t.Hassas ? "/hassas" : "/ozet")
+            : "yok";
+        Kontrol("Gerçek tepe: son çerçeve bilgisi (0,891 → -1,0024 dB)", "-1.0024/hassas", Tepe(olcer));
+        Kontrol("Gerçek tepe: sesin son 100 ms'si daha yüksek (özet -0,5) → özetten", "-0.5000/ozet", Tepe(olcer.Replace("Peak:       -1.0 dBFS", "Peak:       -0.5 dBFS")));
+        Kontrol("Gerçek tepe: çerçeve bilgisi yok → özetten", "-1.0000/ozet", Tepe(olcer.Replace("lavfi.r128.true_peak", "lavfi.r128.sample_peak")));
+        Kontrol("Gerçek tepe: sessiz ses", "-inf/hassas", Tepe(olcer.Replace("true_peak=0.884", "true_peak=0.000").Replace("true_peak=0.891", "true_peak=0.000")
+            .Replace("Peak:       -1.0 dBFS", "Peak:       -inf dBFS")));
+        Kontrol("Gerçek tepe: ölçer çıktısı yok", "yok", Tepe("ffmpeg: hata"));
+        var oku = ArgsBuilder.OlcumOku(olcer);
+        Kontrol("Ölçüm: yükseklik -14,004, tepe hassas", "-14.004/-1.0024/True",
+            oku is null ? "yok" : $"{oku.Yukseklik.ToString(inv)}/{oku.Tepe.ToString("0.0000", inv)}/{oku.TepeHassas}");
+
+        // Tepe tavanda mı (ölçerin yuvarlaması kadar pay: çerçeve bilgisinde 0,005 dB, özette 0,05 dB).
+        Kontrol("Tavanda: -1,006 (hassas)", "True", Esitleme.TepeTavandaMi(-1.006, true, -1).ToString());
+        Kontrol("Tavanda: -1,003 (hassas) → aşabilir", "False", Esitleme.TepeTavandaMi(-1.003, true, -1).ToString());
+        Kontrol("Tavanda: -1,06 (özet)", "True", Esitleme.TepeTavandaMi(-1.06, false, -1).ToString());
+        Kontrol("Tavanda: -1,04 (özet) → aşabilir", "False", Esitleme.TepeTavandaMi(-1.04, false, -1).ToString());
+        Kontrol("Tavanda: sessiz ses", "True", Esitleme.TepeTavandaMi(double.NegativeInfinity, true, -1).ToString());
+
+        // Kodlayıcıya giren sesin tahmini tepesi: kaynağın tepesi + kazanç, sınırlayıcı varsa en çok onun tavanı.
+        string Giris(double? kaynak, double kazanc, bool sinir, double sinirTavani) =>
+            Esitleme.GirisTepesi(kaynak, kazanc, sinir, sinirTavani)?.ToString("0.00", inv) ?? "yok";
+        Kontrol("Giriş tepesi: kaynak bilinmiyor", "yok", Giris(null, 3, true, -1));
+        Kontrol("Giriş tepesi: -3 + 2, sınırlayıcısız", "-1.00", Giris(-3, 2, false, -1));
+        Kontrol("Giriş tepesi: -3 + 11, sınırlayıcı -1,18'de", "-1.18", Giris(-3, 11, true, -1.18));
+        Kontrol("Giriş tepesi: -3 + 1, sınırlayıcı -1,18'de (tepe altında)", "-2.00", Giris(-3, 1, true, -1.18));
+
+        // Deneme adımı (bilgisayarda FDK AAC 128 kb/s ile ölçülen dizilerle): tepe aşarsa sınırlayıcı görülen taşma +
+        // 0,1 dB aşağı çekilir; ikisi de tamamsa bu denemenin ayarı son ayardır.
+        string Adim(SesDuzeltme d, double tasma, double? yukseklik, double? tepe, double? giris, bool kayipli = true)
+        {
+            var (yeni, sinir, t) = Esitleme.DenemeAdimi(d, tasma, yukseklik, -14, kayipli, tepe, true, -1, giris);
+            return (yeni is { } y ? string.Create(inv, $"telafi {y.Telafi:0.00} pay {y.TasmaPayi:0.00} {(y.Sinirla ? "sınırla" : "-")}") : "bitti")
+                   + string.Create(inv, $" / taşma {t:0.00}") + (sinir ? " / sınır" : string.Empty);
+        }
+
+        var d0 = new SesDuzeltme();
+        Kontrol("Tepeli ses (14_tepeli): -0,92 (giriş -1) → pay 0,18", "telafi 0.00 pay 0.18 sınırla / taşma 0.08", Adim(d0, 0, -14.01, -0.92, -1));
+        Kontrol("Tepeli ses: pay 0,18 ile -1,03, -14,00 → bitti", "bitti / taşma 0.08", Adim(new SesDuzeltme(0, 0.18, true), 0.08, -14.00, -1.03, -1.18));
+        Kontrol("Yoğun ses: -0,51 (giriş -1) → pay 0,59", "telafi 0.00 pay 0.59 sınırla / taşma 0.49", Adim(d0, 0, null, -0.51, -1));
+        Kontrol("Yoğun ses: pay 0,59 ile -0,94 (giriş -1,59) → pay 0,75", "telafi 0.00 pay 0.75 sınırla / taşma 0.65",
+            Adim(new SesDuzeltme(0, 0.59, true), 0.49, null, -0.94, -1.59));
+        Kontrol("Yoğun ses: pay 0,75 ile -1,13 → bitti", "bitti / taşma 0.65", Adim(new SesDuzeltme(0, 0.75, true), 0.65, null, -1.13, -1.75));
+        Kontrol("Sınırlayıcı yokken taşma (giriş -1,2, çıktı -0,7) → pay 0,6, sınırlayıcı girer", "telafi 0.00 pay 0.60 sınırla / taşma 0.50",
+            Adim(d0, 0, null, -0.7, -1.2));
+        Kontrol("Hazır yüksek ses (tepe -0,1, sınırlayıcı -1'de): -0,19 → pay 0,91", "telafi 0.00 pay 0.91 sınırla / taşma 0.81",
+            Adim(new SesDuzeltme(0, 0, true), 0, null, -0.19, -1));
+        Kontrol("Pay en çok 6 dB: sınırda, yine aşıyor → bitti", "bitti / taşma 6.50", Adim(new SesDuzeltme(0, 6, true), 0, null, -0.5, -7));
+        Kontrol("Yalnızca yükseklik (AAC -14,16) → telafi 0,16", "telafi 0.16 pay 0.00 - / taşma 0.00", Adim(d0, 0, -14.16, -3, -3.1));
+        Kontrol("İkisi de tamam → bitti", "bitti / taşma 0.00", Adim(d0, 0, -14.01, -1.2, -1.25));
+        Kontrol("Tepe ve yükseklik birlikte: -0,92 ve -14,16 → telafi 0,16, pay 0,18", "telafi 0.16 pay 0.18 sınırla / taşma 0.08",
+            Adim(d0, 0, -14.16, -0.92, -1));
+        Kontrol("Tepe denemesi yok (tepe null): yalnızca yükseklik", "bitti / taşma 0.00", Adim(d0, 0, -14.0, null, null));
+        Kontrol("Sessiz ses → bitti", "bitti / taşma 0.00", Adim(d0, 0, null, double.NegativeInfinity, null));
+        Kontrol("Kaynağın tepesi bilinmiyor: aşım kadar (-0,8 → pay 0,3)", "telafi 0.00 pay 0.30 sınırla / taşma 0.20", Adim(d0, 0, null, -0.8, null));
+
+        // Rapor: satır, bilgi ve ipucu yazıları.
+        var ka = Varsayilanlar.TikTok().Ses;
+        var yuksek = Esitleme.KararVer(ka, new SesOlcum(-9.24, -0.1, 4)) with
+        {
+            TepeZorla = true, SinirlayiciCalisti = true, TasmaPayi = 0.91, Tasma = 0.81, Kayipli = true, IlkTepe = -0.19, SonucYukseklik = -9.46,
+        };
+        Kontrol("Zaten yüksek + tepe koruması: satır", "-9,5 LUFS (yalnızca tepeler sınırlandı)", yuksek.SatirMetni ?? "yok");
+        Kontrol("Zaten yüksek + tepe koruması: hedefe ulaşılamadı yazmaz", "False", yuksek.HedefeUlasilamadi.ToString());
+        Kontrol("Zaten yüksek + tepe koruması: bilgi", "-9,2 LUFS · zaten yüksek, dokunulmuyor (tepeler -1 dB'de tutulur)", yuksek.BilgiMetni);
+        Kontrol("Zaten yüksek + tepe koruması: ipucu (tepe tavanın üstündeydi)", "True", yuksek.Ayrinti
+            .Contains("Tepe -0,1 dBTP, tavanın üstündeydi: sınırlayıcı yalnızca tepeleri tuttu; sesin geri kalanına dokunulmadı.", StringComparison.Ordinal).ToString());
+        Kontrol("Zaten yüksek + tepe koruması: ipucu (AAC payı)", "True", yuksek.Ayrinti
+            .Contains("AAC kodlaması tepeyi 0,81 dB yükseltiyordu (denendi, ölçüldü): sınırlayıcı -1,91 dB'de çalıştı; çıktının gerçek tepesi en çok -1 dB.", StringComparison.Ordinal).ToString());
+        Kontrol("Zaten yüksek + tepe koruması: karar yazısı", "True", yuksek.Ayrinti
+            .Contains("Karar: zaten hedeften yüksek, sesin yüksekliğine dokunulmadı", StringComparison.Ordinal).ToString());
+        Kontrol("Zaten yüksek + tepe koruması: sınırlı", "True", yuksek.Sinirli.ToString());
+        Kontrol("Zaten yüksek, koruma yok: eskisi gibi", "-9,2 LUFS (dokunulmadı)", Esitleme.KararVer(ka, new SesOlcum(-9.24, -3, 4)).SatirMetni ?? "yok");
+        var kapaliRapor = new EsitlemeRaporu(EsitlemeKarari.Kapali, new SesOlcum(-12, -0.4, 5), -14, -1)
+        {
+            TepeZorla = true, SinirlayiciCalisti = true, TasmaPayi = 0.2, Tasma = 0.1, SonucYukseklik = -12.2, SonucTepe = -1.02,
+        };
+        Kontrol("Eşitleme kapalı, tepe koruması: satır", "tepeler -1 dB'de tutuldu", kapaliRapor.SatirMetni ?? "yok");
+        Kontrol("Eşitleme kapalı, tepe koruması: bilgi", "tepeler -1 dB'de tutulur", kapaliRapor.BilgiMetni);
+        Kontrol("Eşitleme kapalı, tepe koruması: ipucu", "True", kapaliRapor.Ayrinti
+            .StartsWith("Tepe koruması (LUFS eşitleme kapalı; tepe en çok -1 dB)", StringComparison.Ordinal).ToString());
+        Kontrol("Eşitleme kapalı, tepe koruması (WAV): dönüşüm payı", "True", kapaliRapor.Ayrinti
+            .Contains("Örnekleme hızı dönüşümü tepeyi 0,1 dB yükseltiyordu", StringComparison.Ordinal).ToString());
+        Kontrol("Eşitleme kapalı, tepe koruması: sonuç", "True", kapaliRapor.Ayrinti.Contains("Sonuç: -12,2 LUFS · tepe -1,0 dBTP", StringComparison.Ordinal).ToString());
+        var dogrusal = Esitleme.KararVer(ka, new SesOlcum(-25.87, -1.47, 3)) with
+        {
+            Telafi = 0.05, Kayipli = true, TasmaPayi = 0.18, Tasma = 0.08, SinirlayiciCalisti = true, IlkTepe = -0.92, SonucYukseklik = -14.0,
+        };
+        Kontrol("Eşitleme + sınırlayıcı + AAC payı: satır", "-14,0 LUFS", dogrusal.SatirMetni ?? "yok");
+        Kontrol("Eşitleme + sınırlayıcı + AAC payı: ipucu", "True", dogrusal.Ayrinti
+            .Contains("AAC kodlaması tepeyi 0,08 dB yükseltiyordu (denendi, ölçüldü): sınırlayıcı -1,18 dB'de çalıştı", StringComparison.Ordinal).ToString());
+        Kontrol("Eşitleme + sınırlayıcı + AAC payı: tepe cümlesi eskisi gibi", "True", dogrusal.Ayrinti
+            .Contains("dB'ye çıkacaktı: sınırlayıcı -1 dB'de tuttu", StringComparison.Ordinal).ToString());
+        Kontrol("Eşitleme + sınırlayıcı + AAC payı: \"yalnızca tepeleri\" yazmaz (ses yükseltildi)", "False", dogrusal.Ayrinti
+            .Contains("yalnızca tepeleri", StringComparison.Ordinal).ToString());
     }
 
     private static void Boyutlar()

@@ -58,6 +58,15 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
     (aynı videoda WAV ve AAC varsa FDK AAC'ye WAV'dan çevrilir), yoksa ilk iz.
     Ses (videonun içindeki PCM / WAV dahil) 48 kHz'e soxr ile çevrilir;
     seviye değişmez. Mono ses stereoya iki kanala tam seviyede açılır (ffmpeg'in `-ac 2` açılışı -3 dB kısardı).
+  - Tepe sınırlayıcı (varsayılan açık, -1 dB; 0.12.0): çıktının gerçek tepesi (örneklerin arası dahil; AAC'de çözülen
+    sesinki) tavanı aşmaz. AAC kodlaması ve örnekleme hızı dönüşümü tepeyi biraz yükseltir (kullanıcının videolarında
+    AAC 128 kb/s'de 0,1–1 dB: -1'de tutulan tepe çözülünce -0,9'a, hazır yüksek müzik 0 dB'nin üstüne çıkıyordu). Ses
+    önce yalnızca ses olarak kodlanıp (WAV'da kodlanmadan) ölçülür; tepe tavanı aşıyorsa sınırlayıcı görülen taşma +
+    0,1 dB aşağıda çalışır ve yeniden denenir (en çok 6 deneme, LUFS eşitlemenin telafisiyle birlikte; yükseklik yine
+    -14). Ses yükseltilmese de tepesi tavanı aşan seste yalnızca tepeler tutulur; tepesi tavanın altında kalan sese
+    dokunulmaz (WAV'da bit bit aynı). Kutu kapalıysa dokunulmayan ses olduğu gibi kalır (LUFS eşitleme sesi
+    yükseltiyorsa tepe yine tutulur). Platform (TikTok, YouTube) sesi yeniden kodlar: onun kodlayıcısına giren ses
+    bizim çözülen sesimizdir, standart (AES TD1008) kodlayıcı girişinde en çok -1 dBTP ister.
   - Ayarlar program klasöründeki `ayarlar.json` dosyasında, hata günlükleri `Günlük` klasöründe durur
     (kurulum yok). Program bir arşivin içinden (WinRAR, 7-Zip, zip) açılırsa arşiv programı exe'yi geçici bir
     klasöre açar ve kapanınca siler; o durumda ayarlar ve günlükler `%LOCALAPPDATA%\Relios Export` klasörüne yazılır.

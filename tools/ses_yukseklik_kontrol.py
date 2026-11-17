@@ -9,16 +9,21 @@ sinir:    ses yükseltilmiş, sınırlayıcı açık: en büyük örnek tavanın
           örneklerin arasındaki gerçek tepe de tavanın altında (+ 0,3 dB pay; sınırlayıcı 192 kHz'te çalışır),
           ses kaynaktaki yerinde başlar (sınırlayıcının gecikmesi telafi edilmiş: 1,000 sn ± 1 ms).
 kirpik:   ses yükseltilmiş, sınırlayıcı kapalı: örnekler tam ölçekte kırpılır (sınırlayıcının işe yaradığının karşılığı).
-lufs:     LUFS eşitleme: tümleşik yükseklik hedefte (± 0,1 LU), gerçek tepe tavanın altında (+ 0,3 dB pay).
+lufs:     LUFS eşitleme: tümleşik yükseklik hedefte (± 0,1 LU), gerçek tepe tavanın altında.
 dogrusal: lufs + ses yalnızca yükseltilmiş / kısılmış olmalı: çıktı = kaynak × sabit kazanç (--kaynak gerekir);
           sabit kazançla açıklanamayan kalan, sesin 60 dB altında olmalı (16 bit titreşim ~ -80 dB).
 tepeli:   kısık + ani tepeli ses (sabit kazanç + sınırlayıcı + telafi): yükseklik hedefte (± 0,25 LU: telafi 0,2 LU
           içinde durur), gerçek tepe tavanın altında, hiç kırpılma yok.
+tepe:     tepe koruması (0.12.0): çıktının gerçek tepesi tavanın altında (AAC'de çözülen sesinki), hiç kırpılma yok
+          (yükseklik denetlenmez: ör. dokunulmayan yüksek seste yalnızca tepeler sınırlanır).
+Gerçek tepe her kipte (kirpik dışında) tavanı hiç aşmamalı: program çıktının sesini kodlayıp ölçer, aşarsa
+sınırlayıcıyı aşağı çeker (eskiden kodlayıcıya giren ses -1'de tutulurdu; AAC çözülünce +0,1–1 dB çıkabiliyordu).
 --program: programın satırda gösterdiği sonuç (kendi ölçümü) bu aracın ölçtüğüyle 0,05 LU içinde aynı olmalı.
 --pay:     yüksekliğin hedefe uzaklığı için başka pay (ör. AAC çıktıda telafiyle 0,05).
 
 Yükseklik ITU-R BS.1770-4 ölçeriyle (FFmpeg ebur128) ölçülür: tümleşik yükseklik çerçeve bilgisinden 0,001
-hassasiyetle (özette yalnızca 0,1), gerçek tepe özetten.
+hassasiyetle (özette yalnızca 0,1), gerçek tepe çerçeve bilgisinden (0,001 doğrusal; sesin son 100 ms'si özette daha
+yüksekse özetten, 0,1).
 """
 import array
 import json
@@ -36,7 +41,7 @@ KAYNAK = _ek.get("--kaynak")
 PROGRAM = _ek.get("--program")
 CODEC = _ek.get("--codec", "pcm_s16le")
 PAY = _ek.get("--pay")
-if kip not in ("sinir", "kirpik", "lufs", "dogrusal", "tepeli"):
+if kip not in ("sinir", "kirpik", "lufs", "dogrusal", "tepeli", "tepe"):
     sys.exit(f"bilinmeyen kip: {kip}")
 if kip == "dogrusal" and not KAYNAK:
     sys.exit("dogrusal kipi --kaynak ister")
@@ -73,15 +78,21 @@ def db(x):
 
 
 def r128(yol):
-    # Tümleşik yükseklik her 100 ms'de çerçeve bilgisine yazılır (0,001); sonuncusu bütün sesin değeri.
-    r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-i", yol, "-map", "0:a:0",
-                        "-af", "ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I",
+    # Tümleşik yükseklik ve gerçek tepe her 100 ms'de çerçeve bilgisine yazılır (0,001); sonuncusu bütün sesin değeri.
+    # Sesin son 100 ms'si yalnızca özette sayılır: özetteki tepe daha yüksekse o alınır.
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-i", yol, "-map", "0:a:0", "-af",
+                        "ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I,"
+                        "ametadata=mode=print:key=lavfi.r128.true_peak",
                         "-f", "null", "-"], capture_output=True, text=True, encoding="utf-8", errors="replace")
     ozet = r.stderr[r.stderr.rfind("Summary:"):]
     iler = re.findall(r"lavfi\.r128\.I=(-?[\d.]+)", r.stderr)
+    tepeler = re.findall(r"lavfi\.r128\.true_peak=([\d.]+)", r.stderr)
     tp = re.search(r"True peak:\s+Peak:\s+(-?[\d.]+|-inf) dBFS", ozet)
-    return (float(iler[-1]) if iler else -200.0,
-            float(tp.group(1)) if tp and tp.group(1) != "-inf" else -200.0)
+    ozet_tepe = float(tp.group(1)) if tp and tp.group(1) != "-inf" else -200.0
+    tepe = db(float(tepeler[-1])) if tepeler else ozet_tepe
+    if ozet_tepe > tepe + 0.05:
+        tepe = ozet_tepe
+    return (float(iler[-1]) if iler else -200.0, tepe)
 
 
 bilgi = akis(cikti)
@@ -96,7 +107,7 @@ if kip in ("sinir", "kirpik"):
         chk("En büyük örnek (dBFS)", f"<= {TAVAN + 0.05:.2f}", f"{tepe:.2f}", tepe <= TAVAN + 0.05)
         chk("Ses yükseltildi (tavana yakın)", f">= {TAVAN - 1.5:.2f}", f"{tepe:.2f}", tepe >= TAVAN - 1.5)
         _, gercek = r128(cikti)
-        chk("Gerçek tepe (dBTP, örnekler arası)", f"<= {TAVAN + 0.3:.1f}", f"{gercek:.2f}", gercek <= TAVAN + 0.3)
+        chk("Gerçek tepe (dBTP, örnekler arası)", f"<= {TAVAN:.2f}", f"{gercek:.3f}", gercek <= TAVAN)
         # Sesin başladığı yer: ilk kanalda 1000'i (-30 dBFS) aşan ilk örnek.
         ilk = next((i // kanal for i in range(0, len(s), kanal) if abs(s[i]) > 1000), -1)
         sn = ilk / HZ if ilk >= 0 else -1
@@ -107,12 +118,13 @@ if kip in ("sinir", "kirpik"):
 else:
     yukseklik, tepe = r128(cikti)
     pay = float(PAY) if PAY is not None else (0.25 if kip == "tepeli" else 0.1)
-    chk("Tümleşik yükseklik (LUFS)", f"{HEDEF:.2f} ± {pay}", f"{yukseklik:.3f}", abs(yukseklik - HEDEF) <= pay)
-    if kip == "tepeli":
+    if kip != "tepe":
+        chk("Tümleşik yükseklik (LUFS)", f"{HEDEF:.2f} ± {pay}", f"{yukseklik:.3f}", abs(yukseklik - HEDEF) <= pay)
+    if kip in ("tepeli", "tepe"):
         s = ornekler(cikti, "s16le")
         kirpik = sum(1 for v in s if v in (32767, -32768))
         chk("Tam ölçekte kırpılan örnek", "0", kirpik, kirpik == 0)
-    chk("Gerçek tepe (dBTP)", f"<= {TAVAN + 0.3:.1f}", f"{tepe:.2f}", tepe <= TAVAN + 0.3)
+    chk("Gerçek tepe (dBTP)", f"<= {TAVAN:.2f}", f"{tepe:.3f}", tepe <= TAVAN)
 
     if kip == "dogrusal":
         x = ornekler(KAYNAK, "f32le")

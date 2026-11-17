@@ -32,10 +32,23 @@ public sealed record SesSecimi(SesSecimTuru Tur, string? Dosya = null, int? Kana
 
 /// <summary>
 /// LUFS eşitlemede sesin ölçülen değerleri (ITU-R BS.1770-4 / EBU R128; FFmpeg'in ebur128 ölçeri, bkz.
-/// <see cref="Esitleme.OlcumFiltresi"/>): tümleşik yükseklik (LUFS, 0,001 hassasiyetle), gerçek tepe (dBTP) ve
-/// yükseklik aralığı (LU) (bu ikisi ölçerin özetinden, 0,1 hassasiyetle).
+/// <see cref="Esitleme.OlcumFiltresi"/>): tümleşik yükseklik (LUFS, 0,001 hassasiyetle), gerçek tepe (dBTP; çerçeve
+/// bilgisinden 0,001 doğrusal hassasiyetle, yoksa özetten 0,1) ve yükseklik aralığı (LU, özetten 0,1).
 /// </summary>
-public sealed record SesOlcum(double Yukseklik, double Tepe, double Aralik);
+public sealed record SesOlcum(double Yukseklik, double Tepe, double Aralik)
+{
+    /// <summary>Gerçek tepe çerçeve bilgisinden (0,001 doğrusal) okundu; değilse özetten (0,1 dB).</summary>
+    public bool TepeHassas { get; init; }
+}
+
+/// <summary>
+/// Sesin denemelerden sonraki düzeltmesi; kodlama ve denemeler aynı düzeltmeyle yapılır. <paramref name="Telafi"/>:
+/// LUFS eşitlemede sese eklenen kazanç (dB): sınırlayıcının kıstığı ve AAC'nin düşürdüğü pay. <paramref name="TasmaPayi"/>:
+/// sınırlayıcı tavanın bu kadar (dB) altında çalışır (AAC kodlaması ve örnekleme hızı dönüşümü tepeyi biraz yükseltir).
+/// <paramref name="Sinirla"/>: sınırlayıcı her durumda zincirde (ses yükseltilmese de: deneme, çıktının tepesinin
+/// tavanı aştığını gösterdi).
+/// </summary>
+public sealed record SesDuzeltme(double Telafi = 0, double TasmaPayi = 0, bool Sinirla = false);
 
 /// <summary>Bir dışa aktarmanın ffmpeg komutları (2 / 3 geçişte birden fazla) ve çıktı uzantısı.</summary>
 public sealed record KomutPlani(IReadOnlyList<IReadOnlyList<string>> Gecisler, string Uzanti);
@@ -224,7 +237,9 @@ public static class ArgsBuilder
         string output,
         string? gecisDosyasi = null,
         SesOlcum? olcum = null,
-        double telafi = 0)
+        double telafi = 0,
+        double tasmaPayi = 0,
+        bool sinirla = false)
     {
         var v = a.Video;
         var gecisSayisi = v.Kodlayici == VideoKodlayici.X264
@@ -235,7 +250,7 @@ public static class ArgsBuilder
         var gecisler = new List<IReadOnlyList<string>>();
         if (gecisSayisi == 1)
         {
-            gecisler.Add(Komut(a, media, input, ses, output, gecis: 0, gecisDosyasi, olcum, telafi));
+            gecisler.Add(Komut(a, media, input, ses, output, gecis: 0, gecisDosyasi, olcum, telafi, tasmaPayi, sinirla));
         }
         else
         {
@@ -246,7 +261,7 @@ public static class ArgsBuilder
                 gecisler.Add(Komut(a, media, input, ses, "-", gecis: 3, gecisDosyasi));
             }
 
-            gecisler.Add(Komut(a, media, input, ses, output, gecis: 2, gecisDosyasi, olcum, telafi));
+            gecisler.Add(Komut(a, media, input, ses, output, gecis: 2, gecisDosyasi, olcum, telafi, tasmaPayi, sinirla));
         }
 
         return new KomutPlani(gecisler, Uzanti(a));
@@ -264,7 +279,9 @@ public static class ArgsBuilder
         int gecis,
         string gecisDosyasi,
         SesOlcum? olcum = null,
-        double telafi = 0)
+        double telafi = 0,
+        double tasmaPayi = 0,
+        bool sinirla = false)
     {
         var v = a.Video;
         var sonGecis = gecis is 0 or 2;
@@ -333,7 +350,7 @@ public static class ArgsBuilder
 
         if (sesVar)
         {
-            Ses(args, a.Ses, harici, ses.Kanal, olcum, ses.OrnekHizi, telafi, harici ? SesSuresi(media, ses) : 0);
+            Ses(args, a.Ses, harici, ses.Kanal, olcum, ses.OrnekHizi, telafi, harici ? SesSuresi(media, ses) : 0, tasmaPayi, sinirla);
         }
 
         args.AddRange(
@@ -1293,15 +1310,12 @@ public static class ArgsBuilder
 
     /// <summary>
     /// Ölçerin ffmpeg çıktısından değerleri okur: tümleşik yükseklik son "lavfi.r128.I=" satırından (her 100 ms'de
-    /// yazılır; sonuncusu bütün sesin değeri), gerçek tepe ve yükseklik aralığı en sondaki özetten ("Summary:").
-    /// Ses sessizse ya da 0,4 saniyeden kısaysa ölçer -70 LUFS yazar; o zaman ya da okunamazsa null: eşitleme
-    /// yapılmaz (sessiz sesi yükseltmeye çalışmak hata verir).
+    /// yazılır; sonuncusu bütün sesin değeri), gerçek tepe <see cref="TepeOku"/> ile, yükseklik aralığı en sondaki
+    /// özetten ("Summary:"). Ses sessizse ya da 0,4 saniyeden kısaysa ölçer -70 LUFS yazar; o zaman ya da okunamazsa
+    /// null: eşitleme yapılmaz (sessiz sesi yükseltmeye çalışmak hata verir).
     /// </summary>
     public static SesOlcum? OlcumOku(string gunluk)
     {
-        static double? Sayi(string metin) =>
-            double.TryParse(metin, NumberStyles.Float, Inv, out var d) && double.IsFinite(d) ? d : null;
-
         var iler = System.Text.RegularExpressions.Regex.Matches(gunluk, @"lavfi\.r128\.I=(\S+)");
         var ozet = gunluk.LastIndexOf("Summary:", StringComparison.Ordinal);
         if (iler.Count == 0 || ozet < 0)
@@ -1310,55 +1324,94 @@ public static class ArgsBuilder
         }
 
         var aralik = System.Text.RegularExpressions.Regex.Match(gunluk[ozet..], @"LRA:\s+(\S+) LU");
-        var tepe = System.Text.RegularExpressions.Regex.Match(gunluk[ozet..], @"True peak:\s+Peak:\s+(\S+) dBFS");
         if (Sayi(iler[^1].Groups[1].Value) is not { } i || i <= Esitleme.MutlakKapi
-            || !tepe.Success || Sayi(tepe.Groups[1].Value) is not { } tp
+            || TepeOku(gunluk) is not { } tepe || !double.IsFinite(tepe.Db)
             || !aralik.Success || Sayi(aralik.Groups[1].Value) is not { } lra)
         {
             return null;
         }
 
-        return new SesOlcum(i, tp, lra);
+        return new SesOlcum(i, tepe.Db, lra) { TepeHassas = tepe.Hassas };
+    }
+
+    private static double? Sayi(string metin) =>
+        double.TryParse(metin, NumberStyles.Float, Inv, out var d) && double.IsFinite(d) ? d : null;
+
+    /// <summary>
+    /// Ölçerin gerçek tepesi (dBTP): son "lavfi.r128.true_peak=" satırından (doğrusal, 0,001 hassasiyetle; bütün sesin
+    /// en büyüğü; Hassas). Çerçeve bilgisi her 100 ms'de yazılır, sesin son ~100 ms'si ancak özette sayılır: özetteki
+    /// (0,1 dB'ye yuvarlı) tepe daha yüksekse o alınır. Çerçeve bilgisi yoksa özetten. Sessiz seste eksi sonsuz;
+    /// okunamazsa null.
+    /// </summary>
+    public static (double Db, bool Hassas)? TepeOku(string gunluk)
+    {
+        double? ozetTepe = null;
+        var ozet = gunluk.LastIndexOf("Summary:", StringComparison.Ordinal);
+        if (ozet >= 0 && System.Text.RegularExpressions.Regex.Match(gunluk[ozet..], @"True peak:\s+Peak:\s+(\S+) dBFS") is { Success: true } t)
+        {
+            ozetTepe = t.Groups[1].Value == "-inf" ? double.NegativeInfinity : Sayi(t.Groups[1].Value);
+        }
+
+        var satirlar = System.Text.RegularExpressions.Regex.Matches(gunluk, @"lavfi\.r128\.true_peak=(\S+)");
+        if (satirlar.Count > 0 && Sayi(satirlar[^1].Groups[1].Value) is { } dogrusal && dogrusal >= 0)
+        {
+            var db = dogrusal > 0 ? 20 * Math.Log10(dogrusal) : double.NegativeInfinity;
+            return ozetTepe is { } o && o > db + Esitleme.TepePayi + 1e-9 ? (o, false) : (db, true);
+        }
+
+        return ozetTepe is { } yalniz ? (yalniz, false) : null;
     }
 
     /// <summary>
-    /// Sesin filtre zinciri (kodlamada ve telafi ölçümünde aynı). LUFS eşitlemede bütün ses aynı miktarda (sabit
-    /// kazanç: hedef - ölçülen + telafi) hedefe getirilir; sesin dengesi değişmez. Kazanç tepeyi tavanın üstüne
-    /// çıkaracaksa sınırlayıcı (kutu kapalı olsa da) tepeleri tavanda tutar. <paramref name="hedefHz"/>: çıktının
+    /// Sesin zincirinde sınırlayıcı var mı: ses elle yükseltiliyor (artı dB) ve kutu açık; LUFS eşitlemenin kazancı
+    /// (telafi dahil) tepeyi sınırlayıcının tavanının (tavan - taşma payı) üstüne çıkarıyor (kutu kapalı olsa da); ya da
+    /// tepe koruması sınırlayıcıyı zincire koydu (<paramref name="sinirla"/>: deneme, çıktının tepesinin tavanı aştığını
+    /// gösterdi).
+    /// </summary>
+    public static bool SinirlayiciVar(SesAyarlari s, SesOlcum? olcum, double telafi = 0, double tasmaPayi = 0, bool sinirla = false) =>
+        sinirla
+        || (s.Sinirlayici && s.Seviye > 0)
+        || (s.Esitleme && olcum is not null
+            && Esitleme.SinirlanirMi(olcum, s.EsitlemeHedef, s.SinirlayiciTavan - tasmaPayi, telafi));
+
+    /// <summary>
+    /// Sesin filtre zinciri (kodlamada ve denemelerde aynı). LUFS eşitlemede bütün ses aynı miktarda (sabit kazanç:
+    /// hedef - ölçülen + telafi) hedefe getirilir; sesin dengesi değişmez. Kazanç tepeyi tavanın üstüne çıkaracaksa
+    /// sınırlayıcı (kutu kapalı olsa da) tepeleri tavanda tutar. Sınırlayıcı tavanın <paramref name="tasmaPayi"/> kadar
+    /// altında çalışır (AAC kodlaması ve örnekleme hızı dönüşümü tepeyi biraz yükseltir; denemede ölçülen kadar);
+    /// <paramref name="sinirla"/>: ses yükseltilmese de zincirde (tepe koruması). <paramref name="hedefHz"/>: çıktının
     /// örnekleme hızı (null: kaynakla aynı ve dönüşüm yok). <paramref name="hariciSure"/>: aynı adlı harici ses bu
-    /// süreye tam getirilir (<see cref="HariciUzunluk"/>; 0: süre bilinmiyor).
+    /// süreye tam getirilir (<see cref="HariciUzunluk"/>; 0: süre bilinmiyor). <paramref name="olcumIcin"/>: zincir
+    /// ölçülecek (kodlanmayacak): kanal sayısına zincirde inilir (kodlamada -ac'nin yaptığının aynısı).
     /// </summary>
     private static List<string> SesFiltreleri(
         SesAyarlari s, bool harici, int? kaynakKanal, SesOlcum? olcum, double telafi, int? kaynakHz, double hariciSure,
-        out int? hedefHz)
+        out int? hedefHz, double tasmaPayi = 0, bool sinirla = false, bool olcumIcin = false)
     {
         var esitleme = s.Esitleme && olcum is not null;
-        var af = OnSesFiltreleri(s, kaynakKanal, kanalIndir: esitleme);
-        var esitlemeSinirli = false;
+        var af = OnSesFiltreleri(s, kaynakKanal, kanalIndir: esitleme || olcumIcin);
         if (esitleme)
         {
-            var o = olcum!;
             // Telafi de kazançtır: AAC'nin payı da tepeyi tavanın üstüne çıkarabilir (tepe tavana çok yakınsa).
-            esitlemeSinirli = Esitleme.SinirlanirMi(o, s.EsitlemeHedef, s.SinirlayiciTavan, telafi);
-            af.Add($"volume={Db(s.EsitlemeHedef - o.Yukseklik + telafi)}dB");
+            af.Add($"volume={Db(s.EsitlemeHedef - olcum!.Yukseklik + telafi)}dB");
         }
 
         // Sınırlayıcı 192 kHz'te (4 kat örneklemede) çalışır: örneklerin arasındaki gerçek tepeler de tavanda kalır.
         // Kaynağın hızında çalışsaydı yalnızca örnekleri sınırlardı; tiz ya da sıkıştırılmış seste gerçek tepe tavanı
         // birkaç dB aşabilir, 44,1 kHz kaynak 48 kHz'e çevrilirken tam ölçekte kırpılabilirdi.
-        var sinirla = (s.Sinirlayici && s.Seviye > 0) || esitlemeSinirli;
-        if (sinirla)
+        var sinirlayici = SinirlayiciVar(s, olcum, telafi, tasmaPayi, sinirla);
+        if (sinirlayici)
         {
             af.Add("aresample=192000:" + SoxrAyari(s));
 
             // Tavan doğrusal değere çevrilir (-1 dB = 0,891); otomatik seviye kapalı (sesi kendisi yükseltmez),
             // gecikmesi telafi edilir (senkron kaymaz).
-            var tavan = Math.Pow(10, s.SinirlayiciTavan / 20);
+            var tavan = Math.Pow(10, (s.SinirlayiciTavan - tasmaPayi) / 20);
             af.Add(string.Create(Inv, $"alimiter=limit={tavan:0.######}:level=0:latency=1"));
         }
 
         // 192 kHz'ten dönüş: örnekleme hızı "kaynakla aynı" ise kaynağın hızına.
-        hedefHz = s.OrnekHizi ?? (sinirla ? kaynakHz ?? 48000 : null);
+        hedefHz = s.OrnekHizi ?? (sinirlayici ? kaynakHz ?? 48000 : null);
         var kaliteVar = s.Kalite != DonusumKalitesi.Yuksek || s.Titresim != Titresim.Yok;
         if (hedefHz is not null || kaliteVar)
         {
@@ -1396,13 +1449,15 @@ public static class ArgsBuilder
     }
 
     /// <summary>
-    /// LUFS eşitlemede telafi ölçümü: sesin kodlamadaki filtre zinciri (sabit kazanç + sınırlayıcı) uygulanıp yüksekliği
-    /// ölçülür (yalnızca ses okunur). Sınırlayıcı tepeleri kıstıkça yükseklik hedefin altında kalır; eksik kadar telafi
-    /// eklenip yeniden denenir. <paramref name="sureSaniye"/>: <see cref="SesSuresi"/> (harici ses kodlamadaki gibi tam
-    /// bu süreye getirilir).
+    /// Kayıpsız (WAV) çıktıda deneme: sesin kodlamadaki filtre zinciri (sabit kazanç, sınırlayıcı) uygulanıp yüksekliği
+    /// ve gerçek tepesi ölçülür (yalnızca ses okunur). Sınırlayıcı tepeleri kıstıkça yükseklik hedefin altında kalır:
+    /// eksik kadar telafi eklenip yeniden denenir; tepe tavanı aşarsa (örnekleme hızı dönüşümü) sınırlayıcı aşağı
+    /// çekilir. <paramref name="olcum"/>: LUFS eşitlemenin ölçümü (yükseklik değiştirilmeyecekse null: kazanç yok).
+    /// <paramref name="sureSaniye"/>: <see cref="SesSuresi"/> (harici ses kodlamadaki gibi tam bu süreye getirilir).
     /// </summary>
     public static List<string> DenemeOlcumKomutu(
-        SesAyarlari s, string input, SesSecimi ses, double sureSaniye, SesOlcum olcum, double telafi)
+        SesAyarlari s, string input, SesSecimi ses, double sureSaniye, SesOlcum? olcum, double telafi,
+        double tasmaPayi = 0, bool sinirla = false)
     {
         var harici = ses.Tur == SesSecimTuru.HariciDosya;
         var args = new List<string> { "-hide_banner", "-nostdin", "-nostats", "-i", harici ? ses.Dosya! : input };
@@ -1414,21 +1469,24 @@ public static class ArgsBuilder
 
         // Harici ses yalnızca süresi biliniyorsa kodlamadaki gibi kesilip doldurulur (süresiz doldurma bitmezdi).
         var hariciSure = harici ? sureSaniye : 0;
-        var af = SesFiltreleri(s, hariciSure > 0, ses.Kanal, olcum, telafi, ses.OrnekHizi, hariciSure, out _);
+        var af = SesFiltreleri(s, hariciSure > 0, ses.Kanal, olcum, telafi, ses.OrnekHizi, hariciSure, out _,
+            tasmaPayi, sinirla, olcumIcin: true);
         af.Add(Esitleme.OlcumFiltresi);
         args.AddRange(["-af", string.Join(',', af), "-f", "null", "-"]);
         return args;
     }
 
     /// <summary>
-    /// AAC çıktıda telafi denemesi, 1. adım: ses kodlamadaki zincir (sabit kazanç + telafi, gerekirse sınırlayıcı) ve
-    /// aynı kodlayıcı ayarlarıyla (FDK AAC) geçici dosyaya kodlanır (yalnızca ses). 2. adımda dosya
+    /// AAC çıktıda deneme, 1. adım: ses kodlamadaki zincir (sabit kazanç + telafi, gerekirse sınırlayıcı) ve aynı
+    /// kodlayıcı ayarlarıyla (FDK AAC) geçici dosyaya kodlanır (yalnızca ses). 2. adımda dosya
     /// <see cref="Esitleme.SonucOlcumKomutu"/> ile ölçülür. FDK AAC aynı sesten aynı sonucu verdiği için ölçülen
-    /// değer, asıl kodlamadaki sesin yüksekliğidir. <paramref name="sureSaniye"/>: <see cref="SesSuresi"/> (harici ses
-    /// kodlamadaki gibi tam bu süreye getirilir: deneme dosyasındaki ses çıktıdakiyle aynı uzunlukta).
+    /// yükseklik ve gerçek tepe, asıl kodlamadaki sesinkidir (çözülünce). <paramref name="olcum"/>: LUFS eşitlemenin
+    /// ölçümü (yükseklik değiştirilmeyecekse null: kazanç yok). <paramref name="sureSaniye"/>: <see cref="SesSuresi"/>
+    /// (harici ses kodlamadaki gibi tam bu süreye getirilir: deneme dosyasındaki ses çıktıdakiyle aynı uzunlukta).
     /// </summary>
     public static List<string> DenemeKodlamaKomutu(
-        SesAyarlari s, string input, SesSecimi ses, double sureSaniye, SesOlcum olcum, double telafi, string cikti)
+        SesAyarlari s, string input, SesSecimi ses, double sureSaniye, SesOlcum? olcum, double telafi, string cikti,
+        double tasmaPayi = 0, bool sinirla = false)
     {
         var harici = ses.Tur == SesSecimTuru.HariciDosya;
         var args = new List<string> { "-hide_banner", "-nostdin", "-nostats", "-y", "-i", harici ? ses.Dosya! : input };
@@ -1440,16 +1498,16 @@ public static class ArgsBuilder
 
         // Harici ses yalnızca süresi biliniyorsa kodlamadaki gibi kesilip doldurulur (süresiz doldurma bitmezdi).
         var hariciSure = harici ? sureSaniye : 0;
-        Ses(args, s, hariciSure > 0, ses.Kanal, olcum, ses.OrnekHizi, telafi, hariciSure);
+        Ses(args, s, hariciSure > 0, ses.Kanal, olcum, ses.OrnekHizi, telafi, hariciSure, tasmaPayi, sinirla);
         args.AddRange(["-f", "mp4", cikti]);
         return args;
     }
 
     private static void Ses(
         List<string> args, SesAyarlari s, bool harici, int? kaynakKanal = null, SesOlcum? olcum = null,
-        int? kaynakHz = null, double telafi = 0, double hariciSure = 0)
+        int? kaynakHz = null, double telafi = 0, double hariciSure = 0, double tasmaPayi = 0, bool sinirla = false)
     {
-        var af = SesFiltreleri(s, harici, kaynakKanal, olcum, telafi, kaynakHz, hariciSure, out var hedefHz);
+        var af = SesFiltreleri(s, harici, kaynakKanal, olcum, telafi, kaynakHz, hariciSure, out var hedefHz, tasmaPayi, sinirla);
         if (af.Count > 0)
         {
             args.AddRange(["-af", string.Join(',', af)]);
