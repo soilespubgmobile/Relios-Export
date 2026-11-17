@@ -2186,6 +2186,63 @@ internal static class BirimKontrol
         var nv = Varsayilanlar.YouTube();
         nv.Video.Kodlayici = VideoKodlayici.Nvenc;
         Kontrol("NVENC: x264 düzeltmesi yok", "yok", ArgsBuilder.X264Duzelt("requested bitrate is too low. estimated minimum is 43 kbps", nv) ?? "yok");
+
+        // Bellek yetmedi (GitHub'da ölçüldü: 2160×3840'ta 128 iş parçacığı ~47 GB, 64: 23,8 GB, 32: 12,5 GB, 16: 7 GB).
+        const string Bellek = "x264 [error]: malloc of size 42881664 failed\n[vost#0:0/libx264 @ 0x1] [enc:libx264 @ 0x2] Error while "
+                              + "opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.\nCould not open encoder before EOF";
+        Kontrol("Bellek yetmedi: x264'ün iletisi", "True", ArgsBuilder.BellekYetmedi(Bellek).ToString());
+        Kontrol("Bellek yetmedi: FFmpeg'in iletisi", "True", ArgsBuilder.BellekYetmedi("[vf#0:0] Error while filtering: Cannot allocate memory").ToString());
+        Kontrol("Bellek yetmedi değil: kodlayıcı açılamadı", "False", ArgsBuilder.BellekYetmedi("Could not open encoder before EOF").ToString());
+        Kontrol("Bellek: Türkçe açıklama (\"ayarlar uymuyor\" değil)",
+            "Bellek yetmedi: kodlayıcı bu ayarlarla bilgisayarın belleğinden fazlasını istiyor. Çözünürlüğü, iş parçacığı sayısını ya da önden bakışı düşürün; açık başka programları kapatın.",
+            HataAciklamasi.Bul(Bellek) ?? "yok");
+        Kontrol("x264'ün kendi iş parçacığı sayısı: 16 işlemcide 24", "24", ArgsBuilder.X264OtomatikIsParcacigi(16).ToString());
+        var cok = Varsayilanlar.YouTube();
+        cok.Video.X264.IsParcacigi = 128;
+        var bnot = ArgsBuilder.X264Duzelt(Bellek, cok, islemci: 16);
+        Kontrol("Bellek, 128 iş parçacığı (16 işlemci): 64", "64", cok.Video.X264.IsParcacigi?.ToString() ?? "yok");
+        Kontrol("Bellek: not (41 MB yukarı yuvarlı)", "Bellek yetmedi (x264 41 MB daha ayıramadı): iş parçacığı 128 → 64", bnot ?? "yok");
+        Kontrol("Bellek: 64 → 32", "Bellek yetmedi (x264 41 MB daha ayıramadı): iş parçacığı 64 → 32", ArgsBuilder.X264Duzelt(Bellek, cok, islemci: 16) ?? "yok");
+        Kontrol("Bellek: 32 → 16 (x264'ün kendi seçtiği 24'ün üstünde)", "Bellek yetmedi (x264 41 MB daha ayıramadı): iş parçacığı 32 → 16",
+            ArgsBuilder.X264Duzelt(Bellek, cok, islemci: 16) ?? "yok");
+        Kontrol("Bellek: önden bakış 40 (60'tan kısa): sonra iş parçacığı 16 → 8", "Bellek yetmedi (x264 41 MB daha ayıramadı): iş parçacığı 16 → 8",
+            ArgsBuilder.X264Duzelt(Bellek, cok, islemci: 16) ?? "yok");
+        Kontrol("Bellek: önden bakış değişmedi", "40", cok.Video.X264.IleriBakis?.ToString() ?? "yok");
+        var tt = Varsayilanlar.TikTok();
+        Kontrol("Bellek, TikTok varsayılanı (8 iş parçacığı, 16 işlemci): önce önden bakış 250 → 125",
+            "Bellek yetmedi (x264 301 MB daha ayıramadı): önden bakış 250 → 125 kare",
+            ArgsBuilder.X264Duzelt("x264 [error]: malloc of size 315187200 failed", tt, islemci: 16) ?? "yok");
+        Kontrol("Bellek, TikTok: 125 → 60 (en az 60)", "Bellek yetmedi: önden bakış 125 → 60 kare",
+            ArgsBuilder.X264Duzelt("Cannot allocate memory", tt, islemci: 16) ?? "yok");
+        Kontrol("Bellek, TikTok: sonra iş parçacığı 8 → 4", "Bellek yetmedi: iş parçacığı 8 → 4", ArgsBuilder.X264Duzelt("Cannot allocate memory", tt, islemci: 16) ?? "yok");
+        Kontrol("Bellek, TikTok: 4 → 2", "Bellek yetmedi: iş parçacığı 4 → 2", ArgsBuilder.X264Duzelt("Cannot allocate memory", tt, islemci: 16) ?? "yok");
+        Kontrol("Bellek, TikTok: 2 → 1", "Bellek yetmedi: iş parçacığı 2 → 1", ArgsBuilder.X264Duzelt("Cannot allocate memory", tt, islemci: 16) ?? "yok");
+        Kontrol("Bellek, TikTok: sonra önden bakış 60 → 30", "Bellek yetmedi: önden bakış 60 → 30 kare", ArgsBuilder.X264Duzelt("Cannot allocate memory", tt, islemci: 16) ?? "yok");
+        var tt4 = Varsayilanlar.TikTok();
+        Kontrol("Bellek, TikTok, 4 işlemci (x264'ün kendi seçtiği 6): önce iş parçacığı 8 → 4", "Bellek yetmedi: iş parçacığı 8 → 4",
+            ArgsBuilder.X264Duzelt("Cannot allocate memory", tt4, islemci: 4) ?? "yok");
+        var oto = Varsayilanlar.YouTube();
+        oto.Video.X264.IsParcacigi = null;
+        Kontrol("Bellek, iş parçacığı boş (x264 seçer: 16 işlemcide 24): 24 → 12", "Bellek yetmedi: iş parçacığı 24 → 12",
+            ArgsBuilder.X264Duzelt("Cannot allocate memory", oto, islemci: 16) ?? "yok");
+        var ekli = Varsayilanlar.YouTube();
+        ekli.Video.X264.IsParcacigi = 128;
+        ekli.Video.X264.EkParametreler = "threads=128";
+        Kontrol("Bellek, ek parametrede threads: iş parçacığına dokunulmaz, önden bakış 40 → 20", "Bellek yetmedi: önden bakış 40 → 20 kare",
+            ArgsBuilder.X264Duzelt("Cannot allocate memory", ekli, islemci: 16) ?? "yok");
+        Kontrol("Bellek, ek parametrede threads: ayar 128 kaldı", "128", ekli.Video.X264.IsParcacigi?.ToString() ?? "yok");
+        ekli.Video.X264.EkParametreler = "threads=128:rc-lookahead=250";
+        Kontrol("Bellek, ikisi de ek parametrede: düzeltilecek bir şey yok", "yok", ArgsBuilder.X264Duzelt("Cannot allocate memory", ekli, islemci: 16) ?? "yok");
+        var hizli = Varsayilanlar.YouTube();
+        hizli.Video.X264.IsParcacigi = 1;
+        hizli.Video.X264.IleriBakis = null;
+        hizli.Video.X264.OnAyar = "ultrafast";
+        Kontrol("Bellek, 1 iş parçacığı + ultrafast (önden bakış 0): düzeltilecek bir şey yok", "yok",
+            ArgsBuilder.X264Duzelt("Cannot allocate memory", hizli, islemci: 16) ?? "yok");
+        hizli.Video.X264.OnAyar = "slow";
+        Kontrol("Bellek, önden bakış boş + slow (x264: 50): 25", "Bellek yetmedi: önden bakış 50 → 25 kare",
+            ArgsBuilder.X264Duzelt("Cannot allocate memory", hizli, islemci: 16) ?? "yok");
+        Kontrol("Bellek, NVENC: x264 düzeltmesi yok", "yok", ArgsBuilder.X264Duzelt(Bellek, nv, islemci: 16) ?? "yok");
         Kontrol("Başka bir hata: düzeltilmez", "yok", ArgsBuilder.X264Duzelt("height not divisible by 4 (1080x1350)", Varsayilanlar.YouTube()) ?? "yok");
 
         // Kayıpsız ve tahmini boyut.

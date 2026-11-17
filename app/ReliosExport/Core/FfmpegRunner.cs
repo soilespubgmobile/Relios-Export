@@ -467,7 +467,8 @@ public static class Exporter
                 catch (FfmpegHatasi ex) when (duzeltmeler < EnCokX264Duzeltmesi)
                 {
                     // x264 açılışta reddettiyse ve ayar düzeltilebiliyorsa (çok düşük 2 / 3 geçiş bit hızı, matrisle
-                    // olanaksız QP sınırı): x264'ün söylediği değerle bu geçiş (ve sonrakiler) yeniden.
+                    // olanaksız QP sınırı): x264'ün söylediği değerle bu geçiş (ve sonrakiler) yeniden. Bellek yetmediyse
+                    // (iş parçacığı / önden bakış azaltıldı) bütün geçişler baştan: geçişler aynı ayarlarla kodlanmalı.
                     if (ArgsBuilder.X264Duzelt(ex.Gunluk, a) is not { } duzeltmeNotu)
                     {
                         throw;
@@ -478,7 +479,7 @@ public static class Exporter
                     onNot?.Invoke(duzeltmeNotu);
                     onInfo?.Invoke(Describe(media, a, ses, rapor, ekler));
                     plan = Plan();
-                    i--;
+                    i = ArgsBuilder.BellekYetmedi(ex.Gunluk) ? -1 : i - 1;
                 }
             }
 
@@ -533,7 +534,7 @@ public static class Exporter
     }
 
     /// <summary>x264'ün açılışta reddettiği ayar en çok bu kadar kez düzeltilip yeniden denenir.</summary>
-    public const int EnCokX264Duzeltmesi = 4;
+    public const int EnCokX264Duzeltmesi = 8;
 
     /// <summary>Hata günlüğünün içeriği: kaynak, bilgi, açıklama, komutlar, ffmpeg çıktısı ve ayarlar.</summary>
     private static string GunlukMetni(

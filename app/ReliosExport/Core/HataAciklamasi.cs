@@ -44,6 +44,8 @@ public static class HataAciklamasi
             "Diskte yer kalmadı. Kayıt yerinde yer açın ya da başka bir kayıt yeri seçin."),
         (["Permission denied"],
             "Dosyaya yazılamadı: kayıt yerine yazma izni yok ya da dosya başka bir programda açık."),
+        (["malloc of size", "Cannot allocate memory"],
+            "Bellek yetmedi: kodlayıcı bu ayarlarla bilgisayarın belleğinden fazlasını istiyor. Çözünürlüğü, iş parçacığı sayısını ya da önden bakışı düşürün; açık başka programları kapatın."),
         (["Unable to set the bitrate", "Unable to set the AOT", "Unable to initialize the encoder", "Invalid config"],
             "FDK AAC bu birleşimi kabul etmedi: profil, bit hızı, örnekleme hızı ve kanal sayısı birbirine uymuyor (ör. HE-AAC için bit hızı çok yüksek)."),
         (["Incomplete MB-tree stats file", "stats file", "ratecontrol_init: can't open stats file"],

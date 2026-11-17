@@ -743,9 +743,14 @@ public static class ArgsBuilder
     /// <item>Düz olmayan nicemleme matrisiyle (JVT) en yüksek QP x264'ün izin verdiği en düşük QP'nin altında ("Impossible
     /// QP constraints for CQM (min=X, max=Y)"; JVT'de 8 bitte en az 1, 10 bitte 7, eksi kroma QP ofsetinde daha fazla):
     /// en yüksek QP X.</item>
+    /// <item>Bellek yetmedi ("malloc of size N failed", "Cannot allocate memory"; x264'ün belleği iş parçacığı ve önden
+    /// bakış sayısıyla büyür: 2160×3840'ta iş parçacığı başına ~0,35 GB, 128 iş parçacığı ~47 GB): her denemede bir
+    /// adım: işlemcinin kullanabileceğinden (x264'ün kendi seçtiği, mantıksal işlemci × 1,5) fazla iş parçacığı yarıya,
+    /// sonra 60'tan uzun önden bakış yarıya (en az 60), sonra iş parçacığı, sonra önden bakış. Ek parametrelerde yazılı
+    /// değere dokunulmaz. <paramref name="islemci"/>: mantıksal işlemci sayısı (boşsa bu bilgisayarınki).</item>
     /// </list>
     /// </summary>
-    public static string? X264Duzelt(string gunluk, ProfilAyarlari a)
+    public static string? X264Duzelt(string gunluk, ProfilAyarlari a, int? islemci = null)
     {
         if (a.Video.Kodlayici != VideoKodlayici.X264)
         {
@@ -753,6 +758,42 @@ public static class ArgsBuilder
         }
 
         var x = a.Video.X264;
+        if (BellekYetmedi(gunluk))
+        {
+            var boyut = System.Text.RegularExpressions.Regex.Match(gunluk, @"malloc of size (\d+) failed");
+            var neden = boyut.Success && long.TryParse(boyut.Groups[1].Value, NumberStyles.Integer, Inv, out var bayt)
+                ? $"Bellek yetmedi (x264 {Math.Max(1, (bayt + (1 << 20) - 1) >> 20)} MB daha ayıramadı)"
+                : "Bellek yetmedi";
+            var otomatik = X264OtomatikIsParcacigi(islemci ?? Environment.ProcessorCount);
+            int? isParcacigi = EkDeger(x, "threads") is null ? x.IsParcacigi ?? otomatik : null;
+            int? ileriBakis = EkDeger(x, "rc-lookahead") is null ? x.IleriBakis ?? X264HizAyarininIleriBakisi(x.OnAyar, x.Ayar) : null;
+            if (isParcacigi is { } fazla && fazla > otomatik)
+            {
+                x.IsParcacigi = Math.Max(1, fazla / 2);
+                return $"{neden}: iş parçacığı {fazla} → {x.IsParcacigi}";
+            }
+
+            if (ileriBakis is { } uzun && uzun > 60)
+            {
+                x.IleriBakis = uzun / 2 < 70 ? 60 : uzun / 2;
+                return $"{neden}: önden bakış {uzun} → {x.IleriBakis} kare";
+            }
+
+            if (isParcacigi is { } t && t > 1)
+            {
+                x.IsParcacigi = t / 2;
+                return $"{neden}: iş parçacığı {t} → {x.IsParcacigi}";
+            }
+
+            if (ileriBakis is { } la && la > 0)
+            {
+                x.IleriBakis = la / 2;
+                return $"{neden}: önden bakış {la} → {x.IleriBakis} kare";
+            }
+
+            return null;
+        }
+
         var dusuk = System.Text.RegularExpressions.Regex.Match(gunluk, @"requested bitrate is too low\. estimated minimum is (\d+) kbps");
         if (dusuk.Success && x.Mod is X264Modu.IkiGecis or X264Modu.UcGecis
             && int.TryParse(dusuk.Groups[1].Value, NumberStyles.Integer, Inv, out var enAz))
@@ -779,6 +820,39 @@ public static class ArgsBuilder
         }
 
         return null;
+    }
+
+    /// <summary>Günlükte bellek ayrılamadığı yazıyor mu (x264: "malloc of size N failed"; FFmpeg: "Cannot allocate memory").</summary>
+    public static bool BellekYetmedi(string gunluk) =>
+        gunluk.Contains("malloc of size", StringComparison.OrdinalIgnoreCase)
+        || gunluk.Contains("Cannot allocate memory", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>x264'ün iş parçacığı sayısı boşken kendi seçtiği değer (çerçeve iş parçacıklarında mantıksal işlemci × 1,5).</summary>
+    public static int X264OtomatikIsParcacigi(int islemci) => Math.Max(1, islemci * 3 / 2);
+
+    /// <summary>x264 hız ayarının (preset) ve ayarının (tune) önden bakışı (rc-lookahead; x264'teki gibi).</summary>
+    private static int X264HizAyarininIleriBakisi(string? onAyar, string? ayar)
+    {
+        var n = onAyar?.Trim().ToLowerInvariant() switch
+        {
+            "ultrafast" or "superfast" => 0,
+            "veryfast" => 10,
+            "faster" => 20,
+            "fast" => 30,
+            "slow" => 50,
+            "slower" or "veryslow" or "placebo" => 60,
+            _ => 40, // x264'ün varsayılanı (medium)
+        };
+
+        foreach (var t in (ayar ?? string.Empty).Split(new[] { ',', '.', '/', '-', '+' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (t.Equals("zerolatency", StringComparison.OrdinalIgnoreCase))
+            {
+                n = 0;
+            }
+        }
+
+        return n;
     }
 
     /// <summary>
