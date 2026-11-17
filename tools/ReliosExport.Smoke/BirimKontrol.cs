@@ -2195,31 +2195,32 @@ internal static class BirimKontrol
         nvencGecmeli.Video.Kodlayici = VideoKodlayici.Nvenc;
         Kontrol("NVENC: x264'ün geçmeli ayarı geçerli değil (2'nin katı)", "2", ArgsBuilder.YukseklikKati(nvencGecmeli, hd).ToString());
 
-        // Çok büyük küçültme: FFmpeg'in ölçekleyicisi bir adımda en çok 256 dokunuş (ör. 576 → 16 Spline'da açılmıyordu).
-        static string Ara(int kw, int kh, int hw, int hh, string olcek, bool korunur) =>
-            string.Join(" ", ArgsBuilder.AraOlcekler(kw, kh, hw, hh, olcek, korunur).Select(x => $"{x.W}x{x.H}")) is { Length: > 0 } t ? t : "yok";
-        Kontrol("Ara ölçek: Spline 720×576 → 16×1080 (esnet): genişlik önce 128'e", "128x576", Ara(720, 576, 16, 1080, "spline", false));
-        Kontrol("Ara ölçek: Area 8192 → 16 (oran 512): önce 128'e", "128x2160", Ara(8192, 2160, 16, 2160, "area", false));
-        Kontrol("Ara ölçek: Bicubic 576 → 16 (145 dokunuş): gerekmez", "yok", Ara(720, 576, 720, 16, "bicubic", false));
-        Kontrol("Ara ölçek: Bicubic 1080 → 16 (271 dokunuş): 128'e", "1920x128", Ara(1920, 1080, 1920, 16, "bicubic", false));
-        Kontrol("Ara ölçek: Lanczos 1920×1080 → 1080×1920: gerekmez", "yok", Ara(1920, 1080, 1080, 1920, "lanczos", false));
-        Kontrol("Ara ölçek: en yakın komşu: gerekmez", "yok", Ara(8192, 8192, 16, 16, "neighbor", false));
-        Kontrol("Ara ölçek: oran korunur (kırpma 330×576 → 16×28): ikisi aynı oranla", "128x224", Ara(330, 576, 16, 28, "spline", true));
-        Kontrol("Ara ölçek: Lanczos 480×270 → 16×8192 (30 kat küçültme, 30 kat büyütme): önce 128", "128x270", Ara(480, 270, 16, 8192, "lanczos", false));
-        Kontrol("Ara ölçek: Lanczos 128 → 16 (8 kat): gerekmez", "yok", Ara(128, 270, 16, 8192, "lanczos", false));
-        Kontrol("Ara ölçek: Spline 320×180 → 8192×16 (11,25 kat): yükseklik önce 128", "320x128", Ara(320, 180, 8192, 16, "spline", false));
+        // Esnetmede bir boyut küçülüp öbürü büyürken Spline / Lanczos'ta önce küçülen boyut (ör. 16×8192 açılmıyordu).
+        static string On(int kw, int kh, int hw, int hh, string olcek) =>
+            ArgsBuilder.OnOlcek(kw, kh, hw, hh, olcek) is { } o ? $"{o.W}x{o.H}" : "yok";
+        Kontrol("Ön ölçek: Spline 480×270 → 16×8192: önce 16×270", "16x270", On(480, 270, 16, 8192, "spline"));
+        Kontrol("Ön ölçek: Lanczos 320×180 → 8192×16: önce 320×16", "320x16", On(320, 180, 8192, 16, "lanczos"));
+        Kontrol("Ön ölçek: Spline, ikisi de küçülüyor (7680×4320 → 16×16): gerekmez", "yok", On(7680, 4320, 16, 16, "spline"));
+        Kontrol("Ön ölçek: Spline, ikisi de büyüyor: gerekmez", "yok", On(320, 180, 8192, 8192, "spline"));
+        Kontrol("Ön ölçek: Bicubic (çalışıyor): gerekmez", "yok", On(480, 270, 16, 8192, "bicubic"));
+        Kontrol("Ön ölçek: Lanczos 1920×1080 → 1080×1920 (yatay küçülür, dikey büyür): önce 1080×1080", "1080x1080", On(1920, 1080, 1080, 1920, "lanczos"));
         var dar = Varsayilanlar.TikTok();
         dar.Video.Cozunurluk = CozunurlukModu.Hedef;
         dar.Video.Genislik = 16;
-        dar.Video.Yukseklik = 1080;
+        dar.Video.Yukseklik = 8192;
         dar.Video.Oran = OranUyumu.Esnet;
         dar.Video.Olcekleme = "spline";
-        var dk = Komut(dar, V(720, 576));
-        Iceriyor("Spline 16×1080 (esnet): önce Area ile 128×576", dk, "scale=128:576:flags=area");
-        Iceriyor("Spline 16×1080: son adım Spline", dk, "scale=128:576:flags=area" + (dar.Video.HassasYuvarlama ? "+accurate_rnd+full_chroma_int" : string.Empty)
-                                                         + ",scale=16:1080:flags=spline");
+        var dk = Komut(dar, V(480, 270));
+        var hassasEk = dar.Video.HassasYuvarlama ? "+accurate_rnd+full_chroma_int" : string.Empty;
+        Iceriyor("Spline 16×8192 (esnet): önce 16×270, renk dönüşümsüz", dk, $"scale=16:270:flags=spline{hassasEk},scale=16:8192:flags=spline{hassasEk}:in_color_matrix=");
         dar.Video.Olcekleme = "bicubic";
-        Icermiyor("Bicubic 16×1080 (720 → 16: 181 dokunuş): ara ölçek yok", Komut(dar, V(720, 576)), "flags=area");
+        Icermiyor("Bicubic 16×8192: tek adım", Komut(dar, V(480, 270)), "scale=16:270:");
+        var kirpDar = Varsayilanlar.TikTok();
+        kirpDar.Video.Cozunurluk = CozunurlukModu.Hedef;
+        kirpDar.Video.Genislik = 16;
+        kirpDar.Video.Yukseklik = 8192;
+        kirpDar.Video.Olcekleme = "spline";
+        Icermiyor("Ortadan kırp (en-boy oranı korunur): tek adım", Komut(kirpDar, V(480, 270)), "scale=16:270:");
 
         // Çok dar hedefte kırpma genişliği / yüksekliği en az 2 (eskiden 0 çıkıp ffmpeg duruyordu).
         static string P(CropPlan p) => $"{p.Width}x{p.Height}+{p.X}+{p.Y}";
@@ -2253,7 +2254,8 @@ internal static class BirimKontrol
         var jvtBos = Varsayilanlar.YouTube();
         jvtBos.Video.X264.Cqm = "jvt";
         jvtBos.Video.X264.QpMax = null;
-        Kontrol("JVT, qpmax boş: düzeltilecek bir şey yok", "yok", ArgsBuilder.X264Duzelt("Impossible QP constraints for CQM (min=7, max=6)", jvtBos) ?? "yok");
+        Kontrol("JVT, qpmax boş (matrisin kendi QP aralığı boş): düz matris", "JVT nicemleme matrisi bu ayarlarla kullanılamıyor (x264: QP en az 7, en çok 6): düz matris",
+            ArgsBuilder.X264Duzelt("Impossible QP constraints for CQM (min=7, max=6)", jvtBos) ?? "yok");
         var nv = Varsayilanlar.YouTube();
         nv.Video.Kodlayici = VideoKodlayici.Nvenc;
         Kontrol("NVENC: x264 düzeltmesi yok", "yok", ArgsBuilder.X264Duzelt("requested bitrate is too low. estimated minimum is 43 kbps", nv) ?? "yok");
@@ -2325,6 +2327,25 @@ internal static class BirimKontrol
         dusukVbv.Video.X264.VbvTampon = 100;
         Kontrol("4K 25 fps, VBV 100 kb/s: \"en çok\" yok (dosya tahminin 40 katı çıkıyordu)", "yok",
             BoyutTahmini.Hesapla(dusukVbv, V(3840, 2160, 3, 25), SesSecimi.Yok)?.Metin ?? "yok");
+
+        // ffmpeg çöktü (Windows NTSTATUS): Türkçe açıklama; x264'ün bilinen çökmelerinde ayar düzeltilip yeniden.
+        Kontrol("Çökme mi: 0xC0000005 (erişim ihlali)", "True", HataAciklamasi.CokmeMi(-1073741819).ToString());
+        Kontrol("Çökme mi: 0xC0000409 (iç denetim)", "True", HataAciklamasi.CokmeMi(-1073740791).ToString());
+        Kontrol("Çökme değil: FFmpeg'in kendi hata kodu", "False", HataAciklamasi.CokmeMi(-542398533).ToString());
+        Kontrol("Çökme değil: 1", "False", HataAciklamasi.CokmeMi(1).ToString());
+        Iceriyor("Çökme açıklaması", HataAciklamasi.CokmeAciklamasi(-1073741819), "FFmpeg beklenmedik biçimde kapandı (kod 0xC0000005, erişim ihlali)");
+        var cokenMatris = Varsayilanlar.YouTube();
+        cokenMatris.Video.X264.Cqm = "jvt";
+        Kontrol("Çöktü + JVT: düz matris", "x264 JVT nicemleme matrisiyle bu ayarlarda düştü: düz matris",
+            ArgsBuilder.X264Duzelt("[libx264 @ 0x1] NAL HRD parameters require VBV parameters", cokenMatris, coktu: true) ?? "yok");
+        Kontrol("Çöktü + düz matris: düzeltilecek bir şey yok", "yok", ArgsBuilder.X264Duzelt("...", cokenMatris, coktu: true) ?? "yok");
+        var cokenGecmeli = Varsayilanlar.YouTube();
+        cokenGecmeli.Video.X264.Gecmeli = true;
+        cokenGecmeli.Video.X264.IsParcacigi = 128;
+        Kontrol("x264 iç denetimi (geçmeli, çok iş parçacığı): iş parçacığı 1", "x264 geçmeli kodlamada çok iş parçacığıyla düştü: iş parçacığı 128 → 1",
+            ArgsBuilder.X264Duzelt("Assertion failed: a->l0.me16x16.mv[1] <= h->mb.mv_max_spel[1] || h->i_thread_frames == 1, file encoder/analyse.c, line 1317",
+                cokenGecmeli, coktu: true) ?? "yok");
+        Kontrol("Çöktü ama x264 düzeltmesi yok (NVENC)", "yok", ArgsBuilder.X264Duzelt("...", nv, coktu: true) ?? "yok");
 
         // Bellek yetmedi (GitHub'da ölçüldü: 2160×3840'ta 128 iş parçacığı ~47 GB, 64: 23,8 GB, 32: 12,5 GB, 16: 7 GB).
         const string Bellek = "x264 [error]: malloc of size 42881664 failed\n[vost#0:0/libx264 @ 0x1] [enc:libx264 @ 0x2] Error while "

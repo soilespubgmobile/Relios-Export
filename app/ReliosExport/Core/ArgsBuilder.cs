@@ -420,15 +420,6 @@ public static class ArgsBuilder
         {
             var w = v.Genislik - (v.Genislik % 2);
             var h = v.Yukseklik - (v.Yukseklik % kat);
-            var araFlags = "flags=area" + (v.HassasYuvarlama ? "+accurate_rnd+full_chroma_int" : string.Empty);
-            void Ara(int kw, int kh, int hw, int hh, bool oranKorunur)
-            {
-                foreach (var (aw, ah) in AraOlcekler(kw, kh, hw, hh, v.Olcekleme, oranKorunur))
-                {
-                    filters.Add(string.Create(Inv, $"scale={aw}:{ah}:{araFlags}"));
-                }
-            }
-
             switch (v.Oran)
             {
                 case OranUyumu.OrtadanKirp:
@@ -438,20 +429,20 @@ public static class ArgsBuilder
                         filters.Add(string.Create(Inv, $"crop={crop.Width}:{crop.Height}:{crop.X}:{crop.Y}"));
                     }
 
-                    Ara(crop.Width, crop.Height, w, h, oranKorunur: true);
                     filters.Add(string.Create(Inv, $"scale={w}:{h}:{flags}:{renk}"));
                     break;
                 case OranUyumu.KenarEkle:
-                    // Sığdırılan boyut (ffmpeg'in force_original_aspect_ratio=decrease hesabı gibi, piksel boyutundan).
-                    var sigdir = Math.Min((double)w / media.DisplayWidth, (double)h / media.DisplayHeight);
-                    Ara(media.DisplayWidth, media.DisplayHeight, (int)Math.Max(2, media.DisplayWidth * sigdir),
-                        (int)Math.Max(2, media.DisplayHeight * sigdir), oranKorunur: true);
                     filters.Add(string.Create(Inv,
                         $"scale={w}:{h}:force_original_aspect_ratio=decrease:force_divisible_by=2:{flags}:{renk}"));
                     filters.Add(string.Create(Inv, $"pad={w}:{h}:-1:-1:color=black"));
                     break;
                 default:
-                    Ara(media.DisplayWidth, media.DisplayHeight, w, h, oranKorunur: false);
+                    if (OnOlcek(media.DisplayWidth, media.DisplayHeight, w, h, v.Olcekleme) is { } on)
+                    {
+                        // Önce küçülen boyut (renk dönüşümsüz), sonra büyütme ve renk.
+                        filters.Add(string.Create(Inv, $"scale={on.W}:{on.H}:{flags}"));
+                    }
+
                     filters.Add(string.Create(Inv, $"scale={w}:{h}:{flags}:{renk}"));
                     break;
             }
@@ -467,87 +458,22 @@ public static class ArgsBuilder
     }
 
     /// <summary>
-    /// Ölçekleyicinin süzgeç çarpanı (FFmpeg swscale): küçültmede süzgeç boyu 1 + çarpan × oran; en yakın komşu tek
-    /// dokunuş (0).
+    /// Esnetmede bir boyut küçülüp öbürü büyürken (ör. 320×180 → 16×8192) Spline ve Lanczos'ta FFmpeg'in ölçekleyicisi
+    /// açılmıyordu ("Failed initializing scaling graph"; GitHub'da ölçüldü: Spline 8 kat küçültme + 16 kat büyütmede,
+    /// Lanczos 40 kat + 16 katta; ikisi de küçülüyor ya da büyüyorsa, 7680×4320 → 16×16 bile, çalışıyor). O zaman önce
+    /// küçülen boyut(lar) aynı ölçekleyiciyle hedefe (büyüyen boyut kaynakta kalır), sonra büyütme: 576 hedefte 0 hata.
+    /// Gerekmiyorsa null.
     /// </summary>
-    private static int OlcekleyiciCarpani(string olcekleme) => olcekleme switch
+    public static (int W, int H)? OnOlcek(int kw, int kh, int hw, int hh, string olcekleme)
     {
-        "spline" => 20,
-        "lanczos" => 6,
-        "bicubic" => 4,
-        "bilinear" => 2,
-        "area" => 1,
-        _ => 0,
-    };
-
-    /// <summary>
-    /// Çok büyük küçültmede ara ölçekler. FFmpeg'in ölçekleyicisi bir adımda en çok 256 dokunuşlu süzgeç kullanır (süzgeç
-    /// boyu 1 + çarpan × küçültme oranı, kaynak boyu - 2 ile sınırlı); Spline ve Lanczos öbür boyut büyütülürken 8 kattan
-    /// büyük küçültmede de açılmıyordu ("Failed initializing scaling graph"; ör. 16×8192 hedefte). O zaman önce Area ile
-    /// (çarpan 1; her adımda en çok 200 kat) hedefin 8 katına küçültülür, son adım seçilen ölçekleyiciyle.
-    /// <paramref name="oranKorunur"/>: iki boyut aynı oranla küçülür (kırpma / kenar eklemede en-boy oranı korunur).
-    /// Gerekmiyorsa boş.
-    /// </summary>
-    public static List<(int W, int H)> AraOlcekler(int kw, int kh, int hw, int hh, string olcekleme, bool oranKorunur)
-    {
-        var f = OlcekleyiciCarpani(olcekleme);
-        // Spline ve Lanczos öbür boyut büyütülürken 8 kattan büyük küçültmede de açılmıyor (GitHub'da ölçüldü: 480×270 →
-        // 16×8192 Lanczos'ta 181 dokunuşla bile); öbürlerinde süzgeç boyu.
-        bool Asar(int k, int hd) => k > hd && hd > 0
-            && (f >= 6 ? (double)k / hd > 8 : Math.Min(1 + ((f * (long)k) + hd - 1) / hd, k - 2) >= 250);
-        var adimlar = new List<(int W, int H)>();
-        if (f == 0 || !(Asar(kw, hw) || Asar(kh, hh)))
+        if (olcekleme is not ("spline" or "lanczos"))
         {
-            return adimlar;
+            return null;
         }
 
-        static int Cift(double d) => Math.Max(2, (int)Math.Ceiling(d / 2) * 2);
-        if (oranKorunur)
-        {
-            // Ortak oran: ikisinden büyüğü; ara boy hedefin 8 katı (kaynaktan büyükse kaynak).
-            var oran = Math.Max((double)kw / hw, (double)kh / hh);
-            var kalan = oran / 8;
-            var adimOran = 1.0;
-            while (kalan > 1)
-            {
-                var bu = Math.Min(kalan, 200);
-                adimOran *= bu;
-                kalan /= bu;
-                adimlar.Add((Cift(kw / adimOran), Cift(kh / adimOran)));
-            }
-
-            return adimlar;
-        }
-
-        // Boyutlar ayrı ayrı (esnetme): her boyut kendi oranıyla; adımı olmayan boyut olduğu gibi kalır.
-        List<int> Boyut(int k, int hd)
-        {
-            var liste = new List<int>();
-            if (!Asar(k, hd))
-            {
-                return liste;
-            }
-
-            double kalan = (double)k / hd / 8, oranAdim = 1;
-            while (kalan > 1)
-            {
-                var bu = Math.Min(kalan, 200);
-                oranAdim *= bu;
-                kalan /= bu;
-                liste.Add(Cift(k / oranAdim));
-            }
-
-            return liste;
-        }
-
-        var ws = Boyut(kw, hw);
-        var hs = Boyut(kh, hh);
-        for (var i = 0; i < Math.Max(ws.Count, hs.Count); i++)
-        {
-            adimlar.Add((i < ws.Count ? ws[i] : ws.Count > 0 ? ws[^1] : kw, i < hs.Count ? hs[i] : hs.Count > 0 ? hs[^1] : kh));
-        }
-
-        return adimlar;
+        var kuculur = hw < kw || hh < kh;
+        var buyur = hw > kw || hh > kh;
+        return kuculur && buyur ? (Math.Min(hw, kw), Math.Min(hh, kh)) : null;
     }
 
     /// <summary>
@@ -855,7 +781,7 @@ public static class ArgsBuilder
     /// değere dokunulmaz. <paramref name="islemci"/>: mantıksal işlemci sayısı (boşsa bu bilgisayarınki).</item>
     /// </list>
     /// </summary>
-    public static string? X264Duzelt(string gunluk, ProfilAyarlari a, int? islemci = null)
+    public static string? X264Duzelt(string gunluk, ProfilAyarlari a, int? islemci = null, bool coktu = false)
     {
         if (a.Video.Kodlayici != VideoKodlayici.X264)
         {
@@ -894,6 +820,28 @@ public static class ArgsBuilder
             {
                 x.IleriBakis = la / 2;
                 return $"{neden}: önden bakış {la} → {x.IleriBakis} kare";
+            }
+
+            return null;
+        }
+
+        if (coktu || gunluk.Contains("Assertion failed", StringComparison.Ordinal))
+        {
+            // x264 çöktü. Geçmeli kodlamada çok iş parçacığıyla x264'ün iç denetimi düşüyor ("mv_max_spel"; arama aralığı
+            // 16'nın altındayken; program onu zaten en az 16 yapar): iş parçacığı 1. JVT gibi bir nicemleme matrisi çok
+            // düşük QP ve eksi kroma QP ofsetiyle erişim ihlaline yol açıyor (GitHub'da ölçüldü: QP 8 ve altı, kroma -3 ve
+            // altı): düz matris.
+            if (gunluk.Contains("mv_max_spel", StringComparison.Ordinal) && x.Gecmeli && x.IsParcacigi != 1)
+            {
+                var eskiIs = x.IsParcacigi?.ToString(Inv) ?? "otomatik";
+                x.IsParcacigi = 1;
+                return $"x264 geçmeli kodlamada çok iş parçacığıyla düştü: iş parçacığı {eskiIs} → 1";
+            }
+
+            if (x.Cqm is { } matrisAdi && !matrisAdi.Equals("flat", StringComparison.OrdinalIgnoreCase))
+            {
+                x.Cqm = "flat";
+                return $"x264 {matrisAdi.ToUpperInvariant()} nicemleme matrisiyle bu ayarlarda düştü: düz matris";
             }
 
             return null;

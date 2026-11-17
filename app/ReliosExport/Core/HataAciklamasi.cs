@@ -4,10 +4,16 @@ using System.Text;
 namespace ReliosExport.Core;
 
 /// <summary>ffmpeg başarısız olduğunda fırlatılır: Türkçe açıklama + tam ffmpeg günlüğü.</summary>
-public sealed class FfmpegHatasi(string mesaj, string gunluk) : Exception(mesaj)
+public sealed class FfmpegHatasi(string mesaj, string gunluk, int? cikisKodu = null) : Exception(mesaj)
 {
     /// <summary>ffmpeg'in hata çıktısı (uzunsa başı ve sonu).</summary>
     public string Gunluk { get; } = gunluk;
+
+    /// <summary>ffmpeg'in çıkış kodu (biliniyorsa). Windows'ta çökmede NTSTATUS: ör. 0xC0000005 erişim ihlali.</summary>
+    public int? CikisKodu { get; } = cikisKodu;
+
+    /// <summary>ffmpeg çöktü mü (kendi hatasıyla kapanmadı): erişim ihlali, yığın taşması, x264'ün iç denetimi (abort).</summary>
+    public bool Coktu => CikisKodu is { } k && HataAciklamasi.CokmeMi(k);
 
     /// <summary>Günlüğün yazıldığı dosya (yazılabildiyse).</summary>
     public string? GunlukDosyasi { get; set; }
@@ -76,6 +82,17 @@ public static class HataAciklamasi
             "Diskte yer kalmadı. Kayıt yerinde yer açın ya da başka bir kayıt yeri seçin." + Environment.NewLine + ex.Message,
         _ => ex.Message,
     };
+
+    /// <summary>
+    /// Çıkış kodu bir çökmeyi mi gösteriyor (Windows NTSTATUS hata kodları: 0xC0000005 erişim ihlali, 0xC0000409 güvenlik
+    /// denetimi / abort, 0xC00000FD yığın taşması, 0xC000001D geçersiz komut, 0xC0000094 sıfıra bölme...).
+    /// </summary>
+    public static bool CokmeMi(int kod) => (uint)kod is >= 0xC0000000u and <= 0xC0FFFFFFu;
+
+    /// <summary>Çöken ffmpeg için Türkçe açıklama.</summary>
+    public static string CokmeAciklamasi(int kod) =>
+        $"FFmpeg beklenmedik biçimde kapandı (kod 0x{(uint)kod:X8}{((uint)kod == 0xC0000005u ? ", erişim ihlali" : (uint)kod == 0xC0000409u ? ", iç denetim" : string.Empty)}): "
+        + "bu ayar birleşimi kodlayıcıda bir hataya yol açıyor. Ayarları değiştirip (ör. nicemleme matrisi, geçmeli kodlama, iş parçacığı) yeniden deneyin.";
 
     /// <summary>Bilinen bir hata ise Türkçe açıklaması, değilse null.</summary>
     public static string? Bul(string ffmpegCiktisi)

@@ -186,8 +186,9 @@ public sealed class FfmpegRunner
                 son = errHead.Concat(errTail).Where(l => !string.IsNullOrWhiteSpace(l)).TakeLast(8).ToList();
             }
 
-            var aciklama = HataAciklamasi.Bul(gunluk) ?? $"ffmpeg hata verdi (kod {p.ExitCode}).";
-            throw new FfmpegHatasi(aciklama + Environment.NewLine + string.Join(Environment.NewLine, son), gunluk);
+            var aciklama = HataAciklamasi.Bul(gunluk)
+                           ?? (HataAciklamasi.CokmeMi(p.ExitCode) ? HataAciklamasi.CokmeAciklamasi(p.ExitCode) : $"ffmpeg hata verdi (kod {p.ExitCode}).");
+            throw new FfmpegHatasi(aciklama + Environment.NewLine + string.Join(Environment.NewLine, son), gunluk, p.ExitCode);
         }
 
         onProgress?.Report(1);
@@ -563,7 +564,7 @@ public static class Exporter
                     // x264 açılışta reddettiyse ve ayar düzeltilebiliyorsa (çok düşük 2 / 3 geçiş bit hızı, matrisle
                     // olanaksız QP sınırı): x264'ün söylediği değerle bu geçiş (ve sonrakiler) yeniden. Bellek yetmediyse
                     // (iş parçacığı / önden bakış azaltıldı) bütün geçişler baştan: geçişler aynı ayarlarla kodlanmalı.
-                    if (ArgsBuilder.X264Duzelt(ex.Gunluk, a) is not { } duzeltmeNotu)
+                    if (ArgsBuilder.X264Duzelt(ex.Gunluk, a, coktu: ex.Coktu) is not { } duzeltmeNotu)
                     {
                         throw;
                     }
