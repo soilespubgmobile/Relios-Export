@@ -257,7 +257,12 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, SesOlcum? Olcum, doubl
             {
                 satirlar.Add($"Sonuç: {Bir(s)} LUFS" + (SonucTepe is { } t ? $" · tepe {Bir(t)} dBTP" : string.Empty)
                              + (HedefeUlasilamadi ? " · hedefe ulaşılamadı" : string.Empty));
-                if (HedefeUlasilamadi && !TelafiSiniri)
+                if (HedefeUlasilamadi && TelafiSiniri && Math.Abs(Telafi) < Esitleme.EnCokTelafi - (Esitleme.KayipliAdim / 2))
+                {
+                    satirlar.Add($"Telafi {Bicim.Sayi(Esitleme.EnCokTelafi)} dB'ye kadar denendi, yükseklik daha fazla artmadı (sınırlayıcı doydu"
+                                 + $" ya da ses kodlamada değişiyor): hedefe en yakın sonuç {Isaretli(Telafi)} dB telafiyle.");
+                }
+                else if (HedefeUlasilamadi && !TelafiSiniri)
                 {
                     satirlar.Add(YakinAyarYok
                         ? "Ses kodlayıcısı yüksekliği kazançla sıçrayarak değiştiriyor (ör. çok düşük bit hızı): hedefin altında ve"

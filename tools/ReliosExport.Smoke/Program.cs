@@ -143,6 +143,15 @@ try
             // Doğrulama ASCII satırları okur (ESITLEME_...): karar, satırda gösterilecek yazı, ölçülen sonuç.
             Console.WriteLine("ESITLEME_KARAR=" + r.Karar + (r.Sinirli ? "/Sinirli" : string.Empty));
             Console.WriteLine("ESITLEME_TELAFI=" + r.Telafi.ToString("0.00", CultureInfo.InvariantCulture));
+
+            // Hedefe ulaşılamadıysa nedeni: telafi sınırı (6 dB yetmedi), kodlayıcı sıçrıyor (daha yakın ayar yok), denemeler bitti.
+            Console.WriteLine("ESITLEME_BAYRAK=" + string.Join(',', new[]
+            {
+                r.HedefeUlasilamadi ? "ulasilamadi" : null,
+                r.TelafiSiniri ? "telafi_siniri" : null,
+                r.YakinAyarYok ? "yakin_ayar_yok" : null,
+                r.DenemelerBitti ? "denemeler_bitti" : null,
+            }.Where(x => x is not null)));
             if (r.SonucYukseklik is { } sy)
             {
                 Console.WriteLine("ESITLEME_SONUC=" + sy.ToString("0.00", CultureInfo.InvariantCulture));

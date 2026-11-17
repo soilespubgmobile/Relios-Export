@@ -1214,20 +1214,18 @@ def ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v,
         ana = karar.split('/')[0]
         ulasilamadi = 'ulaşılamadı' in satir
         telafi = next((float(y[len('ESITLEME_TELAFI='):]) for y in gunluk if y.startswith('ESITLEME_TELAFI=')), 0.0)
-        sinirda = abs(abs(telafi) - 6) < 0.005  # telafi en çok ± 6 dB: hedefe 0,5 LU (programın payı) içinde kalabilir
         if ana == 'Dogrusal' and not ulasilamadi:
             # 0.13.0: program sonucu hedeften 0,1 LU'dan uzaksa "hedefe ulaşılamadı" yazar (eskiden 0,5)
             if abs(i - hedef) > 0.105:
                 f.append(f'yükseklik {i:.2f} LUFS (hedef {hedef}, karar {karar})')
-        elif ana == 'Dogrusal' and ulasilamadi and not sinirda:
-            # Telafi sınırına (± 6 dB) gelinmeden hedefe ulaşılamadıysa: yalnızca kodlayıcı yüksekliği sıçrayarak
-            # değiştiriyorsa (hedefin iki yanındaki denemeler arasında 0,01 dB kaldı) kabul; denemelerin bitmesi ya da
-            # denemeyle kodlamanın farklı çıkması incelenmeli.
-            yakin_yok = any('denemeler arasında 0,01 dB kaldı' in y for y in gunluk)
-            bitti = any('Denemeler bitti' in y for y in gunluk)
-            if not yakin_yok:
-                f.append(f'hedefe ulaşılamadı: yükseklik {i:.2f} LUFS (hedef {hedef}, telafi {telafi:+.2f}, karar {karar}'
-                         + (', denemeler bitti' if bitti else '') + ')')
+        elif ana == 'Dogrusal' and ulasilamadi:
+            # Hedefe ulaşılamadıysa nedeni: telafi sınırı (gereken telafi 6 dB'yi aştı; sınırlayıcı doydu ya da yükseklik
+            # kazançla düşüyor) ya da kodlayıcı yüksekliği sıçrayarak değiştiriyor (hedefin iki yanındaki denemeler
+            # arasında 0,01 dB kaldı). Denemelerin bitmesi ya da denemeyle kodlamanın farklı çıkması incelenmeli.
+            bayrak = next((y[len('ESITLEME_BAYRAK='):] for y in gunluk if y.startswith('ESITLEME_BAYRAK=')), '').split(',')
+            if 'telafi_siniri' not in bayrak and 'yakin_ayar_yok' not in bayrak:
+                f.append(f'hedefe ulaşılamadı: yükseklik {i:.2f} LUFS (hedef {hedef}, telafi {telafi:+.2f}, karar {karar}, '
+                         f'{",".join(x for x in bayrak if x) or "neden yok"})')
         else:
             # dokunulmayan seste tepe koruması sınırlayıcıyı tavanın altına çektiyse yükseklik o kadar düşebilir
             pay = 0.6 + (tepe_payi(gunluk) if '/Sinirli' in karar else 0)

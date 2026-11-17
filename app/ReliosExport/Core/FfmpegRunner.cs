@@ -491,7 +491,9 @@ public static class Exporter
                         tasma = gorulen;
                         if (yukseklikDenemesi)
                         {
-                            sinir = sinirda;
+                            // Telafi sınırına bir kez gelindiyse (gereken telafi 6 dB'yi aştı) sonra hedefe yakın bir ayar
+                            // seçilse de sınır görüldü: hedefe ulaşılamadıysa nedeni budur.
+                            sinir |= sinirda;
                         }
 
                         if (yukseklik is { } yk)
@@ -523,21 +525,26 @@ public static class Exporter
                         var son = denenenler[^1];
                         var sonuDenendi = son.D == duzeltme;
                         denemelerBitti = !sonuDenendi;
+                        // Hedefe en yakını; yükseklikleri 0,02 LU içinde eşit olanlardan sese en az kazanç ekleyeni (sınırlayıcı
+                        // doyduysa daha fazla kazanç yüksekliği artırmaz, tepeleri daha çok ezer).
                         var uygun = denenenler.Where(x => x.TepeTamam)
-                            .OrderBy(x => x.Yukseklik is { } y ? Math.Abs(y - hedef) : 0)
+                            .OrderBy(x => x.Yukseklik is { } y ? Math.Round(Math.Abs(y - hedef) / Esitleme.KayipliPayi) : 0)
+                            .ThenBy(x => x.Yukseklik is null ? 0 : Math.Abs(x.D.Telafi))
                             .ThenBy(x => x.D.TasmaPayi)
                             .ToList();
+
                         // Son deneme hedefte ve tepesi tavanın altındaysa kodlama onunla.
                         var sonTamam = sonuDenendi && son.TepeTamam
                             && (son.Yukseklik is not { } sy || Math.Abs(sy - hedef) <= Esitleme.KayipliPayi);
-                        if (!sonTamam && uygun.Count > 0)
+                        if (sonTamam)
+                        {
+                            sinir = false;
+                        }
+                        else if (uygun.Count > 0)
                         {
                             duzeltme = uygun[0].D;
-
-                            // Telafi sınırı yalnızca seçilen ayar sınırdaysa (denemeler sınıra varmadan bittiyse değil).
-                            sinir = sinir && Math.Abs(duzeltme.Telafi) >= Esitleme.EnCokTelafi - (Esitleme.KayipliAdim / 2);
                         }
-                        else if (!sonTamam && !sonuDenendi)
+                        else if (!sonuDenendi)
                         {
                             for (var d = 0; d < Esitleme.EnCokDeneme; d++)
                             {

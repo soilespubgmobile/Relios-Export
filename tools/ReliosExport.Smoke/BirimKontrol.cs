@@ -837,6 +837,10 @@ internal static class BirimKontrol
             .Contains("hedefin altında ve üstünde ölçülen denemeler arasında 0,01 dB kaldı; hedefe en yakını kullanıldı.", StringComparison.Ordinal).ToString());
         Kontrol("Ayrıntı: telafi sınırında ayrıca neden yazılmaz", "False", (ulas with { SonucYukseklik = -16, TelafiSiniri = true, Telafi = 6 }).Ayrinti
             .Contains("hedefe en yakın", StringComparison.Ordinal).ToString());
+        Kontrol("Ayrıntı: sınıra kadar denendi, yükseklik artmadı (en yakını +2,3 dB telafiyle)", "True",
+            (ulas with { SonucYukseklik = -16.4, TelafiSiniri = true, Telafi = 2.27 }).Ayrinti
+            .Contains("Telafi 6 dB'ye kadar denendi, yükseklik daha fazla artmadı (sınırlayıcı doydu ya da ses kodlamada değişiyor): hedefe en yakın sonuç +2,3 dB telafiyle.",
+                StringComparison.Ordinal).ToString());
 
         foreach (var (ad, a) in new[] { ("TikTok", Varsayilanlar.TikTok()), ("YouTube", Varsayilanlar.YouTube()) })
         {
