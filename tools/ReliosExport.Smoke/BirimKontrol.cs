@@ -31,6 +31,8 @@ internal static class BirimKontrol
         FdkUyumuKontrol();
         X264Profilleri();
         SesGecikmesi();
+        Calinabilirlik();
+        Sinirlar013();
         Console.WriteLine();
         Console.WriteLine($"Birim kontrol: {_ok + _fark} kontrol, {_fark} fark.");
         return _fark == 0 ? 0 : 1;
@@ -776,15 +778,16 @@ internal static class BirimKontrol
         // Mono çıktı: kanal indirme ölçümden ve eşitlemeden önce (stereo ölçülüp mono'ya inilince sonuç 3–6 dB düşük kalırdı).
         var mono = Varsayilanlar.YouTube();
         mono.Ses.Kanal = KanalModu.Mono;
-        Icermiyor("Mono, eşitleme kapalı: kanal indirme yine -ac 1 ile (eskisi gibi)", Komut(mono), "pan=mono");
+        Iceriyor("Mono, eşitleme kapalı: kanal indirme yine zincirde (ölçümdeki gibi, 0.13.0)", Komut(mono),
+            " -af pan=mono|c0=0.5*c0+0.5*c1,aresample=48000:");
         Iceriyor("Mono, eşitleme kapalı", Komut(mono), " -ac 1 ");
         mono.Ses.Esitleme = true;
         Iceriyor("Mono + eşitleme: önce mono'ya iner (yarım + yarım), sonra sabit kazanç", Komut(mono, olcum),
             " -af pan=mono|c0=0.5*c0+0.5*c1,volume=7.37dB,");
         Iceriyor("Mono + eşitleme: ölçüm de mono", " " + string.Join(' ', ArgsBuilder.OlcumKomutu(mono.Ses, "KAYNAK.mp4",
             ArgsBuilder.SesSec(mono.Ses, Kaynak48(), "KAYNAK.mp4"), 10)) + " ",
-            " -af pan=mono|c0=0.5*c0+0.5*c1,ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I,ametadata=mode=print:key=lavfi.r128.true_peak ");
-        Icermiyor("Mono + eşitleme, ses dokunulmadı (ölçüm yok): indirme yine -ac 1 ile", Komut(mono), "pan=mono");
+            " -af pan=mono|c0=0.5*c0+0.5*c1,aresample=48000:resampler=soxr:precision=33,ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I,ametadata=mode=print:key=lavfi.r128.true_peak ");
+        Iceriyor("Mono + eşitleme, ses dokunulmadı (ölçüm yok): indirme yine zincirde", Komut(mono), " -af pan=mono|c0=0.5*c0+0.5*c1,");
 
         var olc = ArgsBuilder.OlcumKomutu(esit.Ses, "KAYNAK.mp4", ArgsBuilder.SesSec(esit.Ses, Kaynak48(), "KAYNAK.mp4"), 10);
         Iceriyor("Ölçüm komutu (BS.1770 ölçeri, loudnorm değil)", " " + string.Join(' ', olc) + " ",
@@ -1220,9 +1223,10 @@ internal static class BirimKontrol
         var olc = " " + string.Join(' ', ArgsBuilder.OlcumKomutu(tts, "KAYNAK.mp4", harici, 6)) + " ";
         Iceriyor("Ölçüm, harici ses: WAV okunur", olc, " -i SES.wav -map 0:a:0 -vn -sn -dn ");
         Icermiyor("Ölçüm, harici ses: giriş -t ile kısılmaz", olc, " -t ");
-        Iceriyor("Ölçüm, harici ses: kodlamadaki uzunluk", olc, " -af apad,atrim=end=6,ebur128=peak=true:");
+        Iceriyor("Ölçüm, harici ses: çıktının hızında (44,1 kHz) ve kodlamadaki uzunlukla", olc,
+            " -af aresample=44100:resampler=soxr:precision=33,apad,atrim=end=6,ebur128=peak=true:");
         var olcIc = " " + string.Join(' ', ArgsBuilder.OlcumKomutu(tts, "KAYNAK.mp4", ic, 6)) + " ";
-        Iceriyor("Ölçüm, videonun kendi sesi: dosyanın süresiyle", olcIc, " -t 6 -af ebur128=");
+        Iceriyor("Ölçüm, videonun kendi sesi: dosyanın süresiyle, çıktının hızında", olcIc, " -t 6 -af aresample=44100:resampler=soxr:precision=33,ebur128=");
         Icermiyor("Ölçüm, videonun kendi sesi: kesme / doldurma yok", olcIc, "apad");
         var olcBilinmez = " " + string.Join(' ', ArgsBuilder.OlcumKomutu(tts, "KAYNAK.mp4", harici, 0)) + " ";
         Icermiyor("Ölçüm, harici ses, süre bilinmiyor: sonsuz doldurma yok", olcBilinmez, "apad");
@@ -1590,7 +1594,7 @@ internal static class BirimKontrol
     {
         Console.WriteLine();
         Console.WriteLine("--- FDK AAC uyumu: 12 hız, kanal düzeni, açılmayan profil, bit hızı sınırı (FDK AAC 3.0.0'da ölçüldü)");
-        foreach (var (hz, bek) in new[] { (192000, 96000), (176400, 96000), (88200, 88200), (50000, 48000), (44100, 44100), (7350, 8000), (100, 8000), (384000, 96000), (46050, 44100), (46051, 48000) })
+        foreach (var (hz, bek) in new[] { (192000, 96000), (176400, 96000), (88200, 88200), (50000, 48000), (44100, 44100), (7350, 8000), (100, 8000), (384000, 96000), (46050, 48000), (46049, 44100), (46051, 48000) })
         {
             Kontrol($"FDK hızı: {hz} Hz", bek.ToString(), FdkUyumu.Hiz(hz).ToString());
         }
@@ -1621,15 +1625,15 @@ internal static class BirimKontrol
         Kontrol("HE-AAC, 16 kHz: olduğu gibi", "aac_he 32", K("aac_he", 16000, "stereo", bit: 32));
         Kontrol("AAC-LD, 7.1: AAC-LC", "aac_low 256", K("aac_ld", 48000, "7.1", bit: 256));
         Kontrol("AAC-ELD, 7.1(wide): AAC-LC", "aac_low 256", K("aac_eld", 48000, "7.1(wide)", bit: 256));
-        Kontrol("AAC-LD, 5.1.2(back): olduğu gibi", "aac_ld 256", K("aac_ld", 48000, "5.1.2(back)", bit: 256));
+        Kontrol("AAC-LD, 5.1.2(back): çalınamıyor (FFmpeg çözemiyor), AAC-LC", "aac_low 256", K("aac_ld", 48000, "5.1.2(back)", bit: 256));
         Kontrol("AAC-LC 48 kHz stereo 800 kb/s: FDK en çok 576 kodlar", "aac_low 576", K("aac_low", 48000, "stereo", bit: 800));
         Kontrol("AAC-LC 44,1 kHz stereo 800 kb/s: 529", "aac_low 529", K("aac_low", 44100, "stereo", bit: 800));
         Kontrol("AAC-LC 44,1 kHz mono 512 kb/s: 264", "aac_low 264", K("aac_low", 44100, "mono", bit: 512));
         Kontrol("AAC-LC 48 kHz stereo 8 kb/s: FDK en az 14 kodlar", "aac_low 14", K("aac_low", 48000, "stereo", bit: 8));
-        Kontrol("HE-AAC 96 kHz 5.1 64 kb/s: en az 134 (FDK'nin sınırı 133,4)", "aac_he 134", K("aac_he", 96000, "5.1", bit: 64));
+        Kontrol("HE-AAC 96 kHz 5.1 64 kb/s: 88,2 kHz (96'da çözülemeyen SBR), en az 100", "aac_he 100", K("aac_he", 96000, "5.1", bit: 64));
         Kontrol("HE-AAC v2 48 kHz stereo 256 kb/s: en çok 144", "aac_he_v2 144", K("aac_he_v2", 48000, "stereo", bit: 256));
-        Kontrol("AAC-LD mono 96 kHz 800 kb/s: 614 (üstünde FDK açılmaz)", "aac_ld 614", K("aac_ld", 96000, "mono", bit: 800));
-        Kontrol("AAC-ELD mono 64 kHz 700 kb/s: 614", "aac_eld 614", K("aac_eld", 64000, "mono", bit: 700));
+        Kontrol("AAC-LD mono 96 kHz 800 kb/s: 48 kHz (çalınabilen en yüksek), en çok 576", "aac_ld 576", K("aac_ld", 96000, "mono", bit: 800));
+        Kontrol("AAC-ELD mono 64 kHz 700 kb/s: 48 kHz, en çok 576", "aac_eld 576", K("aac_eld", 64000, "mono", bit: 700));
         Kontrol("AAC-LC 128 kb/s: sınır içinde, olduğu gibi", "aac_low 128", K("aac_low", 44100, "stereo"));
         Kontrol("VBR: bit hızı yok", "aac_he -", K("aac_he", 48000, "stereo", FdkModu.Vbr3));
         Kontrol("Hız / düzen bilinmiyor: olduğu gibi", "aac_he_v2 800", K("aac_he_v2", null, null, bit: 800));
@@ -1680,19 +1684,19 @@ internal static class BirimKontrol
         var kaynakKanal = Varsayilanlar.YouTube();
         kaynakKanal.Ses.Kanal = KanalModu.Kaynak;
         c = Komut(kaynakKanal, Kaynak(48000, 6, "5.1(side)"));
-        Iceriyor("5.1(side) kaynak, kanal kaynakla aynı, FDK: FDK'nin 5.1 düzenine", c, " -af aformat=channel_layouts=5.1,aresample=48000:");
+        Iceriyor("5.1(side) kaynak, kanal kaynakla aynı, FDK: FDK'nin 5.1 düzenine (açık, ölçekli)", c, " -af aresample=ochl=5.1:rematrix_maxval=1,aresample=48000:");
         Icermiyor("5.1(side) kaynak: -ac yok", c, " -ac ");
         c = Komut(kaynakKanal, Kaynak(48000, 2, "stereo"));
-        Icermiyor("Stereo kaynak, kanal kaynakla aynı: düzen değişmez", c, "aformat=");
+        Icermiyor("Stereo kaynak, kanal kaynakla aynı: düzen değişmez", c, "ochl=");
         c = Komut(kaynakKanal, Kaynak(48000, 8, "7.1"));
-        Icermiyor("7.1 kaynak: düzen aynı (FDK'de var)", c, "aformat=");
+        Icermiyor("7.1 kaynak: düzen aynı (FDK'de var)", c, "ochl=");
         kaynakKanal.Ses.Fdk.Profil = "aac_ld";
         kaynakKanal.Ses.Fdk.BitHizi = 256;
         c = Komut(kaynakKanal, Kaynak(48000, 8, "7.1"));
         Iceriyor("7.1 kaynak + AAC-LD: FDK açmaz, AAC-LC", c, " -c:a libfdk_aac -profile:a aac_low -b:a 256k ");
         c = Komut(kaynakKanal, Kaynak(48000, 10, "5.1.4"));
-        Iceriyor("5.1.4 kaynak + AAC-LD: 5.1.2(back), LD kalır", c, "aformat=channel_layouts=5.1.2(back)");
-        Iceriyor("5.1.4 kaynak + AAC-LD: profil", c, " -profile:a aac_ld -b:a 256k ");
+        Iceriyor("5.1.4 kaynak + AAC-LD: 5.1.2(back) düzenine", c, "aresample=ochl=5.1.2(back):rematrix_maxval=1");
+        Iceriyor("5.1.4 kaynak + AAC-LD: 5.1.2(back)'ta LD çalınamıyor, AAC-LC", c, " -profile:a aac_low -b:a 256k ");
         kaynakKanal.Ses.Fdk.Profil = "aac_he_v2";
         kaynakKanal.Ses.Fdk.BitHizi = 48;
         Iceriyor("Mono kaynak, kanal kaynakla aynı + HE-AAC v2: HE-AAC", Komut(kaynakKanal, Kaynak(48000, 1, "mono")), " -profile:a aac_he -b:a 48k ");
@@ -1876,5 +1880,357 @@ internal static class BirimKontrol
         Kontrol("Normal klasör", "False", AppPaths.GeciciKlasordeMi(Path.Combine(kok, "Programlar", "Relios Export")).ToString());
         Kontrol("Bu aracın klasörü (geçici değil)", "False", AppPaths.GeciciKlasorden.ToString());
         Kontrol("Veri klasörü exe'nin yanı", AppPaths.AppFolder, AppPaths.VeriKlasoru);
+    }
+
+    /// <summary>
+    /// 0.13.0: FDK'nin açtığı ama FFmpeg'in AAC çözücüsünün (oynatıcıların ve platformların çoğu) çözemediği birleşimler
+    /// çözülen ayara çevrilir; kanal indirme ölçümde ve kodlamada aynı; titreşim yalnızca 16 bitte; ölçüm çıktının hızında.
+    /// </summary>
+    private static void Calinabilirlik()
+    {
+        Console.WriteLine();
+        Console.WriteLine("--- Çalınabilirlik (0.13.0): FDK'nin her çıktısı FFmpeg'le çözülür; kanal indirme, titreşim, ölçüm hızı");
+        static string KH(string profil, int? hz, string? duzen, FdkModu mod = FdkModu.Cbr, int bit = 128)
+        {
+            var k = FdkUyumu.Hesapla(new FdkAyarlari { Profil = profil, Mod = mod, BitHizi = bit }, hz, duzen);
+            return $"{k.Profil} {k.BitHizi?.ToString() ?? "-"} {k.Mod} {k.OrnekHizi?.ToString() ?? "-"}";
+        }
+
+        static string N(string profil, int? hz, string? duzen, FdkModu mod = FdkModu.Cbr, int bit = 128) =>
+            FdkUyumu.Hesapla(new FdkAyarlari { Profil = profil, Mod = mod, BitHizi = bit }, hz, duzen).Not ?? "-";
+
+        Kontrol("AAC-LD 96 kHz stereo: 48 kHz (FFmpeg LD'yi 22,05–48 kHz'te çözer)", "aac_ld 256 Cbr 48000", KH("aac_ld", 96000, "stereo", bit: 256));
+        Kontrol("AAC-LD 8 kHz mono: 22,05 kHz", "aac_ld 32 Cbr 22050", KH("aac_ld", 8000, "mono", bit: 32));
+        Kontrol("AAC-LD 16 kHz 5.1: 22,05 kHz", "aac_ld 128 Cbr 22050", KH("aac_ld", 16000, "5.1"));
+        Kontrol("AAC-LD 48 kHz stereo: olduğu gibi", "aac_ld 128 Cbr 48000", KH("aac_ld", 48000, "stereo"));
+        Kontrol("AAC-LD 22,05 kHz: olduğu gibi (çözülen en düşük hız)", "aac_ld 128 Cbr 22050", KH("aac_ld", 22050, "stereo"));
+        Kontrol("AAC-ELD 16 kHz stereo 64 kb/s: 22,05 kHz, SBR'siz en az 80", "aac_eld 80 Cbr 22050", KH("aac_eld", 16000, "stereo", bit: 64));
+        Kontrol("AAC-ELD 48 kHz mono 32 kb/s: SBR'siz en az 64", "aac_eld 64 Cbr 48000", KH("aac_eld", 48000, "mono", bit: 32));
+        Kontrol("AAC-ELD 48 kHz stereo 64 kb/s: SBR'siz en az 128", "aac_eld 128 Cbr 48000", KH("aac_eld", 48000, "stereo", bit: 64));
+        Kontrol("AAC-ELD 32 kHz stereo 96 kb/s: SBR yok, olduğu gibi", "aac_eld 96 Cbr 32000", KH("aac_eld", 32000, "stereo", bit: 96));
+        Kontrol("AAC-ELD 44,1 kHz mono VBR 2 (40 kb/s): SBR'siz en düşük kip VBR 4", "aac_eld - Vbr4 44100", KH("aac_eld", 44100, "mono", FdkModu.Vbr2));
+        Kontrol("AAC-ELD 24 kHz stereo VBR 1 (40 kb/s): VBR 3 (96 kb/s)", "aac_eld - Vbr3 24000", KH("aac_eld", 24000, "stereo", FdkModu.Vbr1));
+        Kontrol("AAC-ELD 48 kHz mono VBR 5: olduğu gibi", "aac_eld - Vbr5 48000", KH("aac_eld", 48000, "mono", FdkModu.Vbr5));
+        Kontrol("AAC-ELD 48 kHz 5.1: çok kanalda SBR yok, olduğu gibi", "aac_eld 128 Cbr 48000", KH("aac_eld", 48000, "5.1"));
+        Kontrol("AAC-ELD 96 kHz 5.1.2(back): önce AAC-LC (düzen), hız kalır", "aac_low 256 Cbr 96000", KH("aac_eld", 96000, "5.1.2(back)", bit: 256));
+        Kontrol("AAC-LD, hız bilinmiyor: olduğu gibi", "aac_ld 128 Cbr -", KH("aac_ld", null, "stereo"));
+        Kontrol("HE-AAC 96 kHz 3.0 110 kb/s: 88,2 kHz", "aac_he 110 Cbr 88200", KH("aac_he", 96000, "3.0", bit: 110));
+        Kontrol("HE-AAC 96 kHz stereo: olduğu gibi (mono / stereo çözülüyor)", "aac_he 64 Cbr 96000", KH("aac_he", 96000, "stereo", bit: 64));
+        Kontrol("HE-AAC 88,2 kHz 5.1: olduğu gibi", "aac_he 200 Cbr 88200", KH("aac_he", 88200, "5.1", bit: 200));
+        Kontrol("HE-AAC v2 96 kHz stereo: olduğu gibi", "aac_he_v2 64 Cbr 96000", KH("aac_he_v2", 96000, "stereo", bit: 64));
+        Kontrol("Not: AAC-LD hızı", "AAC-LD yalnızca 22,05–48 kHz'te çalınabiliyor: 48 kHz", N("aac_ld", 96000, "stereo"));
+        Kontrol("Not: AAC-ELD hızı ve SBR", "AAC-ELD yalnızca 22,05–48 kHz'te çalınabiliyor: 22,05 kHz; AAC-ELD stereo seste 64 kb/s'de SBR kullanıyor (çalınamıyor): 80 kb/s",
+            N("aac_eld", 16000, "stereo", bit: 64));
+        Kontrol("Not: AAC-ELD VBR", "AAC-ELD mono seste VBR 2 SBR kullanıyor (çalınamıyor): VBR 4", N("aac_eld", 44100, "mono", FdkModu.Vbr2));
+        Kontrol("Not: HE-AAC 96 kHz çok kanal", "HE-AAC 96 kHz'te çok kanallı seste standarda uymayan SBR üretebiliyor (çözülemiyor): 88,2 kHz",
+            N("aac_he", 96000, "5.1", bit: 200));
+        Kontrol("Not: AAC-LD 5.1.2(back)", "AAC-LD 5.1.2(back) sesi çalınamıyor (FFmpeg çözemiyor): AAC-LC", N("aac_ld", 48000, "5.1.2(back)", bit: 256));
+        Kontrol("Not: AAC-LC 48 kHz stereo 128: yok", "-", N("aac_low", 48000, "stereo"));
+
+        static string E(int hz, int kanal) => FdkUyumu.EldSbrsizEnAz(hz, kanal)?.ToString() ?? "yok";
+        foreach (var (hz, kanal, bek) in new[]
+                 {
+                     (48000, 1, "64000"), (44100, 1, "64000"), (32000, 1, "56000"), (24000, 1, "40000"), (22050, 1, "40000"), (16000, 1, "28000"),
+                     (48000, 2, "128000"), (44100, 2, "128000"), (32000, 2, "96000"), (24000, 2, "80000"), (22050, 2, "80000"), (16000, 2, "64000"),
+                     (12000, 1, "yok"), (8000, 2, "yok"), (64000, 2, "yok"), (96000, 1, "yok"), (48000, 6, "yok"),
+                 })
+        {
+            Kontrol($"AAC-ELD SBR'siz en az: {hz} Hz, {kanal} kanal (FDK eldSbrAutoConfigTab)", bek, E(hz, kanal));
+        }
+
+        foreach (var (mod, duzen, bek) in new[]
+                 {
+                     (FdkModu.Vbr1, "mono", 32000), (FdkModu.Vbr3, "mono", 56000), (FdkModu.Vbr5, "mono", 112000),
+                     (FdkModu.Vbr1, "stereo", 40000), (FdkModu.Vbr2, "stereo", 64000), (FdkModu.Vbr4, "stereo", 128000), (FdkModu.Vbr5, "stereo", 192000),
+                     (FdkModu.Vbr3, "5.1", 240000), (FdkModu.Vbr1, "7.1", 140000), (FdkModu.Vbr2, "6.1(back)", 192000), (FdkModu.Vbr4, "3.0", 192000),
+                 })
+        {
+            Kontrol($"FDK VBR bit hızı: {mod} {duzen} (configTabVBR × etkin kanal)", bek.ToString(), FdkUyumu.VbrBitHizi(mod, duzen).ToString());
+        }
+
+        // Komutlar.
+        static MediaInfo M(int hz, int kanal, string? duzen) => new(1280, 720, 1, 1, 0, 6, true, 30, "bt709", "bt709", "tv")
+        {
+            VideoCodec = "h264",
+            VideoProfil = "High",
+            VideoSeviye = 31,
+            VideoSuresi = 6,
+            SesAkislari = [new SesAkisi(1, "pcm_s24le", hz, kanal, 24, null) { Duzen = duzen }],
+        };
+
+        static string Komut(ProfilAyarlari a, MediaInfo m, SesOlcum? olcum = null)
+        {
+            var ses = ArgsBuilder.SesSec(a.Ses, m, "KAYNAK.mov");
+            return " " + string.Join(' ', ArgsBuilder.Olustur(a, m, "KAYNAK.mov", ses, "CIKTI.mov", "GECIS", olcum).Gecisler[0]) + " ";
+        }
+
+        static string Olcum(ProfilAyarlari a, MediaInfo m)
+        {
+            var ses = ArgsBuilder.SesSec(a.Ses, m, "KAYNAK.mov");
+            return " " + string.Join(' ', ArgsBuilder.OlcumKomutu(a.Ses, "KAYNAK.mov", ses, 6)) + " ";
+        }
+
+        var be = M(48000, 6, "5.1");
+        var yt = Varsayilanlar.YouTube();
+        Iceriyor("5.1 → stereo: açık ve ölçekli indirme (-ac 2'nin 16 bitteki hâli)", Komut(yt, be),
+            " -af aresample=ochl=stereo:rematrix_maxval=1,aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac ");
+        Iceriyor("5.1 → stereo: ölçüm de aynı indirmeyle", Olcum(yt, be), " -af aresample=ochl=stereo:rematrix_maxval=1,ebur128=");
+        Iceriyor("5.1 → stereo + eşitleme: önce indirme, sonra kazanç", Komut(yt, be, new SesOlcum(-25, -20, 5)),
+            " -af aresample=ochl=stereo:rematrix_maxval=1,volume=11.0dB,aresample=48000:");
+        var ytMono = Varsayilanlar.YouTube();
+        ytMono.Ses.Kanal = KanalModu.Mono;
+        Iceriyor("5.1 → mono: açık ve ölçekli", Komut(ytMono, be), " -af aresample=ochl=mono:rematrix_maxval=1,aresample=48000:");
+        Iceriyor("Stereo → mono: yarım + yarım (pan)", Komut(ytMono, M(48000, 2, "stereo")), " -af pan=mono|c0=0.5*c0+0.5*c1,aresample=48000:");
+        var ytWav = Varsayilanlar.YouTube();
+        ytWav.Ses.Kodlayici = SesKodlayici.Wav;
+        ytWav.Ses.Kanal = KanalModu.Kaynak;
+        Icermiyor("WAV, kanal kaynakla aynı (5.1): düzen değişmez", Komut(ytWav, be), "ochl=");
+
+        var ld = Varsayilanlar.YouTube();
+        ld.Ses.Fdk.Profil = "aac_ld";
+        ld.Ses.OrnekHizi = null;
+        var k96 = M(96000, 2, "stereo");
+        Iceriyor("AAC-LD, 96 kHz kaynak, hız kaynakla aynı: 48 kHz'e", Komut(ld, k96),
+            " -af aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac -profile:a aac_ld -b:a 128k ");
+        Iceriyor("AAC-LD, 96 kHz kaynak: -ar 48000", Komut(ld, k96), " -ar 48000 ");
+        Iceriyor("AAC-LD, 96 kHz kaynak: ölçüm çıktının hızında (48 kHz)", Olcum(ld, k96), " -af aresample=48000:resampler=soxr:precision=33,ebur128=");
+        ld.Ses.OrnekHizi = 8000;
+        Iceriyor("AAC-LD, 8 kHz seçili: 22,05 kHz'e", Komut(ld, M(48000, 2, "stereo")), " -ar 22050 ");
+        ld.Ses.OrnekHizi = 48000;
+        Iceriyor("AAC-LD, 48 kHz: olduğu gibi", Komut(ld, M(48000, 2, "stereo")), " -profile:a aac_ld -b:a 128k -ar 48000 ");
+        var eld = Varsayilanlar.YouTube();
+        eld.Ses.Fdk.Profil = "aac_eld";
+        eld.Ses.Fdk.Mod = FdkModu.Vbr2;
+        eld.Ses.Kanal = KanalModu.Mono;
+        eld.Ses.OrnekHizi = 44100;
+        Iceriyor("AAC-ELD mono 44,1 kHz VBR 2: komutta VBR 4", Komut(eld, M(48000, 2, "stereo")), " -profile:a aac_eld -vbr 4 ");
+        eld.Ses.Fdk.Mod = FdkModu.Cbr;
+        eld.Ses.Fdk.BitHizi = 24;
+        Iceriyor("AAC-ELD mono 44,1 kHz 24 kb/s: 64 kb/s", Komut(eld, M(48000, 2, "stereo")), " -profile:a aac_eld -b:a 64k ");
+        Kontrol("AAC-ELD: tahmini boyutta da 64 kb/s", "64",
+            BoyutTahmini.SesBitHizi(eld.Ses, ArgsBuilder.SesSec(eld.Ses, M(48000, 2, "stereo"), "KAYNAK.mov")).ToString("0"));
+        var he = Varsayilanlar.YouTube();
+        he.Ses.Fdk.Profil = "aac_he";
+        he.Ses.Fdk.BitHizi = 200;
+        he.Ses.Kanal = KanalModu.Kaynak;
+        he.Ses.OrnekHizi = null;
+        Iceriyor("HE-AAC 96 kHz 5.1: 88,2 kHz", Komut(he, M(96000, 6, "5.1")), " -ar 88200 ");
+        Iceriyor("HE-AAC 96 kHz stereo: 96 kHz kalır", Komut(he, k96), " -profile:a aac_he -b:a 200k ");
+        Icermiyor("HE-AAC 96 kHz stereo: dönüşüm yok", Komut(he, k96), " -ar ");
+        var notlu = Exporter.Describe(k96, ld, ArgsBuilder.SesSec(ld.Ses, k96, "KAYNAK.mov"));
+        Icermiyor("Satırdaki bilgi: AAC-LD 48 kHz seçiliyken not yok", " " + notlu + " ", "çalınabiliyor");
+        ld.Ses.OrnekHizi = null;
+        notlu = Exporter.Describe(k96, ld, ArgsBuilder.SesSec(ld.Ses, k96, "KAYNAK.mov"));
+        Iceriyor("Satırdaki bilgi: AAC-LD hız notu", " " + notlu + " ", " · AAC-LD yalnızca 22,05–48 kHz'te çalınabiliyor: 48 kHz");
+        Kontrol("Notlar: AAC-LD hız notu (bitince ipucunda)", "AAC-LD yalnızca 22,05–48 kHz'te çalınabiliyor: 48 kHz",
+            string.Join(" | ", Exporter.Notlar(k96, ld, ArgsBuilder.SesSec(ld.Ses, k96, "KAYNAK.mov"))));
+        Kontrol("Çıktının hızı: AAC-LD, 96 kHz kaynak", "48000",
+            ArgsBuilder.CiktiHizi(ld.Ses, ArgsBuilder.SesSec(ld.Ses, k96, "KAYNAK.mov"))?.ToString() ?? "yok");
+        var wavKaynak = Varsayilanlar.YouTube();
+        wavKaynak.Ses.Kodlayici = SesKodlayici.Wav;
+        wavKaynak.Ses.OrnekHizi = null;
+        Kontrol("Çıktının hızı: WAV, hız kaynakla aynı", "96000",
+            ArgsBuilder.CiktiHizi(wavKaynak.Ses, ArgsBuilder.SesSec(wavKaynak.Ses, k96, "KAYNAK.mov"))?.ToString() ?? "yok");
+        Kontrol("Çıktının hızı: WAV, 48 kHz seçili", "48000",
+            ArgsBuilder.CiktiHizi(ytWav.Ses, ArgsBuilder.SesSec(ytWav.Ses, k96, "KAYNAK.mov"))?.ToString() ?? "yok");
+
+        // Titreşim yalnızca 16 bit çıktıda (FFmpeg'in Shibata titreşimi 24 / 32 bitte sesi bozuyor).
+        foreach (var (bit, titresim, codec, titresimli) in new[]
+                 {
+                     (WavBitDerinligi.Bit16, Titresim.Shibata, "pcm_s16le", true),
+                     (WavBitDerinligi.Bit16, Titresim.Ucgen, "pcm_s16le", true),
+                     (WavBitDerinligi.Bit24, Titresim.Shibata, "pcm_s24le", false),
+                     (WavBitDerinligi.Bit24, Titresim.UcgenYuksekGecis, "pcm_s24le", false),
+                     (WavBitDerinligi.Bit32, Titresim.Shibata, "pcm_s32le", false),
+                     (WavBitDerinligi.Bit32, Titresim.Ucgen, "pcm_s32le", false),
+                     (WavBitDerinligi.Float32, Titresim.Shibata, "pcm_f32le", false),
+                 })
+        {
+            var w = Varsayilanlar.YouTube();
+            w.Ses.Kodlayici = SesKodlayici.Wav;
+            w.Ses.WavBit = bit;
+            w.Ses.Titresim = titresim;
+            var komut = Komut(w, M(44100, 2, "stereo"));
+            Iceriyor($"WAV {bit} + {titresim}: {codec}", komut, " -c:a " + codec + " ");
+            if (titresimli)
+            {
+                Iceriyor($"WAV {bit} + {titresim}: titreşim var", komut, ":dither_method=");
+            }
+            else
+            {
+                Icermiyor($"WAV {bit} + {titresim}: titreşim yok (24 / 32 bitte gereksiz; Shibata sesi bozuyordu)", komut, "dither_method");
+                Iceriyor($"WAV {bit} + {titresim}: dönüşüm yine en yüksek kalitede", komut, " -af aresample=48000:resampler=soxr:precision=33 -c:a ");
+            }
+
+            Kontrol($"TitresimVar: WAV {bit} + {titresim}", titresimli.ToString(), ArgsBuilder.TitresimVar(w.Ses).ToString());
+        }
+
+        var fdkShibata = Varsayilanlar.YouTube();
+        fdkShibata.Ses.Titresim = Titresim.Shibata;
+        Iceriyor("FDK AAC (16 bit girer) + Shibata: titreşim var", Komut(fdkShibata, M(44100, 2, "stereo")), ":dither_method=shibata -c:a libfdk_aac ");
+        Kontrol("TitresimVar: FDK + titreşim yok", "False",
+            ArgsBuilder.TitresimVar(new SesAyarlari { Kodlayici = SesKodlayici.FdkAac, Titresim = Titresim.Yok }).ToString());
+
+        // DRC: çözücü sesi değiştirir; karar ve tepe koruması çözülen sesle.
+        var drc = Varsayilanlar.TikTok().Ses;
+        Kontrol("DRC: varsayılanda yok", "False", Esitleme.DrcVar(drc).ToString());
+        drc.Fdk.DrcProfili = 0;
+        Kontrol("DRC: profil 0 (yok)", "False", Esitleme.DrcVar(drc).ToString());
+        drc.Fdk.DrcProfili = 3;
+        Kontrol("DRC: müzik · standart", "True", Esitleme.DrcVar(drc).ToString());
+        drc.Kodlayici = SesKodlayici.Wav;
+        Kontrol("DRC: WAV'da yok", "False", Esitleme.DrcVar(drc).ToString());
+
+        var tts = Varsayilanlar.TikTok().Ses;
+        var r = Esitleme.KararVer(tts, new SesOlcum(-34.8, -14.2, 20)) with { KaynakYukseklik = -21.7 };
+        Kontrol("Karar çıktıdaki hâliyle (-34,8): yükseltilir", "Dogrusal", r.Karar.ToString());
+        Iceriyor("Ayrıntı: kaynağın ölçümü", r.Ayrinti, "Ölçülen: -21,7 LUFS · tepe -14,2 dBTP · ses aralığı 20,0 LU");
+        Iceriyor("Ayrıntı: çıktıdaki hâli ve karar", r.Ayrinti, "Çıktıdaki hâli -34,8 LUFS (ses kodlamadaki zinciriyle denenip ölçüldü): karar bununla verildi.");
+        Iceriyor("Bilgi satırı: kazanç çıktıdaki hâline göre (+20,8)", r.BilgiMetni, "-34,8 → -14 LUFS (bütün ses +20,8 dB");
+        var r2 = Esitleme.KararVer(tts, new SesOlcum(-14.1, -3, 5)) with { KaynakYukseklik = -14.12 };
+        Icermiyor("Ayrıntı: kaynak ile çıktı aynıysa (0,05'ten az) tek satır", r2.Ayrinti, "Çıktıdaki hâli");
+        Kontrol("Karar: çıktıdaki hâli -14,1 → hedefte", "Hedefte", r2.Karar.ToString());
+        var r3 = Esitleme.KararVer(tts, new SesOlcum(-23.9, 20.8, 20)) with { KaynakYukseklik = 9.8 };
+        Kontrol("Karar: kaynak 9,8 LUFS ama çıktıda -23,9 (sınırlayıcı): yükseltilir", "Dogrusal", r3.Karar.ToString());
+    }
+
+    /// <summary>0.13.0: x264'ün açılmadığı ayarlar (geçmeli yükseklik, matris QP, düşük 2 geçiş), kırpma, tahmini boyut.</summary>
+    private static void Sinirlar013()
+    {
+        Console.WriteLine();
+        Console.WriteLine("--- x264'ün açılmadığı ayarlar, çok dar boyut, tahmini boyut (0.13.0)");
+        static MediaInfo V(int w, int h, double sure = 10, double fps = 30) => new(w, h, 1, 1, 0, sure, false, fps, "bt709", "bt709", "tv")
+        {
+            VideoCodec = "h264",
+            VideoProfil = "High",
+            VideoSeviye = 40,
+            VideoSuresi = sure,
+        };
+
+        static string Komut(ProfilAyarlari a, MediaInfo m) =>
+            " " + string.Join(' ', ArgsBuilder.Olustur(a, m, "KAYNAK.mov", SesSecimi.Yok, "CIKTI.mov", "GECIS").Gecisler[0]) + " ";
+
+        static ProfilAyarlari Gecmeli(string profil, int w = 1080, int h = 1350)
+        {
+            var a = Varsayilanlar.TikTok();
+            a.Video.Cozunurluk = CozunurlukModu.Hedef;
+            a.Video.Genislik = w;
+            a.Video.Yukseklik = h;
+            a.Video.X264.Profil = profil;
+            a.Video.X264.Gecmeli = true;
+            return a;
+        }
+
+        var hd = V(1280, 720);
+        Iceriyor("Geçmeli + High (4:2:0), 1080×1350: yükseklik 4'ün katı (1348)", Komut(Gecmeli("high"), hd), "scale=1080:1348:");
+        Kontrol("Geçmeli + High: çıktı boyutu", "1080×1348", $"{ArgsBuilder.CiktiBoyutu(Gecmeli("high"), hd).Genislik}×{ArgsBuilder.CiktiBoyutu(Gecmeli("high"), hd).Yukseklik}");
+        Kontrol("Geçmeli + High: not", "geçmeli 4:2:0'da yükseklik 4'ün katı: 1350 → 1348", ArgsBuilder.YukseklikNotu(Gecmeli("high"), hd) ?? "yok");
+        Kontrol("Geçmeli + High: Notlar", "geçmeli 4:2:0'da yükseklik 4'ün katı: 1350 → 1348", string.Join(" | ", Exporter.Notlar(hd, Gecmeli("high"), SesSecimi.Yok)));
+        Iceriyor("Geçmeli + High: satırdaki bilgi", " " + Exporter.Describe(hd, Gecmeli("high"), SesSecimi.Yok) + " ", " · geçmeli 4:2:0'da yükseklik 4'ün katı: 1350 → 1348 ");
+        Iceriyor("Geçmeli + High 10 (4:2:0): 1348", Komut(Gecmeli("high10"), hd), "scale=1080:1348:");
+        Iceriyor("Geçmeli + High 4:2:2: 1350 kalır (4:2:2'de 2'nin katı yeter)", Komut(Gecmeli("high422"), hd), "scale=1080:1350:");
+        Kontrol("Geçmeli + High 4:2:2: not yok", "yok", ArgsBuilder.YukseklikNotu(Gecmeli("high422"), hd) ?? "yok");
+        Iceriyor("Geçmeli + High 4:4:4: 1350 kalır", Komut(Gecmeli("high444"), hd), "scale=1080:1350:");
+        Iceriyor("Geçmeli + Baseline: geçmeli yok, 1350 kalır", Komut(Gecmeli("baseline"), hd), "scale=1080:1350:");
+        Iceriyor("Geçmeli + High, 1080×1920 (zaten 4'ün katı)", Komut(Gecmeli("high", 1080, 1920), hd), "scale=1080:1920:");
+        Kontrol("Geçmeli + High, 1080×1920: not yok", "yok", ArgsBuilder.YukseklikNotu(Gecmeli("high", 1080, 1920), hd) ?? "yok");
+        var ilerleyen = Gecmeli("high");
+        ilerleyen.Video.X264.Gecmeli = false;
+        Iceriyor("İlerleyen (geçmeli değil): 1350 kalır", Komut(ilerleyen, hd), "scale=1080:1350:");
+        var kenar = Gecmeli("high");
+        kenar.Video.Oran = OranUyumu.KenarEkle;
+        Iceriyor("Geçmeli + kenar ekle: dolgu 1348", Komut(kenar, hd), ",pad=1080:1348:-1:-1:color=black,");
+        var kaynakBoyut = Gecmeli("high");
+        kaynakBoyut.Video.Cozunurluk = CozunurlukModu.Kaynak;
+        Iceriyor("Geçmeli + boyut kaynakla aynı: 4'ün katına", Komut(kaynakBoyut, V(1280, 722)), "scale=trunc(iw*sar/2)*2:trunc(ih/4)*4:");
+        Kontrol("Geçmeli + boyut kaynakla aynı (1280×722): 1280×720", "1280×720",
+            $"{ArgsBuilder.CiktiBoyutu(kaynakBoyut, V(1280, 722)).Genislik}×{ArgsBuilder.CiktiBoyutu(kaynakBoyut, V(1280, 722)).Yukseklik}");
+        Kontrol("Geçmeli + boyut kaynakla aynı (722): not", "geçmeli 4:2:0'da yükseklik 4'ün katı: 722 → 720", ArgsBuilder.YukseklikNotu(kaynakBoyut, V(1280, 722)) ?? "yok");
+        var nvencGecmeli = Gecmeli("high");
+        nvencGecmeli.Video.Kodlayici = VideoKodlayici.Nvenc;
+        Kontrol("NVENC: x264'ün geçmeli ayarı geçerli değil (2'nin katı)", "2", ArgsBuilder.YukseklikKati(nvencGecmeli, hd).ToString());
+
+        // Çok dar hedefte kırpma genişliği / yüksekliği en az 2 (eskiden 0 çıkıp ffmpeg duruyordu).
+        static string P(CropPlan p) => $"{p.Width}x{p.Height}+{p.X}+{p.Y}";
+        var kucuk = V(320, 180);
+        Kontrol("Kırpma: 320×180 → 16:8192 (çok dar): genişlik 2", "2x180+159+0", P(ArgsBuilder.PlanCrop(kucuk, 16.0 / 8192)));
+        Kontrol("Kırpma: 320×180 → 8192:16 (çok yassı): yükseklik 2", "320x2+0+89", P(ArgsBuilder.PlanCrop(kucuk, 8192.0 / 16)));
+        Kontrol("Kırpma: 1920×1080 → 9:16 (eskisi gibi)", "608x1080+656+0", P(ArgsBuilder.PlanCrop(V(1920, 1080), 9.0 / 16)));
+
+        // x264'ün açılışta reddettiği ama düzeltilebilen ayarlar (kodlarken, x264'ün iletisindeki değerle).
+        var iki = Varsayilanlar.YouTube();
+        iki.Video.X264.Mod = X264Modu.IkiGecis;
+        iki.Video.X264.BitHizi = 1;
+        var not = ArgsBuilder.X264Duzelt("[libx264 @ 0x1] requested bitrate is too low. estimated minimum is 43 kbps\n", iki);
+        Kontrol("2 geçiş, bit hızı çok düşük: x264'ün en azı + %2 (43 → 45)", "45", iki.Video.X264.BitHizi.ToString());
+        Kontrol("2 geçiş, bit hızı çok düşük: not", "1 kb/s bu videoda 2 geçişle kodlanamıyor (x264: en az 43 kb/s): 45 kb/s", not ?? "yok");
+        var uc = Varsayilanlar.YouTube();
+        uc.Video.X264.Mod = X264Modu.UcGecis;
+        uc.Video.X264.BitHizi = 4000;
+        not = ArgsBuilder.X264Duzelt("requested bitrate is too low. estimated minimum is 5012 kbps", uc);
+        Kontrol("3 geçiş, 4 Mb/s, en az 5012: 5114", "5114", uc.Video.X264.BitHizi.ToString());
+        Kontrol("3 geçiş: not", "4 Mb/s bu videoda 3 geçişle kodlanamıyor (x264: en az 5012 kb/s): 5114 kb/s", not ?? "yok");
+        var crf = Varsayilanlar.YouTube();
+        Kontrol("CRF'de bu ileti: düzeltilmez", "yok", ArgsBuilder.X264Duzelt("requested bitrate is too low. estimated minimum is 43 kbps", crf) ?? "yok");
+        Kontrol("CRF'de: bit hızı değişmedi", Varsayilanlar.YouTube().Video.X264.BitHizi.ToString(), crf.Video.X264.BitHizi.ToString());
+        var jvt = Varsayilanlar.YouTube();
+        jvt.Video.X264.Cqm = "jvt";
+        jvt.Video.X264.QpMax = 0;
+        not = ArgsBuilder.X264Duzelt("[libx264 @ 0x1] Impossible QP constraints for CQM (min=19, max=0)", jvt);
+        Kontrol("JVT + qpmax 0: qpmax x264'ün en azına (19)", "19", jvt.Video.X264.QpMax?.ToString() ?? "yok");
+        Kontrol("JVT + qpmax 0: not", "JVT nicemleme matrisiyle en yüksek QP en az 19 olabilir (x264): qpmax 0 → 19", not ?? "yok");
+        var jvtBos = Varsayilanlar.YouTube();
+        jvtBos.Video.X264.Cqm = "jvt";
+        jvtBos.Video.X264.QpMax = null;
+        Kontrol("JVT, qpmax boş: düzeltilecek bir şey yok", "yok", ArgsBuilder.X264Duzelt("Impossible QP constraints for CQM (min=7, max=6)", jvtBos) ?? "yok");
+        var nv = Varsayilanlar.YouTube();
+        nv.Video.Kodlayici = VideoKodlayici.Nvenc;
+        Kontrol("NVENC: x264 düzeltmesi yok", "yok", ArgsBuilder.X264Duzelt("requested bitrate is too low. estimated minimum is 43 kbps", nv) ?? "yok");
+        Kontrol("Başka bir hata: düzeltilmez", "yok", ArgsBuilder.X264Duzelt("height not divisible by 4 (1080x1350)", Varsayilanlar.YouTube()) ?? "yok");
+
+        // Kayıpsız ve tahmini boyut.
+        var m = V(1920, 1080);
+        var kp = Varsayilanlar.YouTube();
+        kp.Video.X264.Crf = 0;
+        kp.Video.X264.Profil = string.Empty;
+        Kontrol("Kayıpsız mı: 8 bit CRF 0, otomatik profil", "True", ArgsBuilder.X264KayipsizMi(kp, m).ToString());
+        Kontrol("CRF 0 (kayıpsız) + VBV: x264 VBV'yi yok sayar, tahmin yok", "yok", BoyutTahmini.Hesapla(kp, m, SesSecimi.Yok)?.Metin ?? "yok");
+        kp.Video.X264.Profil = "high444";
+        Kontrol("Kayıpsız mı: CRF 0, High 4:4:4", "True", ArgsBuilder.X264KayipsizMi(kp, m).ToString());
+        kp.Video.X264.Profil = "main";
+        Kontrol("Kayıpsız mı: CRF 0, Main (CRF 1'e çıkar)", "False", ArgsBuilder.X264KayipsizMi(kp, m).ToString());
+        Kontrol("CRF 0 + Main + VBV: en çok", "True", (BoyutTahmini.Hesapla(kp, m, SesSecimi.Yok)?.Tur == TahminTuru.EnCok).ToString());
+        kp.Video.X264.Profil = "high10";
+        Kontrol("Kayıpsız mı: CRF 0, High 10 (10 bitte CRF 0 = QP 12)", "False", ArgsBuilder.X264KayipsizMi(kp, m).ToString());
+        kp.Video.X264.Profil = string.Empty;
+        kp.Video.X264.Crf = 0.5;
+        Kontrol("Kayıpsız mı: CRF 0,5, otomatik profil", "True", ArgsBuilder.X264KayipsizMi(kp, m).ToString());
+        kp.Video.X264.Crf = 1;
+        Kontrol("Kayıpsız mı: CRF 1", "False", ArgsBuilder.X264KayipsizMi(kp, m).ToString());
+        kp.Video.X264.Mod = X264Modu.SabitQp;
+        kp.Video.X264.Qp = 0;
+        Kontrol("Kayıpsız mı: QP 0, otomatik profil", "True", ArgsBuilder.X264KayipsizMi(kp, m).ToString());
+        var dusukQp = Varsayilanlar.YouTube();
+        dusukQp.Video.X264.QpMax = 10;
+        Kontrol("CRF + VBV, qpmax 10: x264 VBV'ye uyamaz, \"en çok\" yok", "yok", BoyutTahmini.Hesapla(dusukQp, m, SesSecimi.Yok)?.Metin ?? "yok");
+        dusukQp.Video.X264.QpMax = BoyutTahmini.EnCokIcinQpMax;
+        Kontrol("CRF + VBV, qpmax 20: en çok", "True", (BoyutTahmini.Hesapla(dusukQp, m, SesSecimi.Yok)?.Tur == TahminTuru.EnCok).ToString());
+        var kucukTampon = Varsayilanlar.YouTube();
+        kucukTampon.Video.X264.VbvTampon = 100;
+        Kontrol("Tampon bir kareden küçük (100 kb, 34375 / 30 fps): x264 bir kareye büyütür", "en çok 41,1 MB",
+            BoyutTahmini.Hesapla(kucukTampon, m, SesSecimi.Yok)?.Metin ?? "yok");
+
+        // FDK VBR: tahmini boyutta FDK'nin kipin hedeflediği bit hızı (stereo VBR 5: 192, eskiden 224 sayılıyordu).
+        var vbr = Varsayilanlar.YouTube();
+        vbr.Ses.Fdk.Mod = FdkModu.Vbr5;
+        var sesStereo = new SesSecimi(SesSecimTuru.Video, null, 2) { OrnekHizi = 48000, Duzen = "stereo" };
+        Kontrol("FDK VBR 5 stereo: 192 kb/s", "192", BoyutTahmini.SesBitHizi(vbr.Ses, sesStereo).ToString("0"));
+        vbr.Ses.Fdk.Mod = FdkModu.Vbr1;
+        vbr.Ses.Kanal = KanalModu.Mono;
+        Kontrol("FDK VBR 1 mono: 32 kb/s", "32", BoyutTahmini.SesBitHizi(vbr.Ses, sesStereo).ToString("0"));
+        vbr.Ses.Fdk.Mod = FdkModu.Vbr3;
+        vbr.Ses.Kanal = KanalModu.Kaynak;
+        var ses51 = new SesSecimi(SesSecimTuru.Video, null, 6) { OrnekHizi = 48000, Duzen = "5.1" };
+        Kontrol("FDK VBR 3 5.1: 240 kb/s (48 × 5 etkin kanal)", "240", BoyutTahmini.SesBitHizi(vbr.Ses, ses51).ToString("0"));
     }
 }

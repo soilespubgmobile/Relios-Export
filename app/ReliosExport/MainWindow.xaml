@@ -285,7 +285,7 @@
                             <Button x:Name="BtnOnAyarlar" Grid.Column="2" Content="Ön ayarlar" Style="{StaticResource SecondaryButton}" Height="28" Padding="12,0" Click="OnOnAyarlar"
                                     ToolTip="Ayarları adıyla kaydet, kayıtlı ayarı yükle ya da sil"/>
                             <Button x:Name="BtnVarsayilan" Grid.Column="3" Content="Varsayılan" Style="{StaticResource GhostButton}" Height="28" Margin="4,0,0,0" Click="OnVarsayilan"
-                                    ToolTip="Bu profilin ayarlarını fabrika ayarına döndür"/>
+                                    ToolTipService.ShowOnDisabled="True" ToolTip="Bu profilin ayarlarını fabrika ayarına döndür"/>
                         </Grid>
                     </Border>
 

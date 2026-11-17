@@ -107,14 +107,24 @@ public static class FdkUyumu
     };
 
     /// <summary>
-    /// FDK'ye verilecek profil ve (CBR'de) bit hızı. <paramref name="hz"/>: kodlayıcının göreceği örnekleme hızı
-    /// (<see cref="Hiz"/>; bilinmiyorsa null: bit hızı olduğu gibi). <paramref name="duzen"/>: kodlayıcının göreceği kanal
-    /// düzeni (<see cref="Duzen"/>; mono / stereo seçiliyse o; bilinmiyorsa null). <c>Not</c>: ayar değiştiyse kısa
-    /// Türkçe açıklama (satırdaki bilgide görünür).
+    /// FDK'ye verilecek profil, bit hızı (CBR) ya da VBR kipi ve örnekleme hızı. <paramref name="hz"/>: kodlayıcıya
+    /// gidecek hız (<see cref="Hiz"/>; bilinmiyorsa null: bit hızı ve hız olduğu gibi). <paramref name="duzen"/>:
+    /// kodlayıcının göreceği kanal düzeni (<see cref="Duzen"/>; mono / stereo seçiliyse o; bilinmiyorsa null).
+    /// <c>Not</c>: ayar değiştiyse kısa Türkçe açıklama (satırdaki bilgide ve ipucunda görünür).
+    /// <para>
+    /// FDK'nin açtığı her birleşim çalınamıyor: programdaki FFmpeg'in AAC çözücüsüyle (oynatıcıların ve platformların
+    /// çoğunun kullandığı) her profil × hız × düzen × bit hızı çözülerek denendi. Çözülemeyenlerde program en yakın
+    /// çözülen ayara geçer: AAC-LD / ELD yalnızca 22,05–48 kHz'te çözülüyor (FFmpeg'in LD / ELD tabloları bu hızlar
+    /// için), 5.1.2(back) düzeninde hiç (AAC-LC'de çözülüyor); AAC-ELD mono / stereo seste düşük bit hızında FDK düşük
+    /// gecikmeli SBR kullanıyor ("Low Delay SBR" FFmpeg'de yok): bit hızı / VBR kipi SBR'siz en aza çıkarılır (FDK'nin
+    /// eldSbrAutoConfigTab tablosu); HE-AAC 96 kHz'te 3 ve daha çok kanalda bazı bit hızlarında standarda uymayan SBR
+    /// üretiyor (6 gürültü bandı; en çok 5): 88,2 kHz.
+    /// </para>
     /// </summary>
     public static Karar Hesapla(FdkAyarlari f, int? hz, string? duzen)
     {
         var profil = f.Profil is "aac_low" or "aac_he" or "aac_he_v2" or "aac_ld" or "aac_eld" ? f.Profil : "aac_low";
+        var mod = f.Mod;
         var notlar = new List<string>();
         var kanal = duzen is null ? (int?)null : KanalSayisi(duzen);
         if (profil == "aac_he_v2" && kanal is { } k && k != 2)
@@ -129,27 +139,66 @@ public static class FdkUyumu
             profil = "aac_low";
         }
 
-        if (profil is "aac_ld" or "aac_eld" && duzen is "7.1" or "7.1(wide)")
+        if (profil == "aac_he" && hz == 96000 && kanal is >= 3)
         {
-            notlar.Add($"AAC-{(profil == "aac_ld" ? "LD" : "ELD")} {duzen} sesi kodlayamaz: AAC-LC");
+            hz = 88200;
+            notlar.Add("HE-AAC 96 kHz'te çok kanallı seste standarda uymayan SBR üretebiliyor (çözülemiyor): 88,2 kHz");
+        }
+
+        if (profil is "aac_ld" or "aac_eld" && duzen is "7.1" or "7.1(wide)" or "5.1.2(back)")
+        {
+            notlar.Add(duzen == "5.1.2(back)"
+                ? $"AAC-{LdAdi(profil)} 5.1.2(back) sesi çalınamıyor (FFmpeg çözemiyor): AAC-LC"
+                : $"AAC-{LdAdi(profil)} {duzen} sesi kodlayamaz: AAC-LC");
             profil = "aac_low";
         }
 
+        if (profil is "aac_ld" or "aac_eld" && hz is { } ldHz && ldHz is < LdEnAzHiz or > LdEnCokHiz)
+        {
+            hz = ldHz > LdEnCokHiz ? LdEnCokHiz : LdEnAzHiz;
+            notlar.Add($"AAC-{LdAdi(profil)} yalnızca 22,05–48 kHz'te çalınabiliyor: {Bicim.Khz(hz.Value)}");
+        }
+
+        if (profil == "aac_eld" && hz is { } eHz && kanal is 1 or 2 && EldSbrsizEnAz(eHz, kanal.Value) is { } esik)
+        {
+            // FDK bu bit hızının altında (VBR'de kipin bit hızında) SBR'ye geçer; SBR'li ELD'yi FFmpeg çözemiyor.
+            if (mod == FdkModu.Cbr && f.BitHizi * 1000 < esik)
+            {
+                notlar.Add($"AAC-ELD {(kanal == 1 ? "mono" : "stereo")} seste {f.BitHizi} kb/s'de SBR kullanıyor (çalınamıyor): {esik / 1000} kb/s");
+            }
+            else if (mod != FdkModu.Cbr && VbrBitHizi(mod, duzen!) < esik)
+            {
+                var yeni = mod;
+                while (yeni < FdkModu.Vbr5 && VbrBitHizi(yeni, duzen!) < esik)
+                {
+                    yeni++;
+                }
+
+                notlar.Add($"AAC-ELD {(kanal == 1 ? "mono" : "stereo")} seste VBR {(int)mod} SBR kullanıyor (çalınamıyor): VBR {(int)yeni}");
+                mod = yeni;
+            }
+        }
+
         int? bitHizi = null;
-        if (f.Mod == FdkModu.Cbr)
+        if (mod == FdkModu.Cbr)
         {
             bitHizi = f.BitHizi;
+            if (profil == "aac_eld" && hz is { } eh && kanal is 1 or 2 && EldSbrsizEnAz(eh, kanal.Value) is { } e)
+            {
+                bitHizi = Math.Max(bitHizi.Value, e / 1000);
+            }
+
             if (hz is { } h && duzen is not null && Sinir(profil, h, duzen) is { } s)
             {
                 var enAz = (int)Math.Ceiling(s.EnAz / 1000.0);
                 var enCok = s.EnCok / 1000;
                 var neresi = $"{FdkAyarlari.ProfilAdi(profil)} {Bicim.Khz(h)} {KanalMetni(duzen)}";
-                if (f.BitHizi > enCok)
+                if (bitHizi > enCok)
                 {
                     bitHizi = enCok;
                     notlar.Add($"FDK AAC {neresi} sesi en çok {enCok} kb/s kodlar");
                 }
-                else if (f.BitHizi < enAz)
+                else if (bitHizi < enAz)
                 {
                     bitHizi = enAz;
                     notlar.Add($"FDK AAC {neresi} sesi en az {enAz} kb/s kodlar");
@@ -157,8 +206,68 @@ public static class FdkUyumu
             }
         }
 
-        return new Karar(profil, bitHizi, notlar.Count > 0 ? string.Join("; ", notlar) : null);
+        return new Karar(profil, bitHizi, mod, hz, duzen, notlar.Count > 0 ? string.Join("; ", notlar) : null);
     }
+
+    /// <summary>AAC-LD / ELD'nin çalınabildiği (FFmpeg'in çözebildiği) en düşük ve en yüksek örnekleme hızı.</summary>
+    public const int LdEnAzHiz = 22050;
+
+    public const int LdEnCokHiz = 48000;
+
+    private static string LdAdi(string profil) => profil == "aac_ld" ? "LD" : "ELD";
+
+    /// <summary>
+    /// AAC-ELD mono / stereo seste FDK'nin SBR kullanmadığı en düşük bit hızı (bit/s): FDK'nin kendi tablosu
+    /// (aacenc_lib.cpp, eldSbrAutoConfigTab: hıza ve kanal sayısına göre son uyan satır). 16 kHz'in altında ve 48 kHz'in
+    /// üstünde SBR yok: null.
+    /// </summary>
+    public static int? EldSbrsizEnAz(int hz, int kanal)
+    {
+        if (hz is < 16000 or > 48000 || kanal is not (1 or 2))
+        {
+            return null;
+        }
+
+        return (kanal, hz) switch
+        {
+            (1, > 32000) => 64000,
+            (1, > 24000) => 56000,
+            (1, > 16000) => 40000,
+            (1, _) => 28000,
+            (2, > 32000) => 128000,
+            (2, > 24000) => 96000,
+            (2, > 16000) => 80000,
+            _ => 64000,
+        };
+    }
+
+    /// <summary>
+    /// FDK'nin VBR kipinde hedeflediği bit hızı (bit/s; aacenc.cpp configTabVBR): mono seste kanal başına 32 / 40 / 56 /
+    /// 72 / 112 kb/s; öteki düzenlerde kanal başına 20 / 32 / 48 / 64 / 96 kb/s × etkin kanal sayısı (LFE sayılmaz).
+    /// SBR kararı ve tahmini boyut bunu kullanır.
+    /// </summary>
+    public static int VbrBitHizi(FdkModu mod, string duzen)
+    {
+        var i = Math.Clamp((int)mod, 1, 5) - 1;
+        if (duzen == "mono")
+        {
+            return new[] { 32000, 40000, 56000, 72000, 112000 }[i];
+        }
+
+        return new[] { 20000, 32000, 48000, 64000, 96000 }[i] * EtkinKanal(duzen);
+    }
+
+    /// <summary>FDK'nin etkin kanal sayısı (LFE sayılmaz; channel_map.cpp channelModeConfig).</summary>
+    public static int EtkinKanal(string duzen) => duzen switch
+    {
+        "mono" => 1,
+        "stereo" => 2,
+        "3.0" => 3,
+        "4.0" => 4,
+        "5.0" or "5.1" => 5,
+        "6.1(back)" => 6,
+        _ => 7,
+    };
 
     /// <summary>FDK'nin bu profil, hız ve düzende kullandığı bit hızı aralığı (bit/s); açılmıyorsa ya da bilinmiyorsa null.</summary>
     public static (int EnAz, int EnCok)? Sinir(string profil, int hz, string duzen)
@@ -181,8 +290,11 @@ public static class FdkUyumu
         _ => duzen,
     };
 
-    /// <summary>FDK'ye verilecek profil ve bit hızı (CBR'de kb/s; VBR'de null) ve değiştiyse açıklaması.</summary>
-    public sealed record Karar(string Profil, int? BitHizi, string? Not);
+    /// <summary>
+    /// FDK'ye verilecek profil, bit hızı (CBR'de kb/s; VBR'de null), kip (VBR kipi değişebilir), örnekleme hızı (hız
+    /// bilinmiyorsa null), kodlayıcının göreceği kanal düzeni (bilinmiyorsa null) ve değiştiyse açıklaması.
+    /// </summary>
+    public sealed record Karar(string Profil, int? BitHizi, FdkModu Mod, int? OrnekHizi, string? Duzen, string? Not);
 
     /// <summary>
     /// [(profil, hız)] = 1–8 kanal ve 5.1.2(back) için (en az, en çok) gerçek bit hızı (bit/s); (0, 0): açılmaz. En çok

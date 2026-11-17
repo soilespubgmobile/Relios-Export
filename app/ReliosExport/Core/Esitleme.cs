@@ -43,6 +43,12 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, SesOlcum? Olcum, doubl
     public double? SonucTepe { get; init; }
 
     /// <summary>
+    /// Kaynağın ölçülen yüksekliği (LUFS; kanal sayısı ve hız çıktıdaki gibi). Karar sesin çıktıdaki hâlinin ölçümüyle
+    /// verildiyse (<see cref="Olcum"/>: AAC'de kodlanıp çözülen, sınırlayıcıdan geçen ses) ondan farklı olabilir.
+    /// </summary>
+    public double? KaynakYukseklik { get; init; }
+
+    /// <summary>
     /// Sınırlayıcının kıstığı ve (AAC çıktıda) kodlamanın düşürdüğü payı karşılamak için sese eklenen kazanç (dB;
     /// en çok <see cref="Esitleme.EnCokTelafi"/>; yalnızca AAC'de eksi olabilir).
     /// </summary>
@@ -159,7 +165,16 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, SesOlcum? Olcum, doubl
             else
             {
                 satirlar.Add($"LUFS eşitleme (hedef {HedefMetni} LUFS, tepe en çok {TavanMetni} dB)");
-                satirlar.Add($"Ölçülen: {Bir(o.Yukseklik)} LUFS · tepe {Bir(o.Tepe)} dBTP · ses aralığı {Bir(o.Aralik)} LU");
+                if (KaynakYukseklik is { } ky && Math.Abs(ky - o.Yukseklik) >= 0.05)
+                {
+                    // Karar çıktıdaki hâlin ölçümüyle (ör. AAC'nin DRC'si sesi kısıyor, sınırlayıcı yüksek sesi eziyor).
+                    satirlar.Add($"Ölçülen: {Bir(ky)} LUFS · tepe {Bir(o.Tepe)} dBTP · ses aralığı {Bir(o.Aralik)} LU");
+                    satirlar.Add($"Çıktıdaki hâli {Bir(o.Yukseklik)} LUFS (ses kodlamadaki zinciriyle denenip ölçüldü): karar bununla verildi.");
+                }
+                else
+                {
+                    satirlar.Add($"Ölçülen: {Bir(o.Yukseklik)} LUFS · tepe {Bir(o.Tepe)} dBTP · ses aralığı {Bir(o.Aralik)} LU");
+                }
                 var dokunma = TepeZorla ? "sesin yüksekliğine dokunulmadı" : "sese dokunulmadı";
                 satirlar.Add(Karar switch
                 {
@@ -276,6 +291,13 @@ public static class Esitleme
     /// denemede kodlanmadan ölçülür.
     /// </summary>
     public static bool KayipliMi(SesAyarlari s) => s.Kodlayici == SesKodlayici.FdkAac;
+
+    /// <summary>
+    /// FDK AAC'nin DRC'si açık mı (DRC profili seçili): FFmpeg'in AAC çözücüsü (oynatıcıların ve platformların çoğu)
+    /// DRC kazancını uygular, çözülen sesin yüksekliği ve tepesi kodlanan sesinkinden çok farklı olabilir (ölçüldü:
+    /// müzik · hafif, hedef -20'de -21,7 LUFS'luk ses -34,8 LUFS çözülüyor). Karar ve tepe koruması çözülen sesle.
+    /// </summary>
+    public static bool DrcVar(SesAyarlari s) => s.Kodlayici == SesKodlayici.FdkAac && s.Fdk.DrcProfili is > 0;
 
     /// <summary>
     /// Hedefe kazanç (+ telafi), ölçülen gerçek tepeyi tavanın üstüne çıkarır mı (tepe 0,1 dB'ye yuvarlı ölçüldüğü

@@ -78,13 +78,14 @@ public static class ArgsBuilder
         if (displayAspect > target)
         {
             // Kaynak daha geniş: yanlardan kırp.
-            var cw = Even(h * target / sar);
+            // En az 2 piksel (çok dar hedefte, ör. 16×8192, kırpma genişliği 0 çıkıp ffmpeg'i durduruyordu).
+            var cw = Math.Max(2, Even(h * target / sar));
             cw = Math.Min(cw, w - (w % 2));
             return new CropPlan(cw, h, (w - cw) / 2, 0, IsNeeded: true);
         }
 
         // Kaynak daha dar (ör. 9:19.5 telefon kaydı): üstten/alttan kırp.
-        var ch = Even(w * sar / target);
+        var ch = Math.Max(2, Even(w * sar / target));
         ch = Math.Min(ch, h - (h % 2));
         return new CropPlan(w, ch, 0, (h - ch) / 2, IsNeeded: true);
     }
@@ -408,15 +409,17 @@ public static class ArgsBuilder
         var flags = "flags=" + v.Olcekleme + (v.HassasYuvarlama ? "+accurate_rnd+full_chroma_int" : string.Empty);
         var renk = $"in_color_matrix={InputMatrix(media)}:out_range=tv:out_color_matrix=bt709";
 
+        var kat = YukseklikKati(a, media);
         if (v.Cozunurluk == CozunurlukModu.Kaynak)
         {
-            // Boyut aynı kalır (kare piksele açılır, çift sayıya yuvarlanır); yalnızca renk dönüşür.
-            filters.Add($"scale=trunc(iw*sar/2)*2:trunc(ih/2)*2:{flags}:{renk}");
+            // Boyut aynı kalır (kare piksele açılır, çift sayıya yuvarlanır; geçmeli 4:2:0'da yükseklik 4'ün katına);
+            // yalnızca renk dönüşür.
+            filters.Add($"scale=trunc(iw*sar/2)*2:trunc(ih/{kat})*{kat}:{flags}:{renk}");
         }
         else
         {
             var w = v.Genislik - (v.Genislik % 2);
-            var h = v.Yukseklik - (v.Yukseklik % 2);
+            var h = v.Yukseklik - (v.Yukseklik % kat);
             switch (v.Oran)
             {
                 case OranUyumu.OrtadanKirp:
@@ -732,6 +735,75 @@ public static class ArgsBuilder
     }
 
     /// <summary>
+    /// x264'ün açılışta reddettiği ama düzeltilebilen ayar (günlükteki iletisinden; x264'ün kendi hesabıyla): ayarı
+    /// <paramref name="a"/>'da düzeltip kısa açıklamasını döndürür; düzeltilecek bir şey yoksa null.
+    /// <list type="bullet">
+    /// <item>2 / 3 geçişte bit hızı bu videoda erişilemeyecek kadar düşük ("requested bitrate is too low. estimated
+    /// minimum is N kbps"; kısa ve küçük videoda kare başlıkları bile N kb/s tutar): N'nin %2 fazlasıyla.</item>
+    /// <item>Düz olmayan nicemleme matrisiyle (JVT) en yüksek QP x264'ün izin verdiği en düşük QP'nin altında ("Impossible
+    /// QP constraints for CQM (min=X, max=Y)"; JVT'de 8 bitte en az 1, 10 bitte 7, eksi kroma QP ofsetinde daha fazla):
+    /// en yüksek QP X.</item>
+    /// </list>
+    /// </summary>
+    public static string? X264Duzelt(string gunluk, ProfilAyarlari a)
+    {
+        if (a.Video.Kodlayici != VideoKodlayici.X264)
+        {
+            return null;
+        }
+
+        var x = a.Video.X264;
+        var dusuk = System.Text.RegularExpressions.Regex.Match(gunluk, @"requested bitrate is too low\. estimated minimum is (\d+) kbps");
+        if (dusuk.Success && x.Mod is X264Modu.IkiGecis or X264Modu.UcGecis
+            && int.TryParse(dusuk.Groups[1].Value, NumberStyles.Integer, Inv, out var enAz))
+        {
+            var eski = x.BitHizi;
+            var yeni = Math.Max((int)Math.Ceiling(enAz * 1.02) + 1, eski + 1);
+            if (yeni > 1_000_000)
+            {
+                return null;
+            }
+
+            x.BitHizi = yeni;
+            return $"{Bicim.BitHizi(eski)} bu videoda {(x.Mod == X264Modu.IkiGecis ? 2 : 3)} geçişle kodlanamıyor "
+                   + $"(x264: en az {enAz} kb/s): {Bicim.BitHizi(yeni)}";
+        }
+
+        var cqm = System.Text.RegularExpressions.Regex.Match(gunluk, @"Impossible QP constraints for CQM \(min=(\d+), max=(-?\d+)\)");
+        if (cqm.Success && int.TryParse(cqm.Groups[1].Value, NumberStyles.Integer, Inv, out var qpEnAz)
+            && x.QpMax is { } qpMax && qpMax < qpEnAz)
+        {
+            x.QpMax = qpEnAz;
+            return $"{(x.Cqm ?? "JVT").ToUpperInvariant()} nicemleme matrisiyle en yüksek QP en az {qpEnAz} olabilir "
+                   + $"(x264): qpmax {qpMax} → {qpEnAz}";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// x264 kayıpsız mı kodlayacak: 8 bitte CRF 0 (1'in altı) ya da QP 0, kayıpsız olabilen profilde (otomatik / High
+    /// 4:4:4; <see cref="X264Kayipsiz"/>). x264 kayıpsızda sabit QP'ye geçer ve VBV'yi (en yüksek bit hızı / tampon) yok
+    /// sayar. 10 bitte CRF 0 kayıpsız değildir (x264'te QP 12).
+    /// </summary>
+    public static bool X264KayipsizMi(ProfilAyarlari a, MediaInfo? m)
+    {
+        if (a.Video.Kodlayici != VideoKodlayici.X264)
+        {
+            return false;
+        }
+
+        var x = a.Video.X264;
+        var (crf, qp) = X264Kayipsiz(x, ProfilCoz(x.Profil, m));
+        return x.Mod switch
+        {
+            X264Modu.Crf => crf < 1 && PikselBicimi(a, m) != "yuv420p10le",
+            X264Modu.SabitQp => qp <= 0,
+            _ => false,
+        };
+    }
+
+    /// <summary>
     /// Kayıpsız ayar profil yüzünden değiştiyse kısa açıklama (satırdaki bilgi için), değilse null. Bkz. <see cref="X264Kayipsiz"/>.
     /// </summary>
     public static string? X264KayipsizNotu(ProfilAyarlari a, MediaInfo? media)
@@ -814,14 +886,41 @@ public static class ArgsBuilder
     public static (int Genislik, int Yukseklik) CiktiBoyutu(ProfilAyarlari a, MediaInfo m)
     {
         var v = a.Video;
+        var kat = YukseklikKati(a, m);
         if (v.Cozunurluk == CozunurlukModu.Kaynak)
         {
-            // Filtredeki gibi: scale=trunc(iw*sar/2)*2:trunc(ih/2)*2 (döndürme ffmpeg'de önce uygulanır).
+            // Filtredeki gibi: scale=trunc(iw*sar/2)*2:trunc(ih/kat)*kat (döndürme ffmpeg'de önce uygulanır).
             var sar = m.Rotation is 90 or 270 ? 1.0 / m.Sar : m.Sar;
-            return ((int)Math.Floor(m.DisplayWidth * sar / 2) * 2, m.DisplayHeight / 2 * 2);
+            return ((int)Math.Floor(m.DisplayWidth * sar / 2) * 2, m.DisplayHeight / kat * kat);
         }
 
-        return (v.Genislik - (v.Genislik % 2), v.Yukseklik - (v.Yukseklik % 2));
+        return (v.Genislik - (v.Genislik % 2), v.Yukseklik - (v.Yukseklik % kat));
+    }
+
+    /// <summary>
+    /// Çıktı yüksekliğinin katı: x264'te geçmeli (interlaced) kodlamada 4:2:0 görüntünün yüksekliği 4'ün katı olmalı
+    /// (iki alanın her birinde renk satırları çift sayıda; değilse x264 "height not divisible by 4" deyip açılmaz,
+    /// ör. 1080×1350); öteki durumlarda 2. Baseline'da geçmeli kodlama yok (yalnızca ilerleyen).
+    /// </summary>
+    public static int YukseklikKati(ProfilAyarlari a, MediaInfo? m) =>
+        a.Video.Kodlayici == VideoKodlayici.X264 && a.Video.X264.Gecmeli
+        && ProfilCoz(a.Video.X264.Profil, m) != "baseline"
+        && PikselBicimi(a, m).StartsWith("yuv420", StringComparison.Ordinal) ? 4 : 2;
+
+    /// <summary>Geçmeli 4:2:0'da hedef yükseklik 4'ün katına indiyse kısa açıklama (satırdaki bilgi); yoksa null.</summary>
+    public static string? YukseklikNotu(ProfilAyarlari a, MediaInfo? m)
+    {
+        if (YukseklikKati(a, m) != 4)
+        {
+            return null;
+        }
+
+        int? istenen = a.Video.Cozunurluk != CozunurlukModu.Kaynak
+            ? a.Video.Yukseklik - (a.Video.Yukseklik % 2)
+            : m is not null ? m.DisplayHeight / 2 * 2 : null;
+        return istenen is { } h && h % 4 != 0
+            ? $"geçmeli 4:2:0'da yükseklik 4'ün katı: {h} → {h / 4 * 4}"
+            : null;
     }
 
     /// <summary>NVENC'in sınırlı en yüksek bit hızı (kb/s); sınırsızsa (kayıpsızda da) null.</summary>
@@ -1296,14 +1395,13 @@ public static class ArgsBuilder
     // --------------------------------------------------------------------------- Ses
 
     /// <summary>
-    /// Sesin yüksekliğini değiştirmeden önceki filtreler: gecikme, seviye, mono → stereo. LUFS eşitlemede ölçüm de
-    /// bunlardan sonraki sese yapılır (kodlamada sabit kazanç aynı yerde durur).
-    /// <paramref name="kanalIndir"/>: LUFS eşitlemede çıktının kanal sayısına (mono / stereo) burada inilir; yükseklik
-    /// çıktıdaki kanallarla ölçülmeli (stereo ölçülüp sonra mono'ya inilince sonuç hedefin 3–6 dB altında kalır).
-    /// FDK AAC'de kanal "kaynakla aynı" ise ses burada FDK'nin kodlayabildiği düzene çevrilir (<see cref="FdkDuzenDonusumu"/>):
-    /// ölçüm, sınırlayıcı ve kodlama aynı kanallarla.
+    /// Sesin yüksekliğini değiştirmeden önceki filtreler: gecikme, seviye, kanal düzeni. LUFS eşitlemede ölçüm de
+    /// bunlardan sonraki sese yapılır (kodlamada sabit kazanç aynı yerde durur). Çıktının kanal sayısına (mono / stereo)
+    /// her zaman burada inilir (ölçümde, denemelerde ve kodlamada aynı yerde, aynı matrisle; <see cref="KanalDegisimi"/>):
+    /// yükseklik çıktıdaki kanallarla ölçülür, sınırlayıcı çıktıdaki kanalları sınırlar. FDK AAC'de kanal "kaynakla aynı"
+    /// ise ses burada FDK'nin kodlayabildiği düzene çevrilir (<see cref="FdkDuzenDonusumu"/>).
     /// </summary>
-    private static List<string> OnSesFiltreleri(SesAyarlari s, int? kaynakKanal, bool kanalIndir = false, string? kaynakDuzen = null)
+    private static List<string> OnSesFiltreleri(SesAyarlari s, int? kaynakKanal, string? kaynakDuzen = null)
     {
         var af = new List<string>();
         if (s.Gecikme > 0)
@@ -1326,24 +1424,50 @@ public static class ArgsBuilder
             // video stereo çalınınca kaynaktan sessiz kalırdı. Oynatıcılar da mono sesi iki hoparlöre aynen verir.
             af.Add("pan=stereo|c0=c0|c1=c0");
         }
-        else if (kanalIndir && s.Kanal == KanalModu.Mono && kaynakKanal != 1)
+        else if (s.Kanal == KanalModu.Mono && kaynakKanal != 1)
         {
             // Stereo → mono: ffmpeg'in "-ac 1" ile yaptığının aynısı (iki kanalın yarısı); başka kanal sayısında
-            // ffmpeg'in kendi indirmesi.
-            af.Add(kaynakKanal == 2 ? "pan=mono|c0=0.5*c0+0.5*c1" : "aformat=channel_layouts=mono");
+            // ffmpeg'in kendi indirmesi (ölçekli: KanalDegisimi).
+            af.Add(kaynakKanal == 2 ? "pan=mono|c0=0.5*c0+0.5*c1" : KanalDegisimi("mono"));
         }
-        else if (kanalIndir && s.Kanal == KanalModu.Stereo && kaynakKanal is > 2)
+        else if (s.Kanal == KanalModu.Stereo && kaynakKanal is > 2)
         {
-            af.Add("aformat=channel_layouts=stereo");
+            af.Add(KanalDegisimi("stereo"));
         }
 
         if (FdkDuzenDonusumu(s, kaynakKanal, kaynakDuzen) is { } duzen)
         {
-            af.Add("aformat=channel_layouts=" + duzen);
+            af.Add(KanalDegisimi(duzen));
         }
 
         return af;
     }
+
+    /// <summary>
+    /// Kanal düzeni değişimi (ör. 5.1 → stereo): FFmpeg'in kendi matrisi (orta ve arka kanallar -3 dB, LFE düşer),
+    /// katsayıların toplamı 1'i aşmayacak biçimde ölçeklenir (rematrix_maxval=1): "-ac 2" ile 16 bit sese inilince
+    /// olanın aynısı, kırpılmaz. Filtre olarak açıkça yazılır: "aformat" ile bırakılınca indirmeyi FFmpeg'in biçim
+    /// görüşmesi belirliyordu, zincirin devamına göre tam sayı (ölçekli) ya da kayan noktalı (ölçeksiz) yapıyordu;
+    /// 5.0 → stereo ölçümde ve kodlamada 7,6 dB farklı çıkabiliyordu (ölçüm doğruyken çıktı kısık kalıyordu).
+    /// </summary>
+    private static string KanalDegisimi(string duzen) => "aresample=ochl=" + duzen + ":rematrix_maxval=1";
+
+    /// <summary>
+    /// Titreşim (dither) yalnızca 16 bit çıktıda: FDK AAC (16 bit girer) ve 16 bit WAV. 24 / 32 bitte gereksizdir
+    /// (en düşük bit -144 dB'nin altında); üstelik FFmpeg'in gürültü biçimlendiren titreşimi (Shibata) 24 / 32 bit
+    /// çıktıda sesi bozuyor: -40 LUFS'luk ses yüksek bir gürültüyle -4 LUFS çıkıyor (8–48 kHz'te, ölçüldü).
+    /// </summary>
+    public static bool TitresimVar(SesAyarlari s) =>
+        s.Titresim != Titresim.Yok && (s.Kodlayici == SesKodlayici.FdkAac || s.WavBit == WavBitDerinligi.Bit16);
+
+    /// <summary>
+    /// Çıktıdaki sesin örnekleme hızı: FDK AAC'de FDK'nin kodlayacağı hız (<see cref="FdkUyumu.Hesapla"/>: 12 hızdan
+    /// biri; AAC-LD / ELD 22,05–48 kHz), WAV'da seçilen hız ya da kaynağınki. Bilinmiyorsa null.
+    /// </summary>
+    public static int? CiktiHizi(SesAyarlari s, SesSecimi ses) =>
+        s.Kodlayici == SesKodlayici.FdkAac
+            ? FdkKarari(s, ses)?.OrnekHizi
+            : s.OrnekHizi ?? ses.OrnekHizi;
 
     /// <summary>
     /// FDK AAC'de kanal "kaynakla aynı" iken kaynağın düzeni FDK'de yoksa (ör. 5.1(side), quad, 2.1, 7.1.4) FDK'nin
@@ -1377,6 +1501,22 @@ public static class ArgsBuilder
         s.Kodlayici != SesKodlayici.FdkAac || ses.Tur == SesSecimTuru.Yok
             ? null
             : FdkKarari(s, FdkHizi(s, ses.OrnekHizi), ses.Kanal, ses.Duzen);
+
+    /// <summary>
+    /// FDK AAC'de sesin çevrileceği hız (<paramref name="istenen"/>: seçilen hız ya da sınırlayıcının döneceği hız;
+    /// null: kaynağınki): FDK'nin kodlayacağı hız (<see cref="FdkUyumu.Hesapla"/>). Hız seçilmemişse ve kaynağınkiyle
+    /// aynıysa null (dönüşüm yok).
+    /// </summary>
+    private static int? FdkCiktiHizi(SesAyarlari s, int? istenen, int? kaynakHz, int? kaynakKanal, string? kaynakDuzen)
+    {
+        if ((istenen ?? kaynakHz) is not { } hz)
+        {
+            return null;
+        }
+
+        var son = FdkKarari(s, FdkUyumu.Hiz(hz), kaynakKanal, kaynakDuzen).OrnekHizi ?? FdkUyumu.Hiz(hz);
+        return istenen is not null || son != kaynakHz ? son : null;
+    }
 
     private static FdkUyumu.Karar FdkKarari(SesAyarlari s, int? hz, int? kaynakKanal, string? kaynakDuzen)
     {
@@ -1415,7 +1555,14 @@ public static class ArgsBuilder
             args.AddRange(["-t", sureSaniye.ToString("0.###", Inv)]);
         }
 
-        var af = OnSesFiltreleri(s, ses.Kanal, kanalIndir: true, ses.Duzen);
+        var af = OnSesFiltreleri(s, ses.Kanal, ses.Duzen);
+        if (CiktiHizi(s, ses) is { } hz && hz != ses.OrnekHizi)
+        {
+            // Ses çıktının hızında ölçülür: hız dönüşümü sesin en tizini keser (48 → 44,1 kHz'te beyaz gürültüde
+            // 0,25 LU); ölçülen yükseklik çıktıdakiyle aynı olsun.
+            af.Add(string.Create(Inv, $"aresample={hz}:{SoxrAyari(s)}"));
+        }
+
         if (SesUzunlugu(s, ses, sureSaniye) is > 0 and var uzunluk)
         {
             af.Add(HariciUzunluk(uzunluk));
@@ -1501,15 +1648,15 @@ public static class ArgsBuilder
     /// örnekleme hızı (null: kaynakla aynı ve dönüşüm yok; FDK AAC'de her zaman FDK'nin kodlayabildiği hız).
     /// <paramref name="uzunluk"/>: ses bu süreye tam getirilir (<see cref="SesUzunlugu"/>, <see cref="HariciUzunluk"/>;
     /// 0: dokunulmaz). <paramref name="harici"/>: aynı adlı harici ses (süresi bilinmiyorsa yalnızca doldurulur, video
-    /// bitince kesilir). <paramref name="olcumIcin"/>: zincir ölçülecek (kodlanmayacak): kanal sayısına zincirde inilir
-    /// (kodlamada -ac'nin yaptığının aynısı).
+    /// bitince kesilir). <paramref name="olcumIcin"/>: zincir ölçülecek (kodlanmayacak; WAV denemesi): hız FDK'ye göre
+    /// seçilmez.
     /// </summary>
     private static List<string> SesFiltreleri(
         SesAyarlari s, bool harici, int? kaynakKanal, SesOlcum? olcum, double telafi, int? kaynakHz, double uzunluk,
         out int? hedefHz, double tasmaPayi = 0, bool sinirla = false, bool olcumIcin = false, string? kaynakDuzen = null)
     {
         var esitleme = s.Esitleme && olcum is not null;
-        var af = OnSesFiltreleri(s, kaynakKanal, kanalIndir: esitleme || olcumIcin, kaynakDuzen);
+        var af = OnSesFiltreleri(s, kaynakKanal, kaynakDuzen);
         if (esitleme)
         {
             // Telafi de kazançtır: AAC'nin payı da tepeyi tavanın üstüne çıkarabilir (tepe tavana çok yakınsa).
@@ -1536,11 +1683,11 @@ public static class ArgsBuilder
         hedefHz = s.OrnekHizi ?? (sinirlayici ? kaynakHz ?? 48000 : null);
         if (s.Kodlayici == SesKodlayici.FdkAac && !olcumIcin)
         {
-            hedefHz = hedefHz is { } h ? FdkUyumu.Hiz(h)
-                : kaynakHz is { } k && !FdkUyumu.HizDestekli(k) ? FdkUyumu.Hiz(k)
-                : (int?)null;
+            hedefHz = FdkCiktiHizi(s, hedefHz, kaynakHz, kaynakKanal, kaynakDuzen);
         }
-        var kaliteVar = s.Kalite != DonusumKalitesi.Yuksek || s.Titresim != Titresim.Yok;
+
+        var titresim = TitresimVar(s);
+        var kaliteVar = s.Kalite != DonusumKalitesi.Yuksek || titresim;
         if (hedefHz is not null || kaliteVar)
         {
             var r = new List<string>();
@@ -1551,7 +1698,7 @@ public static class ArgsBuilder
 
             r.Add(SoxrAyari(s));
 
-            if (s.Titresim != Titresim.Yok)
+            if (titresim)
             {
                 r.Add("dither_method=" + s.Titresim switch
                 {
@@ -1649,13 +1796,14 @@ public static class ArgsBuilder
             // çektiği bit hızı komutta da gerçek değeriyle yazılır; açmadığı birleşimde en yakın açılan profil.
             var karar = FdkKarari(s, hedefHz ?? (kaynakHz is { } khz ? FdkUyumu.Hiz(khz) : (int?)null), kaynakKanal, kaynakDuzen);
             args.AddRange(["-c:a", "libfdk_aac", "-profile:a", karar.Profil]);
-            if (f.Mod == FdkModu.Cbr)
+            if (karar.Mod == FdkModu.Cbr)
             {
                 args.AddRange(["-b:a", (karar.BitHizi ?? f.BitHizi).ToString(Inv) + "k"]);
             }
             else
             {
-                args.AddRange(["-vbr", ((int)f.Mod).ToString(Inv)]);
+                // VBR kipi FdkUyumu'nun kararı (AAC-ELD'de SBR'siz en düşük kipe çıkabilir).
+                args.AddRange(["-vbr", ((int)karar.Mod).ToString(Inv)]);
             }
 
             if (f.Kesim > 0)

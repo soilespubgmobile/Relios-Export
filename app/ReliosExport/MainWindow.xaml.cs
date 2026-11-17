@@ -392,6 +392,7 @@ public partial class MainWindow : Window
         ProfilAdiniYaz();
         EtiketleriYaz();
         BekleyenleriYaz();
+        VarsayilanDugmesiniYaz();
     }
 
     private void OnAyarDegisti(object? sender, EventArgs e)
@@ -400,6 +401,30 @@ public partial class MainWindow : Window
         _kayit.Start();
         EtiketleriYaz();
         BekleyenleriYaz();
+        VarsayilanDugmesiniYaz();
+    }
+
+    /// <summary>Profillerin fabrika ayarı (ayar dosyasındaki hâliyle; Varsayılan düğmesi karşılaştırır).</summary>
+    private readonly Dictionary<ExportProfileId, string> _varsayilanlar = [];
+
+    /// <summary>
+    /// Varsayılan düğmesi yalnızca ayarlar profilin fabrika ayarından farklıyken tıklanır: her şey zaten varsayılandaysa
+    /// sönük (ipucu nedenini söyler), ayarlardan biri değişince yeniden tıklanır. Karşılaştırma ayar dosyasındaki
+    /// hâlleriyle (bütün video, ses ve anahtar kare ayarları).
+    /// </summary>
+    private void VarsayilanDugmesiniYaz()
+    {
+        var id = SelectedProfile.Id;
+        if (!_varsayilanlar.TryGetValue(id, out var fabrika))
+        {
+            fabrika = _varsayilanlar[id] = AyarDosyasi.Yaz(Varsayilanlar.For(id));
+        }
+
+        var varsayilanda = AyarDosyasi.Yaz(_ayarlar) == fabrika;
+        BtnVarsayilan.IsEnabled = !varsayilanda;
+        BtnVarsayilan.ToolTip = varsayilanda
+            ? "Ayarlar zaten bu profilin fabrika ayarında"
+            : "Bu profilin ayarlarını fabrika ayarına döndür";
     }
 
     private void KaydetHemen()
@@ -910,6 +935,7 @@ public partial class MainWindow : Window
                 try
                 {
                     EsitlemeRaporu? esitleme = null;
+                    var notlar = new List<string>();
                     var output = await Exporter.ExportAsync(
                         item.Path,
                         _outputFolder,
@@ -918,7 +944,8 @@ public partial class MainWindow : Window
                         progress,
                         info => item.Status = "Kodlanıyor · " + info,
                         token,
-                        r => esitleme = r);
+                        r => esitleme = r,
+                        yeniNot => notlar.Add(yeniNot));
                     item.OutputPath = output;
                     item.Progress = 1;
                     item.State = ItemState.Done;
@@ -927,7 +954,10 @@ public partial class MainWindow : Window
                                   + (item.Gecen is { } sure ? " · " + FileItem.SureMetni(sure) : string.Empty)
                                   + DosyaBoyutu(output)
                                   + (esitleme?.SatirMetni is { } sesSonucu ? " · " + sesSonucu : string.Empty);
-                    item.Detail = output + (esitleme is not null ? "\n\n" + esitleme.Ayrinti : string.Empty);
+                    // Programın ayarlarda yaptığı değişiklikler (ör. FDK'nin açmadığı birleşimde en yakın ayar) ipucunda kalır.
+                    item.Detail = output
+                                  + (notlar.Count > 0 ? "\n\nAyarlanan:\n" + string.Join("\n", notlar.Select(n => "• " + n)) : string.Empty)
+                                  + (esitleme is not null ? "\n\n" + esitleme.Ayrinti : string.Empty);
                     ok++;
                 }
                 catch (OperationCanceledException)

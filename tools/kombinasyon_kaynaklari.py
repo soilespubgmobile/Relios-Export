@@ -158,6 +158,12 @@ SES = [
     ('s32', 's32_pcm24_48k_60.mov', 48000, '6.0', 6, ['-c:a', 'pcm_s24le'], 'orta', False, 'PCM 24 bit 48 kHz 6.0 (FDK-LD açmaz)'),
     ('s33', 's33_pcm24_48k_3.0.mov', 48000, '3.0', 3, ['-c:a', 'pcm_s24le'], 'orta', False, 'PCM 24 bit 48 kHz 3.0'),
     ('s34', 's34_pcm24_48k_61back.mov', 48000, '6.1(back)', 7, ['-c:a', 'pcm_s24le'], 'orta', False, 'PCM 24 bit 48 kHz 6.1(back)'),
+    # FDK'nin 12 hızının eksik kalanları ("kaynakla aynı" hızda her FDK hızı denensin)
+    ('s35', 's35_pcm16_12k_stereo.mov', 12000, 'stereo', 2, ['-c:a', 'pcm_s16le'], 'orta', False, 'PCM 16 bit 12 kHz stereo'),
+    ('s36', 's36_pcm16_24k_stereo.mov', 24000, 'stereo', 2, ['-c:a', 'pcm_s16le'], 'orta', True, 'PCM 16 bit 24 kHz stereo, ani tepeler'),
+    ('s37', 's37_pcm24_64k_stereo.mov', 64000, 'stereo', 2, ['-c:a', 'pcm_s24le'], 'orta', False, 'PCM 24 bit 64 kHz stereo'),
+    ('s38', 's38_pcm24_96k_51.mov', 96000, '5.1', 6, ['-c:a', 'pcm_s24le'], 'orta', False, 'PCM 24 bit 96 kHz 5.1'),
+    ('s39', 's39_pcm16_16k_51.mov', 16000, '5.1', 6, ['-c:a', 'pcm_s16le'], 'orta', False, 'PCM 16 bit 16 kHz 5.1'),
 ]
 for ad, dosya, hz, duzen, kanal, codec, seviye, tepeli, aciklama in SES:
     ff(*video_girisi(), *ses_girisi(hz, duzen, kanal, 3, seviye, tepeli), *H264, *codec,

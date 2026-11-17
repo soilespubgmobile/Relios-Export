@@ -140,7 +140,7 @@ VIDEO = [
     Alan('Video.X264.KisitliIntra', ['true', 'false']),
     Alan('Video.X264.EkParametreler', ['', 'ref=2', 'no-mbtree=1:keyint=30', 'sync-lookahead=0:rc-lookahead=10']),
     Alan('AnahtarKare.Birim', ['Kare', 'Kare30', 'Saniye'], liste='AralikBirimleri'),
-    Alan('AnahtarKare.EnBuyuk', ['null', '1', '2', '10', '600']),
+    Alan('AnahtarKare.EnBuyuk', ['null', '1', '2', '10', '30', '600']),
     Alan('AnahtarKare.EnKucuk', ['null', '1', '26', '600']),
     Alan('AnahtarKare.SahneDegisimi', ['null', '0', '40', '100']),
     Alan('AnahtarKare.AcikGop', ['true', 'false']),
@@ -435,9 +435,99 @@ def uret(arg):
         durumlar.append(dict(ad=f'kenar{i + 1:02d}', grup='kenar', kaynak=kaynak, profil=profil, ayarla=ayar, aciklama=aciklama))
     print(f'kenar: {len(KENAR)} deneme')
 
+    derin = derin_ses()
+    mevcut = {k['ad'] for k in manifest}
+    derin = [x for x in derin if x[1] in mevcut]
+    for i, (alt, kaynak, ayar) in enumerate(derin):
+        durumlar.append(dict(ad=f'derin_{alt}{i + 1:04d}', grup='derin', kaynak=kaynak, profil='tiktok', ayarla=H + ayar))
+    print(f'derin ses: {len(derin)} deneme')
+
     with open(arg.cikti, 'w', encoding='utf-8') as f:
         json.dump(durumlar, f, ensure_ascii=False, indent=0)
     print(f'toplam {len(durumlar)} deneme: {arg.cikti}')
+
+
+def derin_ses():
+    """Sesin ayrıntılı taraması (çift kapsamının dışında, ızgara): (alt grup, kaynak, ayarlar)."""
+    d = []
+    # A1: FDK'nin her hızı ("kaynakla aynı" hız; kaynaklar her FDK hızında + FDK'de olmayanlar) × mono / stereo ×
+    # profil × CBR alt / orta / üst + VBR 1 / 5
+    hiz_kaynaklari = ['s12', 's06', 's09', 's35', 's11', 's07', 's36', 's10', 's02', 's01', 's37', 's13', 's03', 's14', 's08']
+    modlar = [['Ses.Fdk.Mod=Cbr', 'Ses.Fdk.BitHizi=8'], ['Ses.Fdk.Mod=Cbr', 'Ses.Fdk.BitHizi=128'],
+              ['Ses.Fdk.Mod=Cbr', 'Ses.Fdk.BitHizi=800'], ['Ses.Fdk.Mod=Vbr1'], ['Ses.Fdk.Mod=Vbr5']]
+    profiller = ['aac_low', 'aac_he', 'aac_he_v2', 'aac_ld', 'aac_eld']
+    for kaynak in hiz_kaynaklari:
+        for kanal in ('Mono', 'Stereo'):
+            for profil in profiller:
+                for mod in modlar:
+                    d.append(('fdkhiz', kaynak, ['Ses.Kaynak=VideonunSesi', 'Ses.Kodlayici=FdkAac', 'Ses.OrnekHizi=null',
+                                                 f'Ses.Kanal={kanal}', f'Ses.Fdk.Profil={profil}'] + mod))
+    # A2: çok kanallı ses × seçilen hız (kaynakla aynı / 44,1 / 96 kHz) × profil × CBR orta / üst + VBR 3
+    for kaynak in ('s05', 's26', 's30', 's34', 's33', 's25', 's29', 's38', 's39', 's16', 's31'):
+        for hz in ('null', '44100', '96000'):
+            for profil in profiller:
+                for mod in (['Ses.Fdk.Mod=Cbr', 'Ses.Fdk.BitHizi=128'], ['Ses.Fdk.Mod=Cbr', 'Ses.Fdk.BitHizi=800'], ['Ses.Fdk.Mod=Vbr3']):
+                    d.append(('fdkkanal', kaynak, ['Ses.Kaynak=VideonunSesi', 'Ses.Kodlayici=FdkAac', f'Ses.OrnekHizi={hz}',
+                                                   'Ses.Kanal=Kaynak', f'Ses.Fdk.Profil={profil}'] + mod))
+    # B: WAV bit derinliği × titreşim × hız × dönüşüm kalitesi
+    i = 0
+    for bit in ('Bit16', 'Bit24', 'Bit32', 'Float32'):
+        for titresim in ('Yok', 'Ucgen', 'UcgenYuksekGecis', 'Shibata'):
+            for hz in ('null', '44100', '48000', '96000'):
+                for kalite in ('Yuksek', 'CokYuksek', 'EnYuksek'):
+                    i += 1
+                    kaynak = ('s01', 's02', 's09', 's08')[i % 4]
+                    d.append(('wav', kaynak, ['Ses.Kaynak=VideonunSesi', 'Ses.Kodlayici=Wav', f'Ses.WavBit={bit}',
+                                              f'Ses.Titresim={titresim}', f'Ses.OrnekHizi={hz}', f'Ses.Kalite={kalite}']))
+    # C: kanal indirme / düzen çevirme: her çok kanallı kaynak × kanal × kodlayıcı × eşitleme
+    for kaynak in ('s05', 's16', 's23', 's24', 's25', 's26', 's27', 's28', 's29', 's30', 's31', 's32', 's33', 's34', 's38',
+                   'h03', 'h11', 'h17'):
+        for kanal in ('Mono', 'Stereo', 'Kaynak'):
+            for kod in ('FdkAac', 'Wav'):
+                for esit in ('true', 'false'):
+                    d.append(('kanal', kaynak, ['Ses.Kaynak=AyniAdliDosyaOncelikli', f'Ses.Kanal={kanal}', f'Ses.Kodlayici={kod}',
+                                                f'Ses.Esitleme={esit}']))
+    # D: gecikme × uzunluk (kısa / uzun / geç başlayan ses, MPEG-TS, harici dosyalar) × kodlayıcı
+    for kaynak in ('s01', 's41', 's42', 's43', 's47', 's44', 's45', 'h01', 'h07', 'h14', 'h15'):
+        for gecikme in ('-60000', '-1500', '-250', '0', '250', '1500', '60000'):
+            for kod in ('FdkAac', 'Wav'):
+                d.append(('gecikme', kaynak, ['Ses.Kaynak=AyniAdliDosyaOncelikli', f'Ses.Gecikme={gecikme}', f'Ses.Kodlayici={kod}']))
+    # E: iki ses izi
+    for kod in ('FdkAac', 'Wav'):
+        for esit in ('true', 'false'):
+            for kanal in ('Kaynak', 'Mono', 'Stereo'):
+                d.append(('iz', 's40', ['Ses.Kaynak=VideonunSesi', f'Ses.Kodlayici={kod}', f'Ses.Esitleme={esit}', f'Ses.Kanal={kanal}']))
+    # F: FDK DRC ve kesim
+    for drc in ('1', '2', '3', '4', '5'):
+        for hedef in ('-31', '-20', '0'):
+            for sik in ('null', '3'):
+                for esit_hedef in ('-14', '-23'):
+                    d.append(('drc', 's01', ['Ses.Kaynak=VideonunSesi', 'Ses.Kodlayici=FdkAac', f'Ses.Fdk.DrcProfili={drc}',
+                                             f'Ses.Fdk.DrcHedef={hedef}', f'Ses.Fdk.SikistirmaProfili={sik}',
+                                             'Ses.Fdk.SikistirmaHedef=-16', f'Ses.EsitlemeHedef={esit_hedef}']))
+    for prog in ('-31', '-23', '0'):
+        d.append(('drc', 's49', ['Ses.Kaynak=VideonunSesi', 'Ses.Kodlayici=FdkAac', f'Ses.Fdk.ProgramSeviyesi={prog}']))
+    for kesim in ('1', '100', '1000', '4000', '16000', '20000'):
+        for kaynak in ('s06', 's01', 's03'):
+            d.append(('kesim', kaynak, ['Ses.Kaynak=VideonunSesi', 'Ses.Kodlayici=FdkAac', 'Ses.OrnekHizi=null', f'Ses.Fdk.Kesim={kesim}']))
+    # G: ses yüksekliği: hedef × tavan × sınırlayıcı × yön × kaynak (kısık / yüksek / tepeli) × kodlayıcı
+    for hedef in ('-40', '-23', '-14', '-5'):
+        for tavan in ('-12', '-1', '-0.1'):
+            for sinir in ('true', 'false'):
+                for yon in ('YalnizcaYukselt', 'IkiYon'):
+                    for kaynak in ('s01', 's49', 's08', 's02', 's04'):
+                        for kod in ('FdkAac', 'Wav'):
+                            d.append(('yukseklik', kaynak, ['Ses.Kaynak=VideonunSesi', f'Ses.Kodlayici={kod}', 'Ses.Esitleme=true',
+                                                            f'Ses.EsitlemeHedef={hedef}', f'Ses.SinirlayiciTavan={tavan}',
+                                                            f'Ses.Sinirlayici={sinir}', f'Ses.EsitlemeYonu={yon}']))
+    for seviye in ('-60', '6', '30'):
+        for kaynak in ('s01', 's49'):
+            for kod in ('FdkAac', 'Wav'):
+                for sinir in ('true', 'false'):
+                    for esit in ('true', 'false'):
+                        d.append(('seviye', kaynak, ['Ses.Kaynak=VideonunSesi', f'Ses.Kodlayici={kod}', f'Ses.Seviye={seviye}',
+                                                     f'Ses.Sinirlayici={sinir}', f'Ses.Esitleme={esit}']))
+    return d
 
 
 H = HIZLI_GORUNTU
@@ -550,6 +640,14 @@ class Araclar:
             satirlar.append(f'çözücü çıkış kodu {r.returncode}')
         return satirlar
 
+    def ses_bitisi(self, dosya, indeks):
+        """Ses izinin FFmpeg'in zaman çizelgesinde (dosyanın başlangıcına göre) bittiği an, çözülerek (sn)."""
+        r = subprocess.run([self.ffmpeg, '-hide_banner', '-nostdin', '-nostats', '-progress', 'pipe:1', '-i', dosya,
+                            '-map', f'0:{indeks}', '-f', 'null', '-'],
+                           capture_output=True, text=True, encoding='utf-8', errors='replace')
+        us = re.findall(r'out_time_us=(\d+)', r.stdout)
+        return int(us[-1]) / 1e6 if us else None
+
     def r128(self, dosya, iz=0):
         """Sesin tümleşik yüksekliği (LUFS) ve gerçek tepesi (dBTP, çerçeve bilgisinden; son ~100 ms özetten)."""
         r = subprocess.run([self.ffmpeg, '-hide_banner', '-nostdin', '-nostats', '-i', dosya, '-map', f'0:a:{iz}', '-vn',
@@ -650,17 +748,59 @@ DUZEN_KANAL = {'mono': 1, 'stereo': 2, '3.0': 3, '4.0': 4, '5.0': 5, '5.1': 6, '
 AAC_PROFIL = {'aac_low': 'LC', 'aac_he': 'HE-AAC', 'aac_he_v2': 'HE-AACv2', 'aac_ld': 'LD', 'aac_eld': 'ELD'}
 
 
-def fdk_profili(profil, hz, duzen):
-    """Program FDK'nin açmadığı birleşimde hangi profile geçmeli (FdkUyumu.Hesapla'nın kuralları, ayrı yazılmış)."""
+VBR_KANAL = {'mono': [32000, 40000, 56000, 72000, 112000], 'diger': [20000, 32000, 48000, 64000, 96000]}
+ETKIN_KANAL = {'mono': 1, 'stereo': 2, '3.0': 3, '4.0': 4, '5.0': 5, '5.1': 5, '6.1(back)': 6, '7.1': 7, '7.1(wide)': 7, '5.1.2(back)': 7}
+
+
+def vbr_bit_hizi(mod, duzen):
+    """FDK'nin VBR kipinde hedeflediği bit hızı (aacenc.cpp configTabVBR; mono'da kanal başına ayrı tablo)."""
+    if duzen == 'mono':
+        return VBR_KANAL['mono'][mod - 1]
+    return VBR_KANAL['diger'][mod - 1] * ETKIN_KANAL[duzen]
+
+
+def eld_sbrsiz_en_az(hz, kanal):
+    """FDK eldSbrAutoConfigTab: bu bit hızının altında ELD SBR kullanır (FFmpeg çözemez). Ayrı yazılmış."""
+    if kanal not in (1, 2) or hz > 48000 or hz < 16000:
+        return None
+    esikler = {1: [(44100, 64000), (32000, 56000), (22050, 40000), (16000, 28000)],
+               2: [(44100, 128000), (32000, 96000), (22050, 80000), (16000, 64000)]}[kanal]
+    for alt, esik in esikler:
+        if hz >= alt:
+            return esik
+    return None
+
+
+def fdk_karari(profil, hz, duzen, mod, bit):
+    """Program FDK'nin açmadığı ya da FFmpeg'in çözemediği birleşimde hangi ayara geçmeli (FdkUyumu.Hesapla'nın
+    kuralları, ayrı yazılmış): (profil, hız, VBR kipi 0 = CBR, CBR'de istenen bit hızı alt sınırı)."""
     if profil not in AAC_PROFIL:
         profil = 'aac_low'
-    if profil == 'aac_he_v2' and duzen and DUZEN_KANAL[duzen] != 2:
+    kanal = DUZEN_KANAL[duzen] if duzen else None
+    if profil == 'aac_he_v2' and kanal and kanal != 2:
         profil = 'aac_he'
     if profil in ('aac_he', 'aac_he_v2') and hz and hz < 16000:
         profil = 'aac_low'
-    if profil in ('aac_ld', 'aac_eld') and duzen in ('7.1', '7.1(wide)'):
+    if profil == 'aac_he' and hz == 96000 and kanal and kanal >= 3:
+        hz = 88200
+    if profil in ('aac_ld', 'aac_eld') and duzen in ('7.1', '7.1(wide)', '5.1.2(back)'):
         profil = 'aac_low'
-    return profil
+    if profil in ('aac_ld', 'aac_eld') and hz and (hz < 22050 or hz > 48000):
+        hz = 48000 if hz > 48000 else 22050
+    en_az = None
+    if profil == 'aac_eld' and hz and kanal in (1, 2):
+        esik = eld_sbrsiz_en_az(hz, kanal)
+        if esik:
+            if mod == 0:
+                en_az = esik // 1000
+            else:
+                while mod < 5 and vbr_bit_hizi(mod, duzen) < esik:
+                    mod += 1
+    return profil, hz, mod, en_az
+
+
+def fdk_profili(profil, hz, duzen):
+    return fdk_karari(profil, hz, duzen, 0, 128)[0]
 
 
 def asc_oku(extradata_metin):
@@ -852,7 +992,7 @@ def dogrula(d, rc, gunluk, ayar, k, kaynak_bilgi, ff, arg):
         farklar += x264_dogrula(sec, x, ayar['AnahtarKare'], o_fps or s_fps or 30, profil, gunluk)
 
     # ----------------------------------------------------------------------------------------- ses
-    farklar += ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v)
+    farklar += ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v, os.path.join(arg.kaynak, k['dosya']))
 
     # ----------------------------------------------------------------------------------------- çözme
     cozme = ff.coz(dosya)
@@ -880,8 +1020,13 @@ def x264_dogrula(sec, x, kare, fps, profil, gunluk):
     mod = x['Mod']
     rc = sec.get('rc')
     bek_rc = {'Crf': 'crf', 'SabitQp': 'cqp', 'OrtalamaBitHizi': 'abr', 'IkiGecis': '2pass', 'UcGecis': '2pass', 'Cbr': 'cbr'}[mod]
-    if mod == 'OrtalamaBitHizi' and params.get('vbv-maxrate') and params.get('vbv-bufsize') and params['vbv-maxrate'] == str(x['BitHizi']):
+    if mod == 'OrtalamaBitHizi' and params.get('vbv-bufsize') and (
+            not params.get('vbv-maxrate') or int(params['vbv-maxrate']) <= int(x['BitHizi'])):
+        # x264: tampon var ama en yüksek bit hızı yok ya da ortalamadan düşük → "assuming CBR"
         bek_rc = {'abr', 'cbr'}
+    if mod == 'Crf' and 'crf' in params and float(params['crf']) < 1 and profil != 'high10':
+        # 8 bitte CRF 0 kayıpsızdır: x264 sabit QP 0'a geçer
+        bek_rc = 'cqp'
     if isinstance(bek_rc, set):
         if rc not in bek_rc:
             f.append(f'x264 rc={rc} (beklenen {bek_rc})')
@@ -914,7 +1059,7 @@ def x264_dogrula(sec, x, kare, fps, profil, gunluk):
     return f
 
 
-def ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v):
+def ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v, kaynak_yolu):
     f = []
     s = ayar['Ses']
     harici_var = bool(k.get('harici'))
@@ -954,6 +1099,7 @@ def ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v)
     if fdk:
         hz = fdk_hizi(hz)
     o_hz = int(a.get('sample_rate') or 0)
+    fdk_mod = 0 if s['Fdk']['Mod'] == 'Cbr' else int(s['Fdk']['Mod'][3:])
     # beklenen kanal düzeni
     if s['Kanal'] == 'Mono':
         duzen, kanal = 'mono', 1
@@ -968,7 +1114,14 @@ def ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v)
         if a.get('codec_name') != 'aac':
             f.append(f'ses {a.get("codec_name")} (beklenen aac)')
             return f
-        bek_profil = fdk_profili(s['Fdk']['Profil'], hz, duzen)
+        bek_profil, hz, bek_mod, bit_en_az = fdk_karari(s['Fdk']['Profil'], hz, duzen, fdk_mod, s['Fdk']['BitHizi'])
+        if bek_mod:
+            if f' -vbr {bek_mod} ' not in komut + ' ':
+                f.append(f'komutta VBR kipi (beklenen -vbr {bek_mod})')
+        elif bit_en_az:
+            m = re.search(r'-b:a (\d+)k', komut)
+            if not m or int(m.group(1)) < bit_en_az:
+                f.append(f'komutta bit hızı {m.group(1) if m else "-"} (ELD SBR\'siz en az {bit_en_az})')
         m = re.search(r'-profile:a (\S+)', komut)
         if not m or m.group(1) != bek_profil:
             f.append(f'komutta profil {m.group(1) if m else "-"} (beklenen {bek_profil})')
@@ -985,8 +1138,9 @@ def ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v)
             if aot not in kabul:
                 f.append(f'AAC nesne türü {aot} (beklenen {bek_aot}, profil {bek_profil})')
             bek_kc = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 11, 8: 12}.get(kanal)
-            if bek_profil == 'aac_he_v2' or (bek_profil in ('aac_he',) and False):
-                bek_kc = 1 if aot == 29 else bek_kc
+            if bek_profil == 'aac_he_v2':
+                # parametrik stereo: çekirdek mono, ASC'de kanal yapılandırması 1 (her sinyalleşmede)
+                bek_kc = 1
             if duzen in ('7.1', '7.1(wide)', '5.1.2(back)') and kc in (0, 7, 12, 13, 14):
                 pass  # 8 kanal: düzene göre farklı yapılandırma (0: PCE)
             elif aot != 29 and kc != bek_kc and not (kc == 0 and kanal > 2):
@@ -1020,9 +1174,8 @@ def ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v)
     elif s['Gecikme'] != 0:
         bek_son = dosya_suresi(src)
     else:
-        bek_son = None
-        if secilen.get('duration'):
-            bek_son = float(secilen['duration']) + max(0.0, float(secilen.get('start_time') or 0))
+        # sesin çözülünce bittiği an (kabın yazdığı süre MPEG-TS'de güvenilmez): FFmpeg'in zaman çizelgesinde
+        bek_son = ff.ses_bitisi(kaynak_yolu, int(secilen.get('index', 0)))
     if bek_son and abs(o_son - bek_son) > 0.06:
         f.append(f'ses {o_son:.3f} sn\'de bitiyor (beklenen {bek_son:.3f})')
     # yükseklik ve gerçek tepe
@@ -1038,10 +1191,13 @@ def ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v)
             pay = 0.3 if '/Sinirli' in karar else 0.1
             if abs(i - hedef) > pay:
                 f.append(f'yükseklik {i:.2f} LUFS (hedef {hedef}, karar {karar})')
-        elif ana == 'Hedefte' and abs(i - hedef) > 0.6:
-            f.append(f'yükseklik {i:.2f} LUFS, karar Hedefte (hedef {hedef})')
-        elif ana == 'ZatenYuksek' and i < hedef - 0.6:
-            f.append(f'yükseklik {i:.2f} LUFS, karar ZatenYuksek (hedef {hedef})')
+        else:
+            # dokunulmayan seste tepe koruması sınırlayıcıyı tavanın altına çektiyse yükseklik o kadar düşebilir
+            pay = 0.6 + (tepe_payi(gunluk) if '/Sinirli' in karar else 0)
+            if ana == 'Hedefte' and abs(i - hedef) > pay:
+                f.append(f'yükseklik {i:.2f} LUFS, karar Hedefte (hedef {hedef})')
+            elif ana == 'ZatenYuksek' and i < hedef - pay:
+                f.append(f'yükseklik {i:.2f} LUFS, karar ZatenYuksek (hedef {hedef})')
         if ulasilamadi and i > hedef + 0.1:
             f.append(f'"hedefe ulaşılamadı" ama yükseklik {i:.2f} > hedef {hedef}')
     yukseltildi = s['Esitleme'] and karar is not None and karar.startswith('Dogrusal')
@@ -1049,6 +1205,12 @@ def ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v)
         if not (s['Seviye'] > 0 and not s['Sinirlayici'] and not yukseltildi):
             f.append(f'gerçek tepe {tepe:.3f} dBTP > tavan {tavan} (karar {karar})')
     return f
+
+
+def tepe_payi(gunluk):
+    y = next((y for y in gunluk if y.startswith('TEPE_PAYI=')), '')
+    m = re.match(r'TEPE_PAYI=(\S+)', y)
+    return float(m.group(1)) if m else 0.0
 
 
 def nvenc_dogrula(gunluk, ayar):

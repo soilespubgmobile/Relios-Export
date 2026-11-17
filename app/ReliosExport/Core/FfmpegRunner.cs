@@ -184,6 +184,11 @@ public static class Exporter
 
     /// <param name="onInfo">Kaynak incelendikten sonra kısa bilgi verir (ör. "1920×1080 · 60 fps · 9:16 kırpılıyor").</param>
     /// <param name="onEsitleme">LUFS eşitleme açıksa, bitince eşitlemenin raporu (ölçüm, karar, çıktının ölçülen yüksekliği).</param>
+    /// <param name="onNot">
+    /// Programın ayarlarda yaptığı her değişikliğin kısa açıklaması (kodlayıcının açamadığı ya da oynatıcıların
+    /// çözemediği birleşimde en yakın çalışan ayar; ör. "AAC-LD yalnızca 22,05–48 kHz'te çalınabiliyor: 48 kHz"):
+    /// baştakiler kodlama başlamadan, x264'ün açılışta reddettiği ayarın düzeltmesi olduğu anda. Satırın ipucuna yazılır.
+    /// </param>
     public static async Task<string> ExportAsync(
         string input,
         string outputFolder,
@@ -192,7 +197,8 @@ public static class Exporter
         IProgress<double>? progress,
         Action<string>? onInfo,
         CancellationToken ct,
-        Action<EsitlemeRaporu>? onEsitleme = null)
+        Action<EsitlemeRaporu>? onEsitleme = null,
+        Action<string>? onNot = null)
     {
         // Kodlama sürerken arayüzde ayar değişse bile bu video başladığı ayarlarla biter.
         var a = ayarlar.Kopya();
@@ -209,15 +215,22 @@ public static class Exporter
         }
 
         var ses = await ArgsBuilder.SesSecAsync(Tools.Ffprobe, a.Ses, media, input, ct);
+        var ekler = new List<string>();
+        foreach (var bastaki in Notlar(media, a, ses))
+        {
+            onNot?.Invoke(bastaki);
+        }
+
         onInfo?.Invoke(Describe(media, a, ses));
         EsitlemeRaporu? rapor = null;
         SesOlcum? olcum = null;
         var duzeltme = new SesDuzeltme();
         if (ses.Tur != SesSecimTuru.Yok && (a.Ses.Esitleme || a.Ses.Sinirlayici))
         {
-            // 1. geçiş: sesin yüksekliği ve gerçek tepesi ölçülür (yalnızca ses okunur, kısa sürer). LUFS eşitleme açıksa
-            // karar: dokunulmaz ya da bütün ses aynı miktarda (sabit kazanç) hedefe. Tepe koruması kaynağın tepesiyle
-            // başlar (sınırlayıcı açıksa ya da eşitleme sesi değiştiriyorsa).
+            // 1. geçiş: sesin yüksekliği ve gerçek tepesi ölçülür (yalnızca ses okunur, kısa sürer; kanal sayısı ve
+            // örnekleme hızı çıktıdaki gibi). LUFS eşitleme açıksa karar: dokunulmaz ya da bütün ses aynı miktarda
+            // (sabit kazanç) hedefe. Tepe koruması kaynağın tepesiyle başlar (sınırlayıcı açıksa ya da eşitleme sesi
+            // değiştiriyorsa).
             onInfo?.Invoke(Describe(media, a, ses) + " · ses ölçülüyor");
             var cikti = new List<string>();
             // Ölçüm, denemeler ve kodlama aynı süreyle (aynı adlı harici ses videonun süresine tam getirilir).
@@ -237,53 +250,111 @@ public static class Exporter
             var olcumGunlugu = string.Join('\n', cikti);
             var kaynakOlcum = ArgsBuilder.OlcumOku(olcumGunlugu);
             var kaynakTepe = ArgsBuilder.TepeOku(olcumGunlugu)?.Db;
-            if (a.Ses.Esitleme)
-            {
-                rapor = Esitleme.KararVer(a.Ses, kaynakOlcum);
-                onInfo?.Invoke(Describe(media, a, ses, rapor));
-            }
-
-            // Ölçüm yalnızca ses yükseltilecek / kısılacaksa zincire girer (dokunulmayan sesin yüksekliği aynı kalır).
-            var uygulandi = rapor is { Uygulandi: true };
-            olcum = uygulandi ? rapor!.Olcum : null;
             var hedef = a.Ses.EsitlemeHedef;
             var tavan = a.Ses.SinirlayiciTavan;
             var kayipli = Esitleme.KayipliMi(a.Ses);
+            var denemeDosyasi = kayipli
+                ? Path.Combine(Path.GetTempPath(), "Relios Export", "deneme-" + Guid.NewGuid().ToString("N") + ".m4a")
+                : null;
 
-            // Tepe koruması: sınırlayıcı açıksa (ya da eşitleme sesi değiştiriyorsa: kutu kapalı olsa da) çıktının gerçek
-            // tepesi tavanı aşmaz; AAC'de çözülen sesinki. AAC kodlaması ve örnekleme hızı dönüşümü tepeyi biraz
-            // yükseltir (kullanıcının videolarında AAC 128 kb/s 0,1–1 dB): ses kodlanıp ölçülür, aşarsa sınırlayıcı
-            // aşağı çekilip yeniden denenir. Tepesi tavanın altında kalan sese dokunulmaz (WAV'da bit bit aynı).
-            var koruma = a.Ses.Sinirlayici || uygulandi;
-            double Kazanc(SesDuzeltme d) => uygulandi ? hedef - olcum!.Yukseklik + d.Telafi : 0;
-            bool Sinirlayici(SesDuzeltme d) => ArgsBuilder.SinirlayiciVar(a.Ses, olcum, d.Telafi, d.TasmaPayi, d.Sinirla);
-            // Yükseklik denemesi: sınırlayıcı tepeleri kıstıkça yükseklik hedefin altında kalır; AAC tizleri kestiği için
-            // yükseklik biraz düşer (kullanıcının OBS kaydında 128 kb/s'de 0,16 LU): ölçülen eksik kadar telafi edilir.
-            bool YukseklikDenemesi(SesDuzeltme d) => uygulandi && (kayipli || Sinirlayici(d));
-
-            // Kaynağın tepesi (kazançla) tavanı zaten aşıyorsa sınırlayıcı baştan zincirde (ses yükseltilmese de).
-            if (koruma && kaynakTepe is { } kt && !Sinirlayici(duzeltme) && kt + Kazanc(duzeltme) + Esitleme.TepePayi > tavan)
+            // Deneme (yalnızca ses): ses kodlamadaki zincirle ölçülür; çıktının sesi AAC ise önce AAC'ye çevrilir
+            // (ölçülen, çözülen sesinki: oynatıcıların ve platformların duyduğu). Ölçerin çıktısını döndürür.
+            async Task<string> Dene(SesOlcum? o, SesDuzeltme d)
             {
-                duzeltme = duzeltme with { Sinirla = true };
-            }
+                var denemeCikti = new List<string>();
+                var denemeler = new List<List<string>>();
+                if (denemeDosyasi is not null)
+                {
+                    denemeler.Add(ArgsBuilder.DenemeKodlamaKomutu(a.Ses, input, ses, sesSuresi, o, d.Telafi, denemeDosyasi,
+                        d.TasmaPayi, d.Sinirla));
+                    denemeler.Add(Esitleme.SonucOlcumKomutu(denemeDosyasi));
+                }
+                else
+                {
+                    denemeler.Add(ArgsBuilder.DenemeOlcumKomutu(a.Ses, input, ses, sesSuresi, o, d.Telafi, d.TasmaPayi, d.Sinirla));
+                }
 
-            // Tepe denemesi gerekmez: ses sessiz ya da tavandan çok kısık (kodlama tepeyi en çok EnCokTasmaPayi kadar
-            // yükseltse de tavanı aşmaz).
-            var tepeDenemesi = koruma && kaynakTepe is { } kt2 && kt2 + Kazanc(duzeltme) + Esitleme.EnCokTasmaPayi > tavan;
-            double? ilkTepe = null;
-            var tasma = 0.0;
-            var sinir = false;
-            var denendi = false;
-            if (tepeDenemesi || YukseklikDenemesi(duzeltme))
-            {
-                // Deneme (yalnızca ses): kodlamadaki ses zinciriyle sesin yüksekliği ve gerçek tepesi ölçülür; çıktının
-                // sesi AAC ise ses önce AAC'ye çevrilir (ölçülen, çözülen sesinki). Gerekirse telafi ve sınırlayıcının
-                // tavanı düzeltilip yeniden denenir; kodlama son denemenin ayarıyla yapılır.
-                var denemeDosyasi = kayipli
-                    ? Path.Combine(Path.GetTempPath(), "Relios Export", "deneme-" + Guid.NewGuid().ToString("N") + ".m4a")
-                    : null;
                 try
                 {
+                    if (denemeDosyasi is not null)
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(denemeDosyasi)!);
+                        await FfmpegRunner.RunAsync(denemeler[0], 0, null, ct);
+                    }
+
+                    await FfmpegRunner.RunAsync(denemeler[^1], 0, null, ct, denemeCikti);
+                }
+                catch (FfmpegHatasi ex)
+                {
+                    ex.GunlukDosyasi = HataAciklamasi.GunlukYaz(input, GunlukMetni(ex, input, profile, media, a, ses, rapor, denemeler));
+                    throw;
+                }
+
+                return string.Join('\n', denemeCikti);
+            }
+
+            try
+            {
+                // Kararın ölçümü: sesin çıktıdaki hâli. Kaynağın ölçümü kodlamadan önceki sesinkidir; AAC'de çözülen ses
+                // ondan kısık olabilir (AAC tizleri keser; FDK'nin DRC ayarlarıyla çözücü sesi kısıp sıkıştırır; çok
+                // düşük kesim frekansı sesin çoğunu siler), sınırlayıcı (elle yükseltmede ya da tavanı aşan tepede)
+                // yüksek sesi kısar. Ses o zaman bir kez kazançsız denenir (AAC'de kodlanıp çözülür), "zaten yüksek" /
+                // "hedefte" kararı ve kazanç çıktının gerçek yüksekliğiyle verilir. WAV'da sınırlayıcı yoksa ölçüm
+                // zaten çıktının sesidir (aynı kanallar, aynı hız). Tepe: kaynağınki (kodlayıcıya giren sesin tahmini).
+                var ilk = new SesDuzeltme(Sinirla: a.Ses.Sinirlayici && kaynakTepe is { } t0 && t0 + Esitleme.TepePayi > tavan);
+                string? ilkGunluk = null;
+                if (a.Ses.Esitleme)
+                {
+                    var kararOlcum = kaynakOlcum;
+                    if (kaynakOlcum is not null && (kayipli || ArgsBuilder.SinirlayiciVar(a.Ses, null, 0, 0, ilk.Sinirla)))
+                    {
+                        onInfo?.Invoke(Describe(media, a, ses) + " · sesin çıktıdaki yüksekliği ölçülüyor");
+                        ilkGunluk = await Dene(null, ilk);
+                        if (ArgsBuilder.OlcumOku(ilkGunluk) is { } cikis)
+                        {
+                            kararOlcum = kaynakOlcum with { Yukseklik = cikis.Yukseklik };
+                        }
+                    }
+
+                    rapor = Esitleme.KararVer(a.Ses, kararOlcum) with { KaynakYukseklik = kaynakOlcum?.Yukseklik };
+                    onInfo?.Invoke(Describe(media, a, ses, rapor));
+                }
+
+                // Ölçüm yalnızca ses yükseltilecek / kısılacaksa zincire girer (dokunulmayan sesin yüksekliği aynı kalır).
+                var uygulandi = rapor is { Uygulandi: true };
+                olcum = uygulandi ? rapor!.Olcum : null;
+
+                // Tepe koruması: sınırlayıcı açıksa (ya da eşitleme sesi değiştiriyorsa: kutu kapalı olsa da) çıktının
+                // gerçek tepesi tavanı aşmaz; AAC'de çözülen sesinki. AAC kodlaması ve örnekleme hızı dönüşümü tepeyi
+                // biraz yükseltir (kullanıcının videolarında AAC 128 kb/s 0,1–1 dB): ses kodlanıp ölçülür, aşarsa
+                // sınırlayıcı aşağı çekilip yeniden denenir. Tepesi tavanın altında kalan sese dokunulmaz (WAV'da bit bit
+                // aynı).
+                var koruma = a.Ses.Sinirlayici || uygulandi;
+                double Kazanc(SesDuzeltme d) => uygulandi ? hedef - olcum!.Yukseklik + d.Telafi : 0;
+                bool Sinirlayici(SesDuzeltme d) => ArgsBuilder.SinirlayiciVar(a.Ses, olcum, d.Telafi, d.TasmaPayi, d.Sinirla);
+                // Yükseklik denemesi: sınırlayıcı tepeleri kıstıkça yükseklik hedefin altında kalır; AAC tizleri kestiği
+                // için yükseklik biraz düşer (kullanıcının OBS kaydında 128 kb/s'de 0,16 LU): ölçülen eksik kadar telafi
+                // edilir.
+                bool YukseklikDenemesi(SesDuzeltme d) => uygulandi && (kayipli || Sinirlayici(d));
+
+                // Kaynağın tepesi (kazançla) tavanı zaten aşıyorsa sınırlayıcı baştan zincirde (ses yükseltilmese de).
+                if (koruma && kaynakTepe is { } kt && !Sinirlayici(duzeltme) && kt + Kazanc(duzeltme) + Esitleme.TepePayi > tavan)
+                {
+                    duzeltme = duzeltme with { Sinirla = true };
+                }
+
+                // Tepe denemesi gerekmez: ses sessiz ya da tavandan çok kısık (kodlama tepeyi en çok EnCokTasmaPayi kadar
+                // yükseltse de tavanı aşmaz). FDK'nin DRC'si açıksa çözücü sesi yükseltebilir: her zaman denenir.
+                var tepeDenemesi = koruma && kaynakTepe is { } kt2
+                    && (kt2 + Kazanc(duzeltme) + Esitleme.EnCokTasmaPayi > tavan || Esitleme.DrcVar(a.Ses));
+                double? ilkTepe = null;
+                var tasma = 0.0;
+                var sinir = false;
+                var denendi = false;
+                if (tepeDenemesi || YukseklikDenemesi(duzeltme))
+                {
+                    // Gerekirse telafi ve sınırlayıcının tavanı düzeltilip yeniden denenir; kodlama son denemenin
+                    // ayarıyla yapılır.
                     for (var d = 0; d < Esitleme.EnCokDeneme; d++)
                     {
                         var yukseklikDenemesi = YukseklikDenemesi(duzeltme);
@@ -292,38 +363,13 @@ public static class Exporter
                                 ? (Sinirlayici(duzeltme) ? " · sınırlayıcının ve AAC'nin payı ölçülüyor" : " · AAC'nin payı ölçülüyor")
                                 : " · sınırlayıcının payı ölçülüyor")
                             : (kayipli ? " · AAC'nin tepeye etkisi ölçülüyor" : " · tepe ölçülüyor")));
-                        var denemeCikti = new List<string>();
-                        var denemeler = new List<List<string>>();
-                        if (denemeDosyasi is not null)
-                        {
-                            denemeler.Add(ArgsBuilder.DenemeKodlamaKomutu(a.Ses, input, ses, sesSuresi, olcum, duzeltme.Telafi, denemeDosyasi,
-                                duzeltme.TasmaPayi, duzeltme.Sinirla));
-                            denemeler.Add(Esitleme.SonucOlcumKomutu(denemeDosyasi));
-                        }
-                        else
-                        {
-                            denemeler.Add(ArgsBuilder.DenemeOlcumKomutu(a.Ses, input, ses, sesSuresi, olcum, duzeltme.Telafi,
-                                duzeltme.TasmaPayi, duzeltme.Sinirla));
-                        }
 
-                        try
-                        {
-                            if (denemeDosyasi is not null)
-                            {
-                                Directory.CreateDirectory(Path.GetDirectoryName(denemeDosyasi)!);
-                                await FfmpegRunner.RunAsync(denemeler[0], 0, null, ct);
-                            }
-
-                            await FfmpegRunner.RunAsync(denemeler[^1], 0, null, ct, denemeCikti);
-                        }
-                        catch (FfmpegHatasi ex)
-                        {
-                            ex.GunlukDosyasi = HataAciklamasi.GunlukYaz(input, GunlukMetni(ex, input, profile, media, a, ses, rapor, denemeler));
-                            throw;
-                        }
-
+                        // Kazançsız ilk deneme kararın ölçümüyle aynı zincirse yeniden yapılmaz.
+                        var denemeGunlugu = ilkGunluk is not null && olcum is null && duzeltme == ilk
+                            ? ilkGunluk
+                            : await Dene(olcum, duzeltme);
+                        ilkGunluk = null;
                         denendi = true;
-                        var denemeGunlugu = string.Join('\n', denemeCikti);
                         var tepe = tepeDenemesi ? ArgsBuilder.TepeOku(denemeGunlugu) : null;
                         double? yukseklik = null;
                         if (yukseklikDenemesi)
@@ -363,38 +409,38 @@ public static class Exporter
                         }
                     }
                 }
-                finally
+
+                // Sınırlayıcıyı tepe koruması mı koydu (yoksa zincirde olmayacaktı: ses yükseltilmiyor ya da tepe aşmıyordu).
+                var sinirlayici = Sinirlayici(duzeltme);
+                var tepeZorla = sinirlayici && !ArgsBuilder.SinirlayiciVar(a.Ses, olcum, duzeltme.Telafi);
+                if (rapor is null && (tepeZorla || duzeltme.TasmaPayi > 0))
                 {
-                    if (denemeDosyasi is not null)
+                    // Eşitleme kapalı: yalnızca tepe koruması çalıştı, satıra ve ipucuna yazılsın.
+                    rapor = new EsitlemeRaporu(EsitlemeKarari.Kapali, kaynakOlcum, hedef, tavan);
+                }
+
+                if (rapor is not null)
+                {
+                    rapor = rapor with
                     {
-                        DeleteQuietly(denemeDosyasi);
-                    }
+                        Telafi = duzeltme.Telafi,
+                        TelafiSiniri = sinir,
+                        Kayipli = kayipli && denendi,
+                        TasmaPayi = duzeltme.TasmaPayi,
+                        Tasma = tasma,
+                        TepeZorla = tepeZorla,
+                        IlkTepe = ilkTepe,
+                        SinirlayiciCalisti = sinirlayici,
+                    };
+                    onInfo?.Invoke(Describe(media, a, ses, rapor));
                 }
             }
-
-            // Sınırlayıcıyı tepe koruması mı koydu (yoksa zincirde olmayacaktı: ses yükseltilmiyor ya da tepe aşmıyordu).
-            var sinirlayici = Sinirlayici(duzeltme);
-            var tepeZorla = sinirlayici && !ArgsBuilder.SinirlayiciVar(a.Ses, olcum, duzeltme.Telafi);
-            if (rapor is null && (tepeZorla || duzeltme.TasmaPayi > 0))
+            finally
             {
-                // Eşitleme kapalı: yalnızca tepe koruması çalıştı, satıra ve ipucuna yazılsın.
-                rapor = new EsitlemeRaporu(EsitlemeKarari.Kapali, kaynakOlcum, hedef, tavan);
-            }
-
-            if (rapor is not null)
-            {
-                rapor = rapor with
+                if (denemeDosyasi is not null)
                 {
-                    Telafi = duzeltme.Telafi,
-                    TelafiSiniri = sinir,
-                    Kayipli = kayipli && denendi,
-                    TasmaPayi = duzeltme.TasmaPayi,
-                    Tasma = tasma,
-                    TepeZorla = tepeZorla,
-                    IlkTepe = ilkTepe,
-                    SinirlayiciCalisti = sinirlayici,
-                };
-                onInfo?.Invoke(Describe(media, a, ses, rapor));
+                    DeleteQuietly(denemeDosyasi);
+                }
             }
         }
 
@@ -403,16 +449,37 @@ public static class Exporter
         var temp = output + ".part" + ArgsBuilder.Uzanti(a);
         var gecisKlasoru = Path.Combine(Path.GetTempPath(), "Relios Export", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(gecisKlasoru);
-        var plan = ArgsBuilder.Olustur(a, media, input, ses, temp, Path.Combine(gecisKlasoru, "gecis"), olcum,
+        KomutPlani Plan() => ArgsBuilder.Olustur(a, media, input, ses, temp, Path.Combine(gecisKlasoru, "gecis"), olcum,
             duzeltme.Telafi, duzeltme.TasmaPayi, duzeltme.Sinirla);
+        var plan = Plan();
         try
         {
             var n = plan.Gecisler.Count;
+            var duzeltmeler = 0;
             for (var i = 0; i < n; i++)
             {
                 var basla = (double)i / n;
                 var ilerleme = progress is null ? null : new Progress<double>(p => progress.Report(basla + (p / n)));
-                await FfmpegRunner.RunAsync(plan.Gecisler[i], media.DurationSeconds, ilerleme, ct);
+                try
+                {
+                    await FfmpegRunner.RunAsync(plan.Gecisler[i], media.DurationSeconds, ilerleme, ct);
+                }
+                catch (FfmpegHatasi ex) when (duzeltmeler < EnCokX264Duzeltmesi)
+                {
+                    // x264 açılışta reddettiyse ve ayar düzeltilebiliyorsa (çok düşük 2 / 3 geçiş bit hızı, matrisle
+                    // olanaksız QP sınırı): x264'ün söylediği değerle bu geçiş (ve sonrakiler) yeniden.
+                    if (ArgsBuilder.X264Duzelt(ex.Gunluk, a) is not { } duzeltmeNotu)
+                    {
+                        throw;
+                    }
+
+                    duzeltmeler++;
+                    ekler.Add(duzeltmeNotu);
+                    onNot?.Invoke(duzeltmeNotu);
+                    onInfo?.Invoke(Describe(media, a, ses, rapor, ekler));
+                    plan = Plan();
+                    i--;
+                }
             }
 
             File.Move(temp, output, overwrite: false);
@@ -440,7 +507,7 @@ public static class Exporter
         {
             // Ses değiştirildiyse (eşitleme ya da tepe koruması) sonucu: çıktının sesi bir kez daha ölçülür (yalnızca ses
             // okunur). Ölçülemese de video hazırdır.
-            onInfo?.Invoke(Describe(media, a, ses, rapor) + " · çıktının sesi ölçülüyor");
+            onInfo?.Invoke(Describe(media, a, ses, rapor, ekler) + " · çıktının sesi ölçülüyor");
             try
             {
                 var cikti = new List<string>();
@@ -464,6 +531,9 @@ public static class Exporter
 
         return output;
     }
+
+    /// <summary>x264'ün açılışta reddettiği ayar en çok bu kadar kez düzeltilip yeniden denenir.</summary>
+    public const int EnCokX264Duzeltmesi = 4;
 
     /// <summary>Hata günlüğünün içeriği: kaynak, bilgi, açıklama, komutlar, ffmpeg çıktısı ve ayarlar.</summary>
     private static string GunlukMetni(
@@ -536,8 +606,40 @@ public static class Exporter
         }
     }
 
-    /// <summary>Kaynağın kısa Türkçe özeti: çözünürlük, kare hızı, kırpma ve hangi sesin kullanılacağı.</summary>
-    public static string Describe(MediaInfo media, ProfilAyarlari a, SesSecimi ses, EsitlemeRaporu? esitleme = null)
+    /// <summary>
+    /// Programın bu kaynakta ayarlarda yaptığı değişiklikler (kodlayıcının açamadığı ya da oynatıcıların çözemediği
+    /// birleşimde en yakın çalışan ayar), görüntü önce: ör. "Main profilde kayıpsız yok: CRF 1", "geçmeli 4:2:0'da
+    /// yükseklik 4'ün katı: 1350 → 1348", "AAC-LD yalnızca 22,05–48 kHz'te çalınabiliyor: 48 kHz".
+    /// </summary>
+    public static List<string> Notlar(MediaInfo media, ProfilAyarlari a, SesSecimi ses)
+    {
+        var notlar = new List<string>();
+        if (ArgsBuilder.X264KayipsizNotu(a, media) is { } kayipsiz)
+        {
+            // Kayıpsız yalnızca High 4:4:4'te; profil her ayarın önüne geçer.
+            notlar.Add(kayipsiz);
+        }
+
+        if (ArgsBuilder.YukseklikNotu(a, media) is { } yukseklik)
+        {
+            notlar.Add(yukseklik);
+        }
+
+        if (ArgsBuilder.FdkKarari(a.Ses, ses)?.Not is { } fdk)
+        {
+            // Ör. "FDK AAC LC 48 kHz stereo sesi en çok 576 kb/s kodlar", "HE-AAC v2 yalnızca stereo sesi kodlar: ...".
+            notlar.Add(fdk);
+        }
+
+        return notlar;
+    }
+
+    /// <summary>
+    /// Kaynağın kısa Türkçe özeti: çözünürlük, kare hızı, kırpma, hangi sesin kullanılacağı ve programın ayarlarda yaptığı
+    /// değişiklikler (<see cref="Notlar"/>; <paramref name="ekler"/>: kodlarken yapılanlar, ör. x264'ün düzeltmesi).
+    /// </summary>
+    public static string Describe(
+        MediaInfo media, ProfilAyarlari a, SesSecimi ses, EsitlemeRaporu? esitleme = null, IReadOnlyList<string>? ekler = null)
     {
         var tr = CultureInfo.GetCultureInfo("tr-TR");
         var text = $"{media.DisplayWidth}×{media.DisplayHeight}";
@@ -584,6 +686,16 @@ public static class Exporter
         {
             // Ör. "Main profilde kayıpsız yok: CRF 1" (kayıpsız yalnızca High 4:4:4'te; profil her ayarın önüne geçer).
             text += " · " + kayipsiz;
+        }
+
+        if (ArgsBuilder.YukseklikNotu(a, media) is { } yukseklik)
+        {
+            text += " · " + yukseklik;
+        }
+
+        foreach (var ek in ekler ?? [])
+        {
+            text += " · " + ek;
         }
 
         text += " · Ses: " + ses.Aciklama;

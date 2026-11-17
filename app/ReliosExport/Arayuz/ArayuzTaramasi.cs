@@ -598,6 +598,29 @@ internal static class ArayuzTaramasi
             Esit2("Varsayılana dön: ayar dosyasına da yazıldı", AyarDosyasi.Yaz(Varsayilanlar.YouTube()), kayitli);
         }
 
+        // Her şey varsayılandayken düğme sönük (yeniden tıklanmaz); bir ayar değişince tıklanır, geri alınınca yine sönük.
+        await Bosta(w);
+        Esit2("Varsayılan: ayarlar fabrika ayarındayken düğme sönük", false, w.BtnVarsayilan.IsEnabled);
+        Esit2("Varsayılan: sönükken ipucu nedenini söylüyor", "Ayarlar zaten bu profilin fabrika ayarında", w.BtnVarsayilan.ToolTip as string);
+        var fabrikaSeviye = Varsayilanlar.YouTube().Ses.Seviye;
+        w.KontrolAyarlari.Ses.Seviye = fabrikaSeviye + 1;
+        await Bosta(w);
+        Esit2("Varsayılan: bir ayar değişince düğme tıklanır", true, w.BtnVarsayilan.IsEnabled);
+        Esit2("Varsayılan: tıklanırken ipucu", "Bu profilin ayarlarını fabrika ayarına döndür", w.BtnVarsayilan.ToolTip as string);
+        w.KontrolAyarlari.Ses.Seviye = fabrikaSeviye;
+        await Bosta(w);
+        Esit2("Varsayılan: ayar fabrika değerine geri alınınca yine sönük", false, w.BtnVarsayilan.IsEnabled);
+        w.KontrolAyarlari.AnahtarKare.AcikGop = !w.KontrolAyarlari.AnahtarKare.AcikGop;
+        await Bosta(w);
+        Esit2("Varsayılan: anahtar kare ayarı değişince de tıklanır", true, w.BtnVarsayilan.IsEnabled);
+        w.KontrolAyarlari.AnahtarKare.AcikGop = !w.KontrolAyarlari.AnahtarKare.AcikGop;
+        w.KontrolAyarlari.Video.X264.QpMax = (w.KontrolAyarlari.Video.X264.QpMax ?? 50) - 1;
+        await Bosta(w);
+        Esit2("Varsayılan: pencerelerdeki (x264) bir ayar değişince de tıklanır", true, w.BtnVarsayilan.IsEnabled);
+        w.KontrolAyarlari.Video.X264.QpMax = Varsayilanlar.YouTube().Video.X264.QpMax;
+        await Bosta(w);
+        Esit2("Varsayılan: hepsi geri alınınca sönük", false, w.BtnVarsayilan.IsEnabled);
+
         // ------------------------------------------------------------------ 4. Ön ayarlar
         await OnAyarlariDene();
 

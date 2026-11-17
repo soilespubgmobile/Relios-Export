@@ -23,7 +23,7 @@ public static class BoyutTahmini
 
     public static BoyutTahmin? Hesapla(ProfilAyarlari a, MediaInfo m, SesSecimi ses)
     {
-        if (m.DurationSeconds <= 0 || VideoBitHizi(a) is not { } video)
+        if (m.DurationSeconds <= 0 || VideoBitHizi(a, m) is not { } video)
         {
             return null;
         }
@@ -40,8 +40,17 @@ public static class BoyutTahmini
         return new BoyutTahmin((long)Math.Round(kbit * 1000.0 / 8), video.Tur);
     }
 
-    /// <summary>Videonun bit hızı (kb/s) ve tahminin türü; ayarlardan belli değilse null.</summary>
-    public static (double Kbps, TahminTuru Tur)? VideoBitHizi(ProfilAyarlari a)
+    /// <summary>
+    /// x264'te "en çok" tahmini için en yüksek QP sınırının (qpmax) en az değeri: daha düşük sınırda x264 bit hızını
+    /// VBV'nin altına indiremez (QP yükseltilemiyor; qpmax 0'da her kare QP 0), "en çok" söylenemez.
+    /// </summary>
+    public const int EnCokIcinQpMax = 20;
+
+    /// <summary>
+    /// Videonun bit hızı (kb/s) ve tahminin türü; ayarlardan belli değilse null. <paramref name="m"/>: "kaynakla aynı"
+    /// profil için (kayıpsız olup olmadığı profile bağlı).
+    /// </summary>
+    public static (double Kbps, TahminTuru Tur)? VideoBitHizi(ProfilAyarlari a, MediaInfo? m = null)
     {
         var v = a.Video;
         if (v.Kodlayici == VideoKodlayici.Nvenc)
@@ -72,6 +81,12 @@ public static class BoyutTahmini
                 return (x.BitHizi, TahminTuru.Yaklasik);
             case X264Modu.Crf when x.VbvMaks is > 0 && x.VbvTampon is > 0:
                 // x264 CRF'de VBV'yi yalnızca ikisi birlikte verilince kullanır (ArgsBuilder.X264Vbv ile aynı kural).
+                // Kayıpsızda (8 bit CRF 0) x264 VBV'yi yok sayar; qpmax çok düşükse VBV'ye uyamaz: üst sınır yok.
+                if (ArgsBuilder.X264KayipsizMi(a, m) || x.QpMax is < EnCokIcinQpMax)
+                {
+                    return null;
+                }
+
                 return (x.VbvMaks.Value, TahminTuru.EnCok);
             default:
                 return null;
@@ -92,10 +107,21 @@ public static class BoyutTahmini
         }
 
         var x = v.X264;
-        return x.VbvTampon is > 0 ? x.VbvTampon.Value * Math.Clamp(x.VbvBaslangic ?? 0.9, 0, 1) : null;
+        if (x.VbvTampon is not > 0)
+        {
+            return null;
+        }
+
+        // x264 tamponu bir kareden küçük olamaz: en yüksek bit hızı / kare hızı ("VBV buffer size cannot be smaller
+        // than one frame"); daha küçük verilince kendisi büyütür.
+        var tampon = Math.Max(x.VbvTampon.Value, x.VbvMaks is > 0 ? x.VbvMaks.Value / ArgsBuilder.CiktiKareHizi(a, m) : 0);
+        return tampon * Math.Clamp(x.VbvBaslangic ?? 0.9, 0, 1);
     }
 
-    /// <summary>Sesin bit hızı (kb/s). WAV kesin; FDK AAC CBR kesin, VBR kipin üst değeri (kanal başına).</summary>
+    /// <summary>
+    /// Sesin bit hızı (kb/s). WAV kesin; FDK AAC CBR kesin (FDK'nin kodlayacağı değer), VBR'de FDK'nin kipin hedeflediği
+    /// bit hızı (<see cref="FdkUyumu.VbrBitHizi"/>).
+    /// </summary>
     public static double SesBitHizi(SesAyarlari s, SesSecimi ses)
     {
         if (ses.Tur == SesSecimTuru.Yok)
@@ -112,22 +138,20 @@ public static class BoyutTahmini
 
         if (s.Kodlayici == SesKodlayici.Wav)
         {
-            var hz = s.OrnekHizi ?? ses.OrnekHizi ?? 48000;
+            var hz = ArgsBuilder.CiktiHizi(s, ses) ?? 48000;
             var bit = s.WavBit == WavBitDerinligi.Bit16 ? 16 : s.WavBit == WavBitDerinligi.Bit24 ? 24 : 32;
             return hz * bit * kanal / 1000.0;
         }
 
+        // CBR: FDK'nin bu hız ve kanal düzeninde kodlayacağı bit hızı (sınırın dışındakini FDK sınıra çeker); VBR:
+        // FDK'nin kipe göre hedefi (AAC-ELD'de kip yükselebilir).
         var f = s.Fdk;
-        // CBR: FDK'nin bu hız ve kanal düzeninde kodlayacağı bit hızı (sınırın dışındakini FDK sınıra çeker).
-        return f.Mod switch
-        {
-            FdkModu.Cbr => ArgsBuilder.FdkKarari(s, ses)?.BitHizi ?? f.BitHizi,
-            FdkModu.Vbr1 => 32 * kanal,
-            FdkModu.Vbr2 => 40 * kanal,
-            FdkModu.Vbr3 => 56 * kanal,
-            FdkModu.Vbr4 => 72 * kanal,
-            _ => 112 * kanal,
-        };
+        var karar = ArgsBuilder.FdkKarari(s, ses);
+        var duzen = karar?.Duzen ?? (kanal == 1 ? "mono" : kanal == 2 ? "stereo" : FdkUyumu.Duzen(null, kanal));
+        var mod = karar?.Mod ?? f.Mod;
+        return mod == FdkModu.Cbr
+            ? karar?.BitHizi ?? f.BitHizi
+            : FdkUyumu.VbrBitHizi(mod, duzen) / 1000.0;
     }
 
     /// <summary>Windows Gezgini gibi (1 MB = 1024 × 1024 bayt): "245 MB", "1,2 GB", "850 KB".</summary>

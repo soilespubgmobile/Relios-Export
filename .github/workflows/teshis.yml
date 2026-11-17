@@ -1,0 +1,49 @@
+name: Teshis (kombinasyon denemesindeki Windows'a ozgu hatalar)
+
+# Kombinasyon denemesinde yalnizca GitHub'daki FFmpeg derlemesinde (x264 core 165) gorulen hatalarin nedeni:
+# programin komutu ayarlar tek tek degistirilerek yeniden calistirilir (tools/teshis.py). Programin parcasi degildir.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "FFmpeg derlemesinin run numarasi"
+        required: true
+        default: "43369861243"
+      kaynak_run_id:
+        description: "Kombinasyon kaynaklarinin run numarasi"
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  teshis:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+      - name: FFmpeg derlemesini indir
+        uses: actions/download-artifact@v8
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: art
+      - name: Kaynaklari indir
+        uses: actions/download-artifact@v8
+        with:
+          name: kombinasyon-kaynaklari
+          run-id: ${{ inputs.kaynak_run_id }}
+          github-token: ${{ github.token }}
+          path: komb
+      - name: Teshis
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          $zip = Get-ChildItem -Recurse art -Filter *.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath ff
+          $bin = (Get-ChildItem -Recurse ff -Filter ffmpeg.exe | Select-Object -First 1).DirectoryName
+          & "$bin/ffmpeg.exe" -hide_banner -version | Select-Object -First 1
+          python -X utf8 -I tools/teshis.py $bin komb

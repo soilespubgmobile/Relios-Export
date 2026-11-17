@@ -162,7 +162,14 @@ try
 
             Console.WriteLine("Eşitleme ayrıntısı:");
             Console.WriteLine(r.Ayrinti);
-        });
+            if (r.KaynakYukseklik is { } ky)
+            {
+                Console.WriteLine("ESITLEME_KAYNAK=" + ky.ToString("0.00", CultureInfo.InvariantCulture)
+                                  + " ESITLEME_OLCUM=" + (r.Olcum?.Yukseklik.ToString("0.00", CultureInfo.InvariantCulture) ?? "-"));
+            }
+        },
+        // Programın ayarlarda yaptığı değişiklikler (doğrulama "NOT=" satırlarını okur).
+        ayarNotu => Console.WriteLine("NOT=" + ayarNotu));
     Console.WriteLine("Çıktı: " + output);
     return 0;
 }
