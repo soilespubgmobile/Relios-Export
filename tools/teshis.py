@@ -2,94 +2,202 @@
 
 Programın parçası değildir. Kullanım: python -I tools/teshis.py <ffmpeg klasörü> <kaynak klasörü> <Smoke exe>
 
-4. tur: kombinasyon denemesinde (commit cfdb633) program hata verdiren 16 deneme programın kendi koduyla (Smoke)
-yeniden çalıştırılır, hata günlüğünün tamamından nedeni yazdırılır; x264'ün geçmeli (MBAFF) kodlamada çok iş
-parçacığıyla düştüğü "Assertion failed: a->l0.me16x16.mv[1] <= h->mb.mv_max_spel[1]" durumu boyut × iş parçacığı ×
-arama aralığıyla taranır.
+5. tur:
+1) Ölçekleyici: çok küçük hedefte (16–96 piksel) hangi ölçekleme × oran "Failed initializing scaling graph" veriyor;
+   önce Area ile 8 katına küçültüp son adımı seçilen ölçekleyiciyle yapmak (programın çözümü) her durumda çalışıyor mu.
+2) Geçmeli (MBAFF): x264'ün "Assertion failed: a->l0.me16x16.mv[1] <= h->mb.mv_max_spel[1]" düşmesi hangi arama
+   aralığında (merange) başlıyor; 16 ve üstü her iş parçacığı sayısında güvenli mi.
+3) İlerleme çubuğu: TikTok varsayılanıyla (x264 veryslow, önden bakış 250, 8 B-kare) ffmpeg'in -progress çıktısı
+   zamana göre (kullanıcı: "%85–90'da duruyor, sonra birden bitiyor").
 """
 import json
+import math
 import os
+import re
 import subprocess
 import sys
+import time
 
 FF = os.path.join(sys.argv[1], 'ffmpeg.exe' if os.name == 'nt' else 'ffmpeg')
 KOMB = sys.argv[2]
 SMOKE = sys.argv[3]
 CIKTI = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'teshis_cikti')
 os.makedirs(CIKTI, exist_ok=True)
-
-ONEMLI = ('x264 [', 'libx264 @', 'Assertion', 'malloc', 'rror', 'failed', 'Invalid', 'not supported', 'must be',
-          'require', 'exceed', 'cannot', 'Cannot', 'unable', 'Unable', 'kod -')
-GURULTU = ('Task finished', 'Terminating thread', 'Nothing was written', 'Error sending frames', 'Conversion failed',
-           'Could not open encoder before EOF', 'Error while opening encoder', 'Error while filtering')
-
-
-def onemli(satirlar, n=16):
-    return [x.strip() for x in satirlar if any(o in x for o in ONEMLI) and not any(g in x for g in GURULTU)][:n]
-
-
-durumlar = {d['ad']: d for d in json.load(open(os.path.join(KOMB, 'durumlar.json'), encoding='utf-8'))}
 manifest = {k['ad']: k for k in json.load(open(os.path.join(KOMB, 'manifest.json'), encoding='utf-8'))}
-ADLAR = ['video149', 'video413', 'video022', 'video118', 'video230', 'video074', 'video170', 'video402', 'video047',
-         'video431', 'video004', 'video316', 'video356', 'video187', 'video211', 'video227']
 
-print('=== 1) Program hata verdiren denemeler (programın kendi koduyla; hata günlüğünün tamamından)')
-for ad in ADLAR:
-    d = durumlar.get(ad)
-    if d is None:
-        print(f'--- {ad}: durumlar.json\'da yok')
-        continue
-    k = manifest[d['kaynak']]
-    cikti = os.path.join(CIKTI, ad)
-    os.makedirs(cikti, exist_ok=True)
-    komut = [SMOKE, os.path.join(KOMB, k['dosya']), cikti, '--profil', d['profil']]
-    for a in d['ayarla']:
-        komut += ['--ayarla', a]
-    try:
-        r = subprocess.run(komut, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=1500)
-        cikis = (r.stdout + r.stderr).splitlines()
-        rc = r.returncode
-    except subprocess.TimeoutExpired:
-        cikis, rc = [], 'zaman aşımı'
-    print(f'--- {ad} [{d["kaynak"]}] çıkış {rc}')
-    for x in cikis:
-        if x.startswith(('HATA', 'NOT=', 'Video: ', 'Komut ')):
-            print('   ', x[:420])
-    gunluk = next((x.split('Günlük: ', 1)[1].strip() for x in cikis if 'Günlük: ' in x), None)
-    if gunluk and os.path.isfile(gunluk):
-        with open(gunluk, encoding='utf-8-sig', errors='replace') as f:
-            for x in onemli(f.read().splitlines()):
-                print('    | ' + x[:300])
-    elif rc != 0:
-        for x in onemli(cikis):
-            print('    > ' + x[:300])
 
-print()
-print('=== 2) Geçmeli (MBAFF) + çerçeve iş parçacıkları: x264 düşüyor mu (boyut × iş parçacığı × arama aralığı)')
-KAYNAK = os.path.join(KOMB, manifest['v07']['dosya'])
-toplam = dusen = 0
-tablo = {}
-for boy in ('1920:1080', '1280:720', '720:576', '1920:64', '640:32'):
-    for th in (2, 4, 8, 16, 32, 64, 128):
-        for merange in (4, 16):
-            for me in ('hex', 'umh'):
-                out = os.path.join(CIKTI, 'mbaff.mkv')
-                r = subprocess.run([FF, '-hide_banner', '-nostdin', '-y', '-loglevel', 'error', '-i', KAYNAK, '-an',
-                                    '-vf', f'scale={boy},format=yuv420p', '-c:v', 'libx264', '-preset', 'veryfast',
-                                    '-x264-params', f'threads={th}:interlaced=1:merange={merange}:me={me}:crf=23', out],
-                                   capture_output=True, text=True, encoding='utf-8', errors='replace')
+def kaynak(ad):
+    return os.path.join(KOMB, manifest[ad]['dosya'])
+
+
+def calistir(args, zaman=600):
+    r = subprocess.run([FF, '-hide_banner', '-nostdin', '-y', '-loglevel', 'error'] + args,
+                       capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=zaman)
+    return r.returncode, r.stderr
+
+
+# ------------------------------------------------------------------------------------------------ 1) ölçekleyici
+print('=== 1) Ölçekleyici: çok küçük hedef')
+# Büyük kaynaklar: 1920x1080 ve 3840x2160 (lavfi, 1 kare)
+for ad, boy in (('b1080', '1920x1080'), ('b2160', '3840x2160')):
+    calistir(['-f', 'lavfi', '-i', f'testsrc2=size={boy}:rate=25', '-frames:v', '2', '-pix_fmt', 'yuv420p',
+              '-c:v', 'ffv1', os.path.join(CIKTI, ad + '.mkv')])
+KAYNAKLAR = [('v03', kaynak('v03'), 352, 288), ('v09', kaynak('v09'), 720, 576),
+             ('b1080', os.path.join(CIKTI, 'b1080.mkv'), 1920, 1080), ('b2160', os.path.join(CIKTI, 'b2160.mkv'), 3840, 2160)]
+CARPAN = {'lanczos': 6, 'spline': 20, 'bicubic': 4, 'bilinear': 2, 'area': 1, 'neighbor': 0}
+RENK = 'in_color_matrix=bt601:out_range=tv:out_color_matrix=bt709'
+toplam = hatali = uyusmayan = 0
+for kad, kyol, kw, kh in KAYNAKLAR:
+    for olcek, f in CARPAN.items():
+        for kucuk in (16, 24, 32, 48, 64, 96):
+            for yon in ('dar', 'yassi'):
+                w, h = (kucuk, 1080) if yon == 'dar' else (1920, kucuk)
+                for hassas in (True, False):
+                    flags = olcek + ('+accurate_rnd+full_chroma_int' if hassas else '')
+                    vf = f'scale={w}:{h}:flags={flags}:{RENK},setsar=1,format=yuv420p'
+                    rc, err = calistir(['-i', kyol, '-frames:v', '1', '-vf', vf, '-f', 'null', '-'])
+                    toplam += 1
+                    # beklenen: swscale süzgeci (1 + çarpan × ceil(oran), kaynak - 2 ile sınırlı) 256'yı aşınca düşer
+                    def boy_(src, dst):
+                        if f == 0 or src <= dst:
+                            return 0
+                        return min(1 + (f * src + dst - 1) // dst, src - 2)
+                    tahmin = max(boy_(kw, w), boy_(kh, h)) >= 256
+                    if rc != 0:
+                        hatali += 1
+                    if (rc != 0) != tahmin:
+                        uyusmayan += 1
+                        if uyusmayan <= 12:
+                            print(f'  tahmin tutmadı: {kad} {olcek} {"hassas" if hassas else "-"} {w}x{h}: kod {rc}, tahmin '
+                                  f'{"düşer" if tahmin else "çalışır"} (süzgeç {boy_(kw, w)} / {boy_(kh, h)}) {err.strip()[:120]}')
+print(f'  {toplam} ölçekleme, {hatali} hata, tahminle uyuşmayan {uyusmayan}')
+
+# Programın çözümü: önce Area ile hedefin 8 katına (oran 200'ü aşarsa iki adım), son adım seçilen ölçekleyiciyle.
+def ara_boy(src, dst, f):
+    if src <= dst or 1 + f * src / dst <= 250:
+        return []
+    hedef = dst * 8
+    adimlar, cur = [], src
+    while cur / hedef > 200:
+        cur = math.ceil(cur / 200)
+        cur += cur % 2
+        adimlar.append(cur)
+    adimlar.append(hedef + hedef % 2)
+    return adimlar
+
+
+toplam = hatali = 0
+for kad, kyol, kw, kh in KAYNAKLAR:
+    for olcek, f in CARPAN.items():
+        for kucuk in (16, 24, 32, 48, 64, 96):
+            for yon in ('dar', 'yassi'):
+                w, h = (kucuk, 1080) if yon == 'dar' else (1920, kucuk)
+                aw, ah = ara_boy(kw, w, max(f, 1)), ara_boy(kh, h, max(f, 1))
+                zincir = []
+                for i in range(max(len(aw), len(ah))):
+                    zw = aw[i] if i < len(aw) else (aw[-1] if aw else 'iw')
+                    zh = ah[i] if i < len(ah) else (ah[-1] if ah else 'ih')
+                    zincir.append(f'scale={zw}:{zh}:flags=area+accurate_rnd+full_chroma_int')
+                vf = ','.join(zincir + [f'scale={w}:{h}:flags={olcek}+accurate_rnd+full_chroma_int:{RENK},setsar=1,format=yuv420p'])
+                rc, err = calistir(['-i', kyol, '-frames:v', '1', '-vf', vf, '-f', 'null', '-'])
                 toplam += 1
-                anahtar = (boy, th, merange)
-                tablo.setdefault(anahtar, [0, 0])
-                tablo[anahtar][0] += 1
-                if r.returncode != 0:
-                    dusen += 1
-                    tablo[anahtar][1] += 1
-                    satir = [x for x in r.stderr.splitlines() if x.strip()]
-                    ilk = next((x for x in satir if 'Assertion' in x), satir[-1] if satir else '')
-                    if dusen <= 6:
-                        print(f'  düştü: {boy} threads={th} merange={merange} me={me} kod {r.returncode}: {ilk[:200]}')
+                if rc != 0:
+                    hatali += 1
+                    if hatali <= 6:
+                        print(f'  basamaklı da düştü: {kad} {olcek} {w}x{h}: {vf[:160]} :: {err.strip()[:160]}')
+print(f'  basamaklı (Area + seçilen): {toplam} ölçekleme, {hatali} hata')
+
+# ------------------------------------------------------------------------------------------------ 2) MBAFF
+print()
+print('=== 2) Geçmeli (MBAFF): arama aralığı × iş parçacığı × boyut')
+tablo = {}
+toplam = dusen = 0
+for kad in ('v07', 'v09'):
+    for boy in ('1920:1080', '720:576', '1920:64'):
+        for th in (4, 16, 64, 128):
+            for merange in (4, 8, 12, 16):
+                for me in ('hex', 'umh'):
+                    rc, err = calistir(['-i', kaynak(kad), '-an', '-vf', f'scale={boy},format=yuv420p', '-c:v', 'libx264',
+                                        '-preset', 'veryfast', '-x264-params',
+                                        f'threads={th}:interlaced=1:merange={merange}:me={me}:crf=23',
+                                        os.path.join(CIKTI, 'mbaff.mkv')])
+                    toplam += 1
+                    tablo.setdefault(merange, [0, 0])
+                    tablo[merange][0] += 1
+                    if rc != 0:
+                        dusen += 1
+                        tablo[merange][1] += 1
+for kad in ('v07', 'v09'):
+    for boy in ('1920:1080', '720:576', '1920:64'):
+        for th in (4, 16, 64, 128):
+            for preset in ('medium', 'slower'):
+                for me in ('hex', 'umh'):
+                    rc, err = calistir(['-i', kaynak(kad), '-an', '-vf', f'scale={boy},format=yuv420p', '-c:v', 'libx264',
+                                        '-preset', preset, '-x264-params', f'threads={th}:interlaced=1:me={me}:crf=23',
+                                        os.path.join(CIKTI, 'mbaff.mkv')])
+                    toplam += 1
+                    tablo.setdefault(f'16 ({preset})', [0, 0])
+                    tablo[f'16 ({preset})'][0] += 1
+                    if rc != 0:
+                        dusen += 1
+                        tablo[f'16 ({preset})'][1] += 1
 print(f'  {toplam} kodlama, {dusen} düştü')
-for (boy, th, merange), (n, h) in sorted(tablo.items()):
-    if h:
-        print(f'  {boy} threads={th} merange={merange}: {h}/{n}')
+for k, (n, d) in tablo.items():
+    print(f'  merange {k}: {d}/{n} düştü')
+
+# ------------------------------------------------------------------------------------------------ 3) ilerleme
+print()
+print('=== 3) İlerleme çubuğu: TikTok varsayılanı, 1080x1920 60 fps 12 sn (ses: AAC), -progress zamana göre')
+kaynak_yolu = os.path.join(CIKTI, 'ilerleme_kaynak.mp4')
+calistir(['-f', 'lavfi', '-i', 'testsrc2=size=1080x1920:rate=60,noise=alls=10:allf=t', '-f', 'lavfi',
+          '-i', 'sine=frequency=440:sample_rate=48000', '-t', '12', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '10',
+          '-c:a', 'aac', '-shortest', kaynak_yolu], 900)
+r = subprocess.run([SMOKE, kaynak_yolu, os.path.join(CIKTI, 'ilerleme'), '--profil', 'tiktok', '--sadece-komut'],
+                   capture_output=True, text=True, encoding='utf-8', errors='replace')
+komut = next((x.split('Komut 1/1: ffmpeg ', 1)[1] for x in r.stdout.splitlines() if 'Komut 1/1: ffmpeg ' in x), None)
+if not komut:
+    print('  komut alınamadı:', r.stdout[-400:], r.stderr[-400:])
+else:
+    args = [a.replace('KAYNAK', kaynak_yolu).replace('CIKTI.mov', os.path.join(CIKTI, 'ilerleme.mov')) for a in komut.split(' ')]
+    args = [a for a in args if a not in ('-hide_banner', '-nostdin', '-y')]
+    print('  komut:', ' '.join(args)[:600])
+    sure = 12.0
+    p = subprocess.Popen([FF, '-hide_banner', '-nostdin', '-y'] + args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                         text=True, encoding='utf-8', errors='replace')
+    basla = time.time()
+    kayit = []
+    blok = {}
+    for satir in p.stdout:
+        satir = satir.strip()
+        if '=' not in satir:
+            continue
+        k, v = satir.split('=', 1)
+        blok[k] = v
+        if k == 'progress':
+            us = blok.get('out_time_us', 'N/A')
+            kayit.append((time.time() - basla, int(us) / 1e6 if us.lstrip('-').isdigit() else None, blok.get('frame'), v))
+            blok = {}
+    p.wait()
+    son = time.time() - basla
+    print(f'  toplam {son:.1f} sn, çıkış {p.returncode}, {len(kayit)} güncelleme')
+    onceki = -1
+    for t, o, fr, durum in kayit:
+        yuzde = None if o is None else 100 * o / sure
+        if yuzde is None or int(yuzde / 5) != onceki or durum == 'end':
+            print(f'  {t:7.1f} sn  ilerleme %{yuzde if yuzde is None else round(yuzde, 1)}  kare {fr}  {durum}')
+            onceki = -1 if yuzde is None else int(yuzde / 5)
+    # en uzun duraklama
+    en_uzun, nerede = 0, None
+    for (t1, o1, _, _), (t2, o2, _, _) in zip(kayit, kayit[1:]):
+        if o1 is not None and o2 is not None and o2 - o1 < 0.01 and t2 - t1 > 0:
+            pass
+    duran = [(t, o) for t, o, _, _ in kayit if o is not None]
+    i = 0
+    while i < len(duran):
+        j = i
+        while j + 1 < len(duran) and duran[j + 1][1] - duran[i][1] < 0.05:
+            j += 1
+        if duran[j][0] - duran[i][0] > en_uzun:
+            en_uzun, nerede = duran[j][0] - duran[i][0], duran[i][1]
+        i = j + 1
+    print(f'  en uzun duraklama: {en_uzun:.1f} sn, %{(100 * nerede / sure) if nerede is not None else 0:.1f}\'de')
