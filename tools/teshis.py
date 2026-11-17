@@ -2,19 +2,18 @@
 
 Programın parçası değildir. Kullanım: python -I tools/teshis.py <ffmpeg klasörü> <kaynak klasörü> <Smoke exe>
 
-6. tur: çok dar / çok yassı hedefte (16×8192, 8192×16) ölçekleyicinin açılmaması ("Failed initializing scaling graph"):
-kombinasyon denemesindeki 6 komut birebir, ayarlar tek tek değiştirilerek; programın çözümü (önce Area ile hedefin 8
-katına) bütün kaynak × hedef × ölçekleyici × piksel biçimiyle.
+7. tur:
+1) Ölçekleyici: bir boyutta büyük küçültme + öbüründe büyütme (ör. 16×8192). Ölçekleyici × kaynak × küçültme × büyütme
+   taraması; programın yeni kuralıyla (küçültme 8 kattan büyükse önce Area ile hedefin 8 katına) düşen kalıyor mu.
+2) video402: x264'ün erişim ihlaliyle düştüğü komut (geçmeli, 4:2:2, JVT, QP 1, kroma -12...), ayarlar tek tek kaldırılarak.
 """
 import json
 import math
 import os
-import re
 import subprocess
 import sys
 
 FF = os.path.join(sys.argv[1], 'ffmpeg.exe' if os.name == 'nt' else 'ffmpeg')
-FP = os.path.join(sys.argv[1], 'ffprobe.exe' if os.name == 'nt' else 'ffprobe')
 KOMB = sys.argv[2]
 CIKTI = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'teshis_cikti')
 os.makedirs(CIKTI, exist_ok=True)
@@ -25,46 +24,31 @@ def kaynak(ad):
     return os.path.join(KOMB, manifest[ad]['dosya'])
 
 
-def boyut(yol):
-    r = subprocess.run([FP, '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height',
-                        '-of', 'csv=p=0', yol], capture_output=True, text=True)
-    w, h = r.stdout.strip().split(',')[:2]
-    return int(w), int(h)
-
-
-def dene(yol, vf):
-    r = subprocess.run([FF, '-hide_banner', '-nostdin', '-y', '-loglevel', 'error', '-i', yol, '-frames:v', '2', '-an',
-                        '-vf', vf, '-f', 'null', '-'], capture_output=True, text=True, encoding='utf-8', errors='replace')
-    return r.returncode == 0, r.stderr.strip().splitlines()[-1][:160] if r.stderr.strip() else ''
+def calistir(args):
+    r = subprocess.run([FF, '-hide_banner', '-nostdin', '-y', '-loglevel', 'error'] + args,
+                       capture_output=True, text=True, encoding='utf-8', errors='replace')
+    return r.returncode, r.stderr
 
 
 CARPAN = {'spline': 20, 'lanczos': 6, 'bicubic': 4, 'bilinear': 2, 'area': 1, 'neighbor': 0}
+RENK = 'in_color_matrix=bt601:out_range=tv:out_color_matrix=bt709'
 
 
-def ara(kw, kh, hw, hh, olcek, korunur):
-    """ArgsBuilder.AraOlcekler ile aynı."""
+def ara(kw, kh, hw, hh, olcek):
+    """Yeni kural (esnetme): küçültme 8 kattan büyükse (Bilinear ve üstü) ya da Area'da süzgeç 250'yi aşarsa önce Area ile
+    hedefin 8 katına (her adımda en çok 200 kat)."""
     f = CARPAN[olcek]
 
-    def asar(k, hd):
-        return k > hd and hd > 0 and min(1 + (f * k + hd - 1) // hd, k - 2) >= 250
+    def gerek(k, hd):
+        if f == 0 or k <= hd:
+            return False
+        return k / hd > 8 if f >= 2 else 1 + math.ceil(f * k / hd) >= 250
 
     def cift(x):
         return max(2, math.ceil(x / 2) * 2)
 
-    if f == 0 or not (asar(kw, hw) or asar(kh, hh)):
-        return []
-    if korunur:
-        oran = max(kw / hw, kh / hh)
-        kalan, a, adim = oran / 8, 1.0, []
-        while kalan > 1:
-            bu = min(kalan, 200)
-            a *= bu
-            kalan /= bu
-            adim.append((cift(kw / a), cift(kh / a)))
-        return adim
-
     def tek(k, hd):
-        if not asar(k, hd):
+        if not gerek(k, hd):
             return []
         kalan, a, liste = k / hd / 8, 1.0, []
         while kalan > 1:
@@ -79,54 +63,74 @@ def ara(kw, kh, hw, hh, olcek, korunur):
             for i in range(max(len(ws), len(hs)))]
 
 
-def basamakli(vf, kw, kh):
-    """Programın zinciri: ölçeklemeden önce Area ara ölçekleri."""
-    m = re.search(r'scale=(\d+):(\d+):flags=(\w+)(\+accurate_rnd\+full_chroma_int)?', vf)
-    hw, hh, olcek, hassas = int(m.group(1)), int(m.group(2)), m.group(3), m.group(4) or ''
-    on = ''.join(f'scale={a}:{b}:flags=area{hassas},' for a, b in ara(kw, kh, hw, hh, olcek, False))
-    return vf.replace('scale=', on + 'scale=', 1) if 'fps=' not in vf.split(',')[0] else \
-        vf.split(',', 1)[0] + ',' + on + vf.split(',', 1)[1]
+# Kaynaklar: 320x180, 640x360, 1920x1080 (lavfi, 2 kare)
+KAYNAKLAR = []
+for boy in ('320x180', '640x360', '1920x1080'):
+    yol = os.path.join(CIKTI, f'k_{boy}.mkv')
+    calistir(['-f', 'lavfi', '-i', f'testsrc2=size={boy}:rate=25', '-frames:v', '2', '-pix_fmt', 'yuv420p', '-c:v', 'ffv1', yol])
+    w, h = map(int, boy.split('x'))
+    KAYNAKLAR.append((boy, yol, w, h))
 
-
-DURUMLAR = [
-    ('video149', 'v11', 'fps=50,scale=16:8192:flags=spline+accurate_rnd+full_chroma_int:in_color_matrix=bt601:out_range=tv:out_color_matrix=bt709,setsar=1,format=yuv420p10le'),
-    ('video230', 'v04', 'fps=30,scale=16:8192:flags=spline+accurate_rnd+full_chroma_int:in_color_matrix=auto:out_range=tv:out_color_matrix=bt709,setsar=1,format=yuv420p'),
-    ('video074', 'v06', 'fps=24000/1001,scale=16:8192:flags=spline+accurate_rnd+full_chroma_int:in_color_matrix=bt601:out_range=tv:out_color_matrix=bt709,setsar=1,format=yuv422p'),
-    ('video047', 'v09', 'fps=60000/1001,scale=8192:16:flags=spline+accurate_rnd+full_chroma_int:in_color_matrix=bt601:out_range=tv:out_color_matrix=bt709,setsar=1,format=yuv420p'),
-    ('video316', 'v05', 'scale=16:8192:flags=spline+accurate_rnd+full_chroma_int:in_color_matrix=bt601:out_range=tv:out_color_matrix=bt709,setsar=1,format=yuv420p'),
-    ('video356', 'v03', 'fps=30,scale=8192:16:flags=spline+accurate_rnd+full_chroma_int:in_color_matrix=bt601:out_range=tv:out_color_matrix=bt709,setsar=1,format=yuv420p'),
-]
-print('=== 1) Kombinasyon denemesindeki 6 komut ve değişiklikleri')
-for ad, kad, vf in DURUMLAR:
-    yol = kaynak(kad)
-    kw, kh = boyut(yol)
-    print(f'--- {ad} ({kad} {kw}x{kh})')
-    print('  aynısı:', dene(yol, vf))
-    for olcek in ('bicubic', 'lanczos', 'bilinear', 'area', 'neighbor'):
-        print(f'  {olcek}:', dene(yol, vf.replace('flags=spline', 'flags=' + olcek)))
-    print('  renk dönüşümü yok:', dene(yol, re.sub(r':in_color_matrix=\w+:out_range=tv:out_color_matrix=bt709', '', vf)))
-    print('  hassas yuvarlama yok:', dene(yol, vf.replace('+accurate_rnd+full_chroma_int', '')))
-    b = basamakli(vf, kw, kh)
-    print('  programın çözümü:', dene(yol, b), b.split(',scale=')[0][:80])
+print('=== 1) Ölçekleyici: bir boyutta küçültme, öbüründe büyütme')
+eski_hata, yeni_hata, toplam = [], [], 0
+for kad, yol, kw, kh in KAYNAKLAR:
+    for olcek in CARPAN:
+        for kucult in (6, 8, 12, 16, 32):
+            for buyut in (1, 8, 32):
+                for yon in ('yatay', 'dikey'):
+                    if yon == 'yatay':
+                        hw, hh = max(16, round(kw / kucult) // 2 * 2), min(8192, kh * buyut)
+                    else:
+                        hw, hh = min(8192, kw * buyut), max(16, round(kh / kucult) // 2 * 2)
+                    son = f'scale={hw}:{hh}:flags={olcek}+accurate_rnd+full_chroma_int:{RENK},setsar=1,format=yuv420p'
+                    rc, err = calistir(['-i', yol, '-frames:v', '1', '-vf', son, '-f', 'null', '-'])
+                    adim = ''.join(f'scale={a}:{b}:flags=area+accurate_rnd+full_chroma_int,' for a, b in ara(kw, kh, hw, hh, olcek))
+                    rc2, err2 = calistir(['-i', yol, '-frames:v', '1', '-vf', adim + son, '-f', 'null', '-'])
+                    toplam += 1
+                    durum = f'{kad} → {hw}x{hh} {olcek}'
+                    if rc != 0:
+                        eski_hata.append(durum)
+                    if rc2 != 0:
+                        yeni_hata.append(durum + f' [{adim[:60]}]')
+print(f'  {toplam} ölçekleme: doğrudan {len(eski_hata)} hata, yeni kuralla {len(yeni_hata)} hata')
+for x in eski_hata:
+    print('   doğrudan düştü:', x)
+for x in yeni_hata:
+    print('   yeni kuralla düştü:', x)
 
 print()
-print('=== 2) Programın çözümü: kaynak × hedef × ölçekleyici × piksel biçimi')
-toplam = hatali = 0
-for kad in ('v01', 'v04', 'v05', 'v06', 'v09', 'v11'):
-    yol = kaynak(kad)
-    kw, kh = boyut(yol)
-    for hw, hh in ((16, 8192), (8192, 16), (16, 1080), (1920, 16), (16, 16), (8192, 8192)):
-        for olcek in CARPAN:
-            for bicim in ('yuv420p', 'yuv420p10le', 'yuv422p', 'yuv444p'):
-                if (hw, hh) == (8192, 8192) and (olcek not in ('spline', 'area') or bicim not in ('yuv420p', 'yuv444p')):
-                    continue
-                vf = (f'scale={hw}:{hh}:flags={olcek}+accurate_rnd+full_chroma_int:in_color_matrix=bt601:out_range=tv:'
-                      f'out_color_matrix=bt709,setsar=1,format={bicim}')
-                b = basamakli(vf, kw, kh)
-                ok, hata = dene(yol, b)
-                toplam += 1
-                if not ok:
-                    hatali += 1
-                    if hatali <= 10:
-                        print(f'  düştü: {kad} {kw}x{kh} → {hw}x{hh} {olcek} {bicim}: {hata} :: {b[:140]}')
-print(f'  programın çözümüyle {toplam} ölçekleme, {hatali} hata')
+print('=== 2) video402: x264 erişim ihlali')
+P = ('threads=1:ref=1:no-deblock=1:me=dia:subme=4:mixed-refs=0:merange=16:chroma-me=0:trellis=2:cqm=jvt:deadzone-inter=0:'
+     'fast-pskip=0:nr=0:dct-decimate=1:interlaced=1:bluray-compat=1:constrained-intra=0:bframes=0:keyint=1798:scenecut=100:'
+     'intra-refresh=0:rc-lookahead=250:mbtree=0:qp=1:qcomp=0.00:qpmax=33:qpstep=50:vbv-bufsize=400000:nal-hrd=cbr:filler=0:'
+     'ipratio=10.00:aq-mode=2:aq-strength=3.00:b-adapt=2:direct=temporal:cabac=0:psy=0:pbratio=10.00:chroma-qp-offset=-12:'
+     'cplxblur=0.00:qblur=0.00:vbv-init=0.00:pic-struct=1')
+VF = ('fps=60000/1001,scale=1440:2560:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=bicubic+accurate_rnd+'
+      'full_chroma_int:in_color_matrix=bt601:out_range=tv:out_color_matrix=bt709,pad=1440:2560:-1:-1:color=black,setsar=1,'
+      'format=yuv422p')
+EK = ['-preset', 'superfast', '-tune', 'zerolatency', '-profile:v', 'high422', '-level:v', '2.1']
+
+
+def dene(params, vf=VF, ek=EK, kad='v12'):
+    rc, err = calistir(['-i', kaynak(kad), '-map', '0:v:0', '-vf', vf, '-c:v', 'libx264', *ek, '-x264-params', params,
+                        os.path.join(CIKTI, 't402.mov')])
+    return 'çalıştı' if rc == 0 else f'DÜŞTÜ (kod {rc}) {err.strip().splitlines()[-1][:120] if err.strip() else ""}'
+
+
+print('  aynısı:', dene(P))
+print('  aynısı (ikinci kez):', dene(P))
+anahtarlar = []
+for p in P.split(':'):
+    a = p.split('=')[0]
+    if a not in anahtarlar:
+        anahtarlar.append(a)
+for a in anahtarlar:
+    print(f'  {a} yok:', dene(':'.join(x for x in P.split(':') if x.split('=')[0] != a)))
+print('  profil high (4:2:0):', dene(P, VF.replace('format=yuv422p', 'format=yuv420p'),
+                                   ['-preset', 'superfast', '-tune', 'zerolatency', '-profile:v', 'high', '-level:v', '2.1']))
+print('  kaynak v01:', dene(P, kad='v01'))
+print('  boyut 320x180:', dene(P, 'scale=320:180,format=yuv422p'))
+for qp in (2, 4, 8, 12, 20):
+    print(f'  qp={qp}:', dene(P.replace('qp=1:', f'qp={qp}:')))
+for ofset in (-6, -3, 0, 12):
+    print(f'  chroma-qp-offset={ofset}:', dene(P.replace('chroma-qp-offset=-12', f'chroma-qp-offset={ofset}')))
