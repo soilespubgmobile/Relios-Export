@@ -19,6 +19,7 @@ internal static class BirimKontrol
         AnahtarKareler();
         SesKanallari();
         SesIzleri();
+        HariciSes();
         SesYuksekligi();
         Boyutlar();
         Kaplar();
@@ -981,6 +982,93 @@ internal static class BirimKontrol
         Dene("Tek AAC", Izli("aac"), "0:a:0", null);
         var tek = ArgsBuilder.SesSec(Varsayilanlar.YouTube().Ses, Izli("aac"), "KAYNAK.mp4");
         Kontrol("Tek iz: bilgi satırı", "videonun sesi", tek.Aciklama);
+    }
+
+    private static void HariciSes()
+    {
+        Console.WriteLine();
+        Console.WriteLine("--- Aynı adlı harici ses: videonun süresine tam getirilir (atrim + apad); ölçüm, telafi denemesi ve kodlama aynı uzunlukta");
+
+        // Video izinin süresi: MP4 / MOV akış süresi, Matroska / WebM "DURATION" etiketi, yoksa 0 (dosyanın süresi kullanılır).
+        static string Sure(string akis, string bicimSuresi = "25.5") =>
+            MediaProbe.Parse("{\"streams\": [{\"codec_type\": \"video\", \"width\": 1280, \"height\": 720, " + akis
+                             + "}], \"format\": {\"duration\": \"" + bicimSuresi + "\"}}")
+                .VideoSuresi.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        Kontrol("Video izinin süresi: akış süresi (MP4 / MOV)", "6", Sure("\"duration\": \"6.000000\""));
+        Kontrol("Video izinin süresi: Matroska DURATION etiketi", "25.042", Sure("\"tags\": {\"DURATION\": \"00:00:25.042000000\"}"));
+        Kontrol("Video izinin süresi: dile göre etiket (DURATION-eng)", "62.5", Sure("\"tags\": {\"DURATION-eng\": \"00:01:02.500000000\"}"));
+        Kontrol("Video izinin süresi: bilinmiyor", "0", Sure("\"tags\": {\"title\": \"x\"}"));
+
+        static MediaInfo Video(double bicimSuresi, double videoSuresi) =>
+            new(1280, 720, 1, 1, 0, bicimSuresi, false, 30, "bt709", "bt709", "tv")
+            {
+                VideoCodec = "h264",
+                VideoProfil = "High",
+                VideoSeviye = 31,
+                VideoSuresi = videoSuresi,
+            };
+        var harici = new SesSecimi(SesSecimTuru.HariciDosya, "SES.wav", 2) { OrnekHizi = 48000 };
+        var ic = new SesSecimi(SesSecimTuru.Video, null, 2) { OrnekHizi = 48000 };
+        static string S(double d) => d.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        Kontrol("Ses süresi: harici, video izi 5,5 sn (dosya 6,2)", "5.5", S(ArgsBuilder.SesSuresi(Video(6.2, 5.5), harici)));
+        Kontrol("Ses süresi: harici, video izinin süresi bilinmiyor", "6", S(ArgsBuilder.SesSuresi(Video(6, 0), harici)));
+        Kontrol("Ses süresi: harici, video izi dosyadan uzun yazılmış", "6.2", S(ArgsBuilder.SesSuresi(Video(6.2, 6.5), harici)));
+        Kontrol("Ses süresi: videonun kendi sesi (dosyanın süresi)", "6.2", S(ArgsBuilder.SesSuresi(Video(6.2, 5.5), ic)));
+
+        static string Komut(ProfilAyarlari a, MediaInfo m, SesSecimi ses, SesOlcum? olcum = null) =>
+            " " + string.Join(' ', ArgsBuilder.Olustur(a, m, "KAYNAK.mp4", ses, "CIKTI.mov", "GECIS", olcum).Gecisler[0]) + " ";
+        var tt = Varsayilanlar.TikTok();
+        var k = Komut(tt, Video(6, 6), harici);
+        Iceriyor("TikTok + harici ses", k, " -i KAYNAK.mp4 -i SES.wav -map 0:v:0 -map 1:a:0 ");
+        Iceriyor("TikTok + harici ses: videonun süresine tam (kısaysa sessizlik, uzunsa kesilir)", k,
+            " -af aresample=44100:resampler=soxr:precision=33:dither_method=triangular,atrim=end=6,apad=whole_dur=6 -c:a libfdk_aac ");
+        Icermiyor("TikTok + harici ses: süre belli, -shortest yok (son AAC karesini keserdi)", k, "-shortest");
+        var olcum = new SesOlcum(-21.37, -10, 6.4);
+        Iceriyor("TikTok + harici ses + eşitleme: kazanç, 44,1 kHz, sonra tam süre", Komut(tt, Video(6, 6), harici, olcum),
+            " -af volume=7.37dB,aresample=44100:resampler=soxr:precision=33:dither_method=triangular,atrim=end=6,apad=whole_dur=6 -c:a libfdk_aac ");
+        Iceriyor("Harici ses: video izinin süresiyle (25,042 sn)", Komut(tt, Video(25.5, 25.042), harici), ",atrim=end=25.042,apad=whole_dur=25.042 ");
+        var bilinmez = Komut(tt, Video(0, 0), harici);
+        Iceriyor("Harici ses, süre bilinmiyor: eski yol (sessizlikle doldur)", bilinmez, ":dither_method=triangular,apad -c:a ");
+        Iceriyor("Harici ses, süre bilinmiyor: video bitince kesilir", bilinmez, " -shortest ");
+        Icermiyor("Videonun kendi sesi: kesme / doldurma yok", Komut(tt, Video(6, 6), ic), "apad");
+
+        // Ölçüm ve telafi denemesi kodlamadaki uzunlukla: harici seste giriş -t ile kısılmaz (gecikme / kesme kaydırmasın),
+        // zincirin sonunda aynı atrim + apad.
+        var tts = tt.Ses;
+        var olc = " " + string.Join(' ', ArgsBuilder.OlcumKomutu(tts, "KAYNAK.mp4", harici, 6)) + " ";
+        Iceriyor("Ölçüm, harici ses: WAV okunur", olc, " -i SES.wav -map 0:a:0 -vn -sn -dn ");
+        Icermiyor("Ölçüm, harici ses: giriş -t ile kısılmaz", olc, " -t ");
+        Iceriyor("Ölçüm, harici ses: kodlamadaki uzunluk", olc, " -af atrim=end=6,apad=whole_dur=6,ebur128=peak=true:");
+        var olcIc = " " + string.Join(' ', ArgsBuilder.OlcumKomutu(tts, "KAYNAK.mp4", ic, 6)) + " ";
+        Iceriyor("Ölçüm, videonun kendi sesi: dosyanın süresiyle", olcIc, " -t 6 -af ebur128=");
+        Icermiyor("Ölçüm, videonun kendi sesi: kesme / doldurma yok", olcIc, "apad");
+        var olcBilinmez = " " + string.Join(' ', ArgsBuilder.OlcumKomutu(tts, "KAYNAK.mp4", harici, 0)) + " ";
+        Icermiyor("Ölçüm, harici ses, süre bilinmiyor: sonsuz doldurma yok", olcBilinmez, "apad");
+
+        var deneme = " " + string.Join(' ', ArgsBuilder.DenemeKodlamaKomutu(tts, "KAYNAK.mp4", harici, 6, olcum, 0.12, "DENEME.m4a")) + " ";
+        Icermiyor("AAC telafi denemesi, harici ses: giriş -t ile kısılmaz", deneme, " -t ");
+        Iceriyor("AAC telafi denemesi, harici ses: kodlamadaki zincir ve uzunluk", deneme,
+            " -af volume=7.49dB,aresample=44100:resampler=soxr:precision=33:dither_method=triangular,atrim=end=6,apad=whole_dur=6 -c:a libfdk_aac -profile:a aac_low -b:a 128k -ar 44100 -ac 2 ");
+        Icermiyor("AAC telafi denemesi, harici ses: -shortest yok", deneme, "-shortest");
+        var denemeBilinmez = " " + string.Join(' ', ArgsBuilder.DenemeKodlamaKomutu(tts, "KAYNAK.mp4", harici, 0, olcum, 0, "DENEME.m4a")) + " ";
+        Icermiyor("AAC telafi denemesi, harici ses, süre bilinmiyor: sonsuz doldurma yok", denemeBilinmez, "apad");
+        var wav = Varsayilanlar.YouTube().Ses;
+        wav.Kodlayici = SesKodlayici.Wav;
+        var tepeli = new SesOlcum(-21.37, -3.2, 6.4);
+        var sinirli = " " + string.Join(' ', ArgsBuilder.DenemeOlcumKomutu(wav, "KAYNAK.mp4", harici, 6, tepeli, 0)) + " ";
+        Iceriyor("Sınırlayıcı telafi ölçümü, harici ses: kodlamadaki zincir ve uzunluk", sinirli,
+            ",aresample=48000:resampler=soxr:precision=33:dither_method=triangular,atrim=end=6,apad=whole_dur=6,ebur128=");
+        Icermiyor("Sınırlayıcı telafi ölçümü, harici ses: giriş -t ile kısılmaz", sinirli, " -t ");
+
+        // x264 / NVENC penceresinin komut notundaki örnek profilin kendi anahtar karesinden (kare hızı kaynakla aynıyken).
+        static string Ornek(ProfilAyarlari a, double fps, bool nvenc = false) => AnahtarKareHesabi.OrnekMetni(a.AnahtarKare, fps, nvenc) ?? "yok";
+        Kontrol("Komut notu örneği: TikTok varsayılanı, 60 fps (10 sn)", "600", Ornek(Varsayilanlar.TikTok(), 60));
+        Kontrol("Komut notu örneği: TikTok varsayılanı, 29,97 fps", "300", Ornek(Varsayilanlar.TikTok(), 30000.0 / 1001));
+        Kontrol("Komut notu örneği: YouTube varsayılanı, 60 fps", "100 / 51", Ornek(Varsayilanlar.YouTube(), 60));
+        Kontrol("Komut notu örneği: YouTube varsayılanı, NVENC (yalnızca en fazla)", "100", Ornek(Varsayilanlar.YouTube(), 60, nvenc: true));
+        var bos = Varsayilanlar.TikTok();
+        bos.AnahtarKare.EnBuyuk = null;
+        Kontrol("Komut notu örneği: en fazla boş", "yok", Ornek(bos, 60));
     }
 
     private static void Kaplar()

@@ -286,6 +286,22 @@ public partial class App : Application
             sira++;
         }
 
+        // x264 / NVENC penceresinin komut notu: örnek, profilin kendi anahtar karesinden (TikTok 10 sn → 60 fps'te 600).
+        foreach (var (ad, not, beklenen) in new[]
+                 {
+                     ("TikTok x264", PencereOrtak.KomutNotu(Varsayilanlar.TikTok()), "(ör. 60 fps'te 600)."),
+                     ("TikTok NVENC", PencereOrtak.KomutNotu(Varsayilanlar.TikTok(), nvenc: true), "(ör. 60 fps'te 600)."),
+                     ("YouTube x264", PencereOrtak.KomutNotu(Varsayilanlar.YouTube()), "(ör. 60 fps'te 100 / 51)."),
+                     ("YouTube NVENC", PencereOrtak.KomutNotu(Varsayilanlar.YouTube(), nvenc: true), "(ör. 60 fps'te 100)."),
+                 })
+        {
+            rapor.AppendLine($"Komut notu ({ad}): {not}");
+            if (!not.EndsWith(beklenen, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"Komut notu ({ad}) beklenen gibi değil: {not}");
+            }
+        }
+
         // Varsayılanların kodlayıcı komutları (önizlemedeki ile aynı fonksiyon) — kontrol çıktısında görünsün.
         rapor.Append("x264_tiktok=").Append(ArgsBuilder.X264KomutMetni(Varsayilanlar.TikTok(), 60)).Append('\n');
         rapor.Append("x264_dikey916=").Append(ArgsBuilder.X264KomutMetni(Varsayilanlar.Dikey916(), 30000.0 / 1001)).Append('\n');

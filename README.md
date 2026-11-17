@@ -52,7 +52,9 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
     başladığı an olarak yazılır: bilgisayarın saatinden, MP4 / MOV kuralı gereği UTC (MediaInfo "UTC" diye
     gösterir; Türkiye saatinden 3 saat geri).
   - Videonun yanında aynı adlı ses dosyası (ör. `edit1.mp4` için `edit1.wav`) varsa videonun kendi
-    sesi yerine o kullanılır. Videoda birden fazla ses izi varsa WAV (PCM) ya da başka kayıpsız iz tercih edilir
+    sesi yerine o kullanılır; ses videonun süresine tam getirilir (uzunsa kesilir, kısaysa sonu sessizlikle
+    doldurulur). LUFS eşitlemenin ölçümü ve AAC telafi denemesi de aynı uzunlukla yapılır (0.11.1; önceden `-shortest`
+    sesi video bitince son AAC karesinde keserdi, sesin sonu kısıksa yükseklik 0,05 LU kadar kayardı). Videoda birden fazla ses izi varsa WAV (PCM) ya da başka kayıpsız iz tercih edilir
     (aynı videoda WAV ve AAC varsa FDK AAC'ye WAV'dan çevrilir), yoksa ilk iz.
     Ses (videonun içindeki PCM / WAV dahil) 48 kHz'e soxr ile çevrilir;
     seviye değişmez. Mono ses stereoya iki kanala tam seviyede açılır (ffmpeg'in `-ac 2` açılışı -3 dB kısardı).

@@ -217,7 +217,9 @@ public static class Exporter
             // dokunulmaz ya da bütün ses aynı miktarda (sabit kazanç) hedefe.
             onInfo?.Invoke(Describe(media, a, ses) + " · ses ölçülüyor");
             var cikti = new List<string>();
-            var olcumKomutu = ArgsBuilder.OlcumKomutu(a.Ses, input, ses, media.DurationSeconds);
+            // Ölçüm, telafi denemesi ve kodlama aynı süreyle (aynı adlı harici ses videonun süresine tam getirilir).
+            var sesSuresi = ArgsBuilder.SesSuresi(media, ses);
+            var olcumKomutu = ArgsBuilder.OlcumKomutu(a.Ses, input, ses, sesSuresi);
             try
             {
                 await FfmpegRunner.RunAsync(olcumKomutu, 0, null, ct, cikti);
@@ -255,12 +257,12 @@ public static class Exporter
                         var denemeler = new List<List<string>>();
                         if (denemeDosyasi is not null)
                         {
-                            denemeler.Add(ArgsBuilder.DenemeKodlamaKomutu(a.Ses, input, ses, media.DurationSeconds, o, telafi, denemeDosyasi));
+                            denemeler.Add(ArgsBuilder.DenemeKodlamaKomutu(a.Ses, input, ses, sesSuresi, o, telafi, denemeDosyasi));
                             denemeler.Add(Esitleme.SonucOlcumKomutu(denemeDosyasi));
                         }
                         else
                         {
-                            denemeler.Add(ArgsBuilder.DenemeOlcumKomutu(a.Ses, input, ses, media.DurationSeconds, o, telafi));
+                            denemeler.Add(ArgsBuilder.DenemeOlcumKomutu(a.Ses, input, ses, sesSuresi, o, telafi));
                         }
 
                         try

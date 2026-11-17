@@ -60,6 +60,12 @@ public sealed record MediaInfo(
     /// <summary>Kaynak videonun piksel biçimi (ffprobe adı: yuv420p, yuv420p10le, yuvj420p...); işlemcide çözülünce kareler bu biçimde gelir.</summary>
     public string? PikselBicimi { get; init; }
 
+    /// <summary>
+    /// Video izinin süresi (sn): ffprobe'un akış süresi, yoksa Matroska / WebM "DURATION" etiketi; bilinmiyorsa 0
+    /// (o zaman dosyanın süresi kullanılır). Aynı adlı harici ses bu süreye tam getirilir.
+    /// </summary>
+    public double VideoSuresi { get; init; }
+
     /// <summary>Kaynaktaki ses akışları (ilki çıktıda "videonun sesi" olarak kullanılır).</summary>
     public IReadOnlyList<SesAkisi> SesAkislari { get; init; } = [];
 
@@ -173,6 +179,7 @@ public static class MediaProbe
             VideoCodec = ReadString(v, "codec_name"),
             VideoProfil = ReadString(v, "profile"),
             PikselBicimi = ReadString(v, "pix_fmt"),
+            VideoSuresi = ReadStreamDuration(v),
             VideoSeviye = v.TryGetProperty("level", out var lv) && lv.ValueKind == JsonValueKind.Number && lv.TryGetInt32(out var l) && l > 0
                 ? l
                 : null,
@@ -320,5 +327,46 @@ public static class MediaProbe
 
         var fromFormat = root.TryGetProperty("format", out var f) ? Read(f) : 0;
         return fromFormat > 0 ? fromFormat : Read(v);
+    }
+
+    /// <summary>
+    /// Akışın kendi süresi (sn): "duration" alanı (MP4, MOV, AVI…) ya da Matroska / WebM'in "DURATION" etiketi
+    /// ("00:00:25.042000000"); ikisi de yoksa 0.
+    /// </summary>
+    private static double ReadStreamDuration(JsonElement s)
+    {
+        if (s.TryGetProperty("duration", out var d) && d.ValueKind == JsonValueKind.String
+            && double.TryParse(d.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var sn)
+            && double.IsFinite(sn) && sn > 0)
+        {
+            return sn;
+        }
+
+        if (!s.TryGetProperty("tags", out var tags) || tags.ValueKind != JsonValueKind.Object)
+        {
+            return 0;
+        }
+
+        foreach (var t in tags.EnumerateObject())
+        {
+            // "DURATION" ya da dile göre "DURATION-eng".
+            if (!t.Name.StartsWith("DURATION", StringComparison.OrdinalIgnoreCase)
+                || t.Value.ValueKind != JsonValueKind.String
+                || t.Value.GetString()?.Split(':') is not [var sa, var dk, var sn2]
+                || !int.TryParse(sa, NumberStyles.Integer, CultureInfo.InvariantCulture, out var saat)
+                || !int.TryParse(dk, NumberStyles.Integer, CultureInfo.InvariantCulture, out var dakika)
+                || !double.TryParse(sn2, NumberStyles.Float, CultureInfo.InvariantCulture, out var saniye))
+            {
+                continue;
+            }
+
+            var toplam = (saat * 3600.0) + (dakika * 60.0) + saniye;
+            if (double.IsFinite(toplam) && toplam > 0)
+            {
+                return toplam;
+            }
+        }
+
+        return 0;
     }
 }

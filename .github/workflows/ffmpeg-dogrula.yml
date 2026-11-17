@@ -403,6 +403,15 @@ jobs:
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=30 -t 12 -pix_fmt yuv420p -c:v libx264 -preset veryfast -an -y $hk
           ffmpeg -hide_banner -loglevel error -f lavfi -i "aevalsrc=$deg*sin(2*PI*440*t)|$deg*sin(2*PI*550*t):s=48000:d=12" -c:a pcm_s24le -y (Join-Path $PWD 'harici_kisik.wav')
           $Kay['harici_kisik'] = $hk
+          # Ayni adli WAV, sonu kisik (2,5 sn video + 2,5 sn WAV; son 0,4 sn 6 dB kisik). 0.11.0'a kadar "-shortest" sesi
+          # video bitince son AAC karesinde (~16 ms once) keserdi: olcumun son 0,4 sn'lik blogu duserdi, cikti ~0,15 LU
+          # yuksek kalirdi (kullanicinin 07_harici'sinde -13,95). Artik ses videonun suresine tam getirilir (atrim + apad),
+          # olcum ve telafi denemesi ayni zincirle: tam -14, ses ornek sayisi WAV'inkiyle ayni.
+          $hs = Join-Path $PWD 'harici_son.mov'
+          ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=30 -t 2.5 -pix_fmt yuv420p -c:v libx264 -preset veryfast -an -y $hs
+          ffmpeg -hide_banner -loglevel error -f lavfi -i 'aevalsrc=if(lt(t\,2.1)\,0.05\,0.025)*sin(2*PI*1000*t)|if(lt(t\,2.1)\,0.05\,0.025)*sin(2*PI*1250*t):s=48000:d=2.5' -c:a pcm_s24le -y (Join-Path $PWD 'harici_son.wav')
+          $Kay['harici_son'] = $hs
+          "harici_son.mov / .wav suresi: " + (ffprobe -v error -show_entries format=duration -of csv=p=0 $hs) + ' / ' + (ffprobe -v error -show_entries format=duration -of csv=p=0 (Join-Path $PWD 'harici_son.wav'))
           $ci = Join-Path $PWD 'cok_izli.mov'
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i 'aevalsrc=0.5*sin(2*PI*1000*t):s=48000' -f lavfi -i "aevalsrc=$deg*sin(2*PI*440*t)|$deg*sin(2*PI*550*t):s=48000" -map 0:v -map 1:a -map 2:a -t 12 -pix_fmt yuv420p -c:v libx264 -preset veryfast -c:a:0 aac -c:a:1 pcm_s24le -y $ci
           $Kay['cok_izli'] = $ci
@@ -429,6 +438,8 @@ jobs:
             @{ ad = 'Esitleme + AAC 64 kb/s, tizi bol ses (pembe gurultu) -> AAC payi telafi edilir, tam -14'; src = $Kay.tizli_pembe; arg = @('--profil', 'youtube', '--ayarla', 'Ses.Fdk.BitHizi=64'); arac = 'yukseklik'; kip = @('lufs', '--codec', 'aac', '--pay', '0.05'); karar = 'Dogrusal' },
             @{ ad = 'Esitleme + TikTok varsayilani (FDK AAC 128 kb/s 44,1 kHz, 48 kHz kaynak)'; src = $Kay.kisik_degisken; arg = @(); arac = 'yukseklik'; kip = @('lufs', '--codec', 'aac', '--pay', '0.05', '--hz', '44100'); karar = 'Dogrusal' },
             @{ ad = 'Esitleme + TikTok varsayilani, tizi bol ses (pembe gurultu) -> AAC payi telafi edilir, tam -14'; src = $Kay.tizli_pembe; arg = @(); arac = 'yukseklik'; kip = @('lufs', '--codec', 'aac', '--pay', '0.05', '--hz', '44100'); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme + ayni adli WAV, sonu kisik (TikTok varsayilani, AAC 44,1 kHz) -> ses videoyla tam ayni uzunlukta, tam -14'; src = $Kay.harici_son; arg = @(); arac = 'yukseklik'; kip = @('lufs', '--codec', 'aac', '--pay', '0.05', '--hz', '44100'); karar = 'Dogrusal' },
+            @{ ad = 'Esitleme + ayni adli WAV, sonu kisik, ses WAV -> sabit kazanc, ses ornek sayisi WAV ile ayni, tam -14'; src = $Kay.harici_son; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', (Join-Path $PWD 'harici_son.wav')); karar = 'Dogrusal' },
             @{ ad = 'Esitleme + WAV, tizi cok bol ses (beyaz gurultu) -> kayipsiz, deneme yok, tam -14'; src = $Kay.tizli_beyaz; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.tizli_beyaz); karar = 'Dogrusal' },
             @{ ad = 'Esitleme: sonu kisik ses (son 3 sn -6 dB) -> tam -14 (loudnorm olcumuyle -13,4 olurdu)'; src = $Kay.kisik_son; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.kisik_son); karar = 'Dogrusal' },
             @{ ad = 'Esitleme: sonu yuksek ses (son 3 sn +6 dB) -> tam -14 (loudnorm olcumuyle -15,0 olurdu)'; src = $Kay.yuksek_son; arg = $yt + $esit; arac = 'yukseklik'; kip = @('dogrusal', '--kaynak', $Kay.yuksek_son); karar = 'Dogrusal' },

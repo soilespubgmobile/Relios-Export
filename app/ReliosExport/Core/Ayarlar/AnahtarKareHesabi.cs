@@ -38,4 +38,20 @@ public static class AnahtarKareHesabi
 
         return (enBuyuk, enKucuk);
     }
+
+    /// <summary>
+    /// Pencerelerdeki örnek: bu kare hızında anahtar kare aralığı (kare), ör. TikTok varsayılanında 60 fps'te "600",
+    /// YouTube'unkinde "100 / 51". <paramref name="yalnizcaEnBuyuk"/>: NVENC "en az"ı kullanmaz. En fazla boşsa null.
+    /// </summary>
+    public static string? OrnekMetni(AnahtarKareAyarlari k, double fps, bool yalnizcaEnBuyuk = false)
+    {
+        var (enBuyuk, enKucuk) = Aralik(k, fps);
+        if (enBuyuk is not { } g)
+        {
+            return null;
+        }
+
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        return enKucuk is { } m && !yalnizcaEnBuyuk ? $"{g.ToString(inv)} / {m.ToString(inv)}" : g.ToString(inv);
+    }
 }

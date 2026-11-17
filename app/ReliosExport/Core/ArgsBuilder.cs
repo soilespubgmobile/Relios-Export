@@ -150,6 +150,37 @@ public static class ArgsBuilder
         return 0;
     }
 
+    /// <summary>
+    /// Sesin süresi (sn): ölçüm, telafi denemesi ve kodlama aynı süreyle yapılır. Aynı adlı harici ses videonun süresine
+    /// tam getirilir (video izinin süresi; bilinmiyorsa dosyanın süresi): uzunsa kesilir, kısaysa sonu sessizlikle
+    /// doldurulur. Videonun kendi sesinde dosyanın süresi (ölçüm bununla sınırlanır).
+    /// </summary>
+    public static double SesSuresi(MediaInfo media, SesSecimi ses)
+    {
+        if (ses.Tur != SesSecimTuru.HariciDosya || media.VideoSuresi <= 0)
+        {
+            return media.DurationSeconds;
+        }
+
+        return media.DurationSeconds > 0 ? Math.Min(media.VideoSuresi, media.DurationSeconds) : media.VideoSuresi;
+    }
+
+    /// <summary>
+    /// Harici sesin uzunluk filtresi: süre biliniyorsa ses tam o süreye getirilir (uzunsa kesilir, kısaysa sonu
+    /// sessizlikle doldurulur); ölçümde de aynı filtre kullanıldığı için ölçülen ses çıktıdakiyle örnek örnek aynıdır.
+    /// Süre bilinmiyorsa yalnızca doldurulur (kodlamada video bitince <c>-shortest</c> keser).
+    /// </summary>
+    private static string HariciUzunluk(double sure)
+    {
+        if (sure <= 0)
+        {
+            return "apad";
+        }
+
+        var d = sure.ToString("0.######", Inv);
+        return $"atrim=end={d},apad=whole_dur={d}";
+    }
+
     /// <summary>Ses codec'i kayıpsız mı (ffprobe adı).</summary>
     public static bool KayipsizMi(string? codec) =>
         codec is not null
@@ -302,7 +333,7 @@ public static class ArgsBuilder
 
         if (sesVar)
         {
-            Ses(args, a.Ses, harici, ses.Kanal, olcum, ses.OrnekHizi, telafi);
+            Ses(args, a.Ses, harici, ses.Kanal, olcum, ses.OrnekHizi, telafi, harici ? SesSuresi(media, ses) : 0);
         }
 
         args.AddRange(
@@ -1235,19 +1266,26 @@ public static class ArgsBuilder
 
     /// <summary>
     /// LUFS eşitlemenin ölçüm geçişi: sesi yalnızca okur (görüntü yok); ölçer değerleri ffmpeg çıktısına yazar
-    /// (okumak için <see cref="OlcumOku"/>). Süre videonunkiyle sınırlanır (harici ses videodan uzunsa sonu çıktıda kesilir).
+    /// (okumak için <see cref="OlcumOku"/>). <paramref name="sureSaniye"/>: <see cref="SesSuresi"/>. Videonun kendi
+    /// sesi bu süreyle sınırlanır; aynı adlı harici ses, kodlamadaki gibi tam bu süreye getirilir (uzunsa kesilir,
+    /// kısaysa sonu sessizlikle doldurulur): ölçülen ses çıktıdakiyle aynı uzunluktadır.
     /// </summary>
     public static List<string> OlcumKomutu(SesAyarlari s, string input, SesSecimi ses, double sureSaniye)
     {
         var harici = ses.Tur == SesSecimTuru.HariciDosya;
         var args = new List<string> { "-hide_banner", "-nostdin", "-nostats", "-i", harici ? ses.Dosya! : input };
         args.AddRange(["-map", harici ? "0:a:0" : "0:a:" + ses.Iz.ToString(Inv), "-vn", "-sn", "-dn"]);
-        if (sureSaniye > 0)
+        if (sureSaniye > 0 && !harici)
         {
             args.AddRange(["-t", sureSaniye.ToString("0.###", Inv)]);
         }
 
         var af = OnSesFiltreleri(s, ses.Kanal, kanalIndir: true);
+        if (harici && sureSaniye > 0)
+        {
+            af.Add(HariciUzunluk(sureSaniye));
+        }
+
         af.Add(Esitleme.OlcumFiltresi);
         args.AddRange(["-af", string.Join(',', af), "-f", "null", "-"]);
         return args;
@@ -1287,10 +1325,12 @@ public static class ArgsBuilder
     /// Sesin filtre zinciri (kodlamada ve telafi ölçümünde aynı). LUFS eşitlemede bütün ses aynı miktarda (sabit
     /// kazanç: hedef - ölçülen + telafi) hedefe getirilir; sesin dengesi değişmez. Kazanç tepeyi tavanın üstüne
     /// çıkaracaksa sınırlayıcı (kutu kapalı olsa da) tepeleri tavanda tutar. <paramref name="hedefHz"/>: çıktının
-    /// örnekleme hızı (null: kaynakla aynı ve dönüşüm yok).
+    /// örnekleme hızı (null: kaynakla aynı ve dönüşüm yok). <paramref name="hariciSure"/>: aynı adlı harici ses bu
+    /// süreye tam getirilir (<see cref="HariciUzunluk"/>; 0: süre bilinmiyor).
     /// </summary>
     private static List<string> SesFiltreleri(
-        SesAyarlari s, bool harici, int? kaynakKanal, SesOlcum? olcum, double telafi, int? kaynakHz, out int? hedefHz)
+        SesAyarlari s, bool harici, int? kaynakKanal, SesOlcum? olcum, double telafi, int? kaynakHz, double hariciSure,
+        out int? hedefHz)
     {
         var esitleme = s.Esitleme && olcum is not null;
         var af = OnSesFiltreleri(s, kaynakKanal, kanalIndir: esitleme);
@@ -1345,8 +1385,11 @@ public static class ArgsBuilder
 
         if (harici)
         {
-            // Harici ses videodan kısaysa sonu sessizlikle doldurulur, uzunsa video bitince kesilir.
-            af.Add("apad");
+            // Harici ses videonun süresine tam getirilir: kısaysa sonu sessizlikle doldurulur, uzunsa kesilir. En sonda
+            // (çıktının örnekleme hızında): çıktıdaki ses, ölçülen ve telafi denemesinde kodlanan sesle örnek örnek aynı.
+            // Eskiden "-shortest" sesi video bitince son AAC karesinde (en çok ~23 ms önce) kesiyordu; sesin sonu
+            // kısıksa ölçülen yükseklik 0,05 LU kadar kayıyordu.
+            af.Add(HariciUzunluk(hariciSure));
         }
 
         return af;
@@ -1355,7 +1398,8 @@ public static class ArgsBuilder
     /// <summary>
     /// LUFS eşitlemede telafi ölçümü: sesin kodlamadaki filtre zinciri (sabit kazanç + sınırlayıcı) uygulanıp yüksekliği
     /// ölçülür (yalnızca ses okunur). Sınırlayıcı tepeleri kıstıkça yükseklik hedefin altında kalır; eksik kadar telafi
-    /// eklenip yeniden denenir.
+    /// eklenip yeniden denenir. <paramref name="sureSaniye"/>: <see cref="SesSuresi"/> (harici ses kodlamadaki gibi tam
+    /// bu süreye getirilir).
     /// </summary>
     public static List<string> DenemeOlcumKomutu(
         SesAyarlari s, string input, SesSecimi ses, double sureSaniye, SesOlcum olcum, double telafi)
@@ -1363,12 +1407,14 @@ public static class ArgsBuilder
         var harici = ses.Tur == SesSecimTuru.HariciDosya;
         var args = new List<string> { "-hide_banner", "-nostdin", "-nostats", "-i", harici ? ses.Dosya! : input };
         args.AddRange(["-map", harici ? "0:a:0" : "0:a:" + ses.Iz.ToString(Inv), "-vn", "-sn", "-dn"]);
-        if (sureSaniye > 0)
+        if (sureSaniye > 0 && !harici)
         {
             args.AddRange(["-t", sureSaniye.ToString("0.###", Inv)]);
         }
 
-        var af = SesFiltreleri(s, harici: false, ses.Kanal, olcum, telafi, ses.OrnekHizi, out _);
+        // Harici ses yalnızca süresi biliniyorsa kodlamadaki gibi kesilip doldurulur (süresiz doldurma bitmezdi).
+        var hariciSure = harici ? sureSaniye : 0;
+        var af = SesFiltreleri(s, hariciSure > 0, ses.Kanal, olcum, telafi, ses.OrnekHizi, hariciSure, out _);
         af.Add(Esitleme.OlcumFiltresi);
         args.AddRange(["-af", string.Join(',', af), "-f", "null", "-"]);
         return args;
@@ -1378,7 +1424,8 @@ public static class ArgsBuilder
     /// AAC çıktıda telafi denemesi, 1. adım: ses kodlamadaki zincir (sabit kazanç + telafi, gerekirse sınırlayıcı) ve
     /// aynı kodlayıcı ayarlarıyla (FDK AAC) geçici dosyaya kodlanır (yalnızca ses). 2. adımda dosya
     /// <see cref="Esitleme.SonucOlcumKomutu"/> ile ölçülür. FDK AAC aynı sesten aynı sonucu verdiği için ölçülen
-    /// değer, asıl kodlamadaki sesin yüksekliğidir.
+    /// değer, asıl kodlamadaki sesin yüksekliğidir. <paramref name="sureSaniye"/>: <see cref="SesSuresi"/> (harici ses
+    /// kodlamadaki gibi tam bu süreye getirilir: deneme dosyasındaki ses çıktıdakiyle aynı uzunlukta).
     /// </summary>
     public static List<string> DenemeKodlamaKomutu(
         SesAyarlari s, string input, SesSecimi ses, double sureSaniye, SesOlcum olcum, double telafi, string cikti)
@@ -1386,21 +1433,23 @@ public static class ArgsBuilder
         var harici = ses.Tur == SesSecimTuru.HariciDosya;
         var args = new List<string> { "-hide_banner", "-nostdin", "-nostats", "-y", "-i", harici ? ses.Dosya! : input };
         args.AddRange(["-map", harici ? "0:a:0" : "0:a:" + ses.Iz.ToString(Inv), "-vn", "-sn", "-dn"]);
-        if (sureSaniye > 0)
+        if (sureSaniye > 0 && !harici)
         {
             args.AddRange(["-t", sureSaniye.ToString("0.###", Inv)]);
         }
 
-        Ses(args, s, harici: false, ses.Kanal, olcum, ses.OrnekHizi, telafi);
+        // Harici ses yalnızca süresi biliniyorsa kodlamadaki gibi kesilip doldurulur (süresiz doldurma bitmezdi).
+        var hariciSure = harici ? sureSaniye : 0;
+        Ses(args, s, hariciSure > 0, ses.Kanal, olcum, ses.OrnekHizi, telafi, hariciSure);
         args.AddRange(["-f", "mp4", cikti]);
         return args;
     }
 
     private static void Ses(
         List<string> args, SesAyarlari s, bool harici, int? kaynakKanal = null, SesOlcum? olcum = null,
-        int? kaynakHz = null, double telafi = 0)
+        int? kaynakHz = null, double telafi = 0, double hariciSure = 0)
     {
-        var af = SesFiltreleri(s, harici, kaynakKanal, olcum, telafi, kaynakHz, out var hedefHz);
+        var af = SesFiltreleri(s, harici, kaynakKanal, olcum, telafi, kaynakHz, hariciSure, out var hedefHz);
         if (af.Count > 0)
         {
             args.AddRange(["-af", string.Join(',', af)]);
@@ -1472,8 +1521,9 @@ public static class ArgsBuilder
         }
 
         args.AddRange(["-metadata:s:a:0", "language=eng"]);
-        if (harici)
+        if (harici && hariciSure <= 0)
         {
+            // Videonun süresi bilinmiyorsa: ses sessizlikle doldurulur (apad), video bitince kesilir.
             args.Add("-shortest");
         }
     }

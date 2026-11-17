@@ -17,7 +17,7 @@ public partial class NvencPenceresi : Window
 
         _onizleme = profil.Kopya();
         _fps = PencereOrtak.OnizlemeKareHizi(profil);
-        KomutNotu.Text = PencereOrtak.KomutNotu(profil).Replace("(keyint, min-keyint, scenecut)", "(-g, sahne değişimi)");
+        KomutNotu.Text = PencereOrtak.KomutNotu(profil, nvenc: true).Replace("(keyint, min-keyint, scenecut)", "(-g, sahne değişimi)");
         Sonuc = AyarDosyasi.Kopyala(profil.Video.Nvenc);
         Sonuc.Degisti += (_, _) => KomutuYaz();
         _onizleme.Video.Nvenc = Sonuc;
