@@ -26,6 +26,21 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
     verilir (`-dpb_size`): ffmpeg'de `-refs` yalnızca kare başına referanstır, DPB boş kalınca kart 6 kare seçer
     ve 1080p'de 4.x seviyelerini (en fazla 4 kare) aşar.
   - Ön ayar listesine program kendiliğinden bir şey koymaz; yalnızca kullanıcının kaydettikleri durur.
+  - Önerilen ayarlar (0.13.0): ön ayar penceresinde ayrı bir bölüm; programla gelir, yalnızca yüklenir (silinmez, ayar
+    dosyasına ve kayıtlı ön ayarlara yazılmaz). "38m videosu gibi": x264 veryslow High, 2 geçiş 12 Mb/s (en çok 16),
+    2 referans kare, IPBPB, her saniye anahtar kare, MOV, FDK AAC-LC 128 kb/s 44,1 kHz. "1717504691091 videosu gibi":
+    x264 veryslow Main, 2 geçiş 52 Mb/s (en çok 62), 3 referans kare, B-kare yok, 30 karede bir anahtar kare, MP4, FDK
+    AAC-LC 512 kb/s 48 kHz. İkisinde de boyut, kare hızı ve seviye kaynakla aynı; ses yüksekliği -14 LUFS.
+  - Varsayılan düğmesi (0.13.0) ayarlar zaten varsayılandayken kapalıdır, bir ayar değişince açılır.
+  - İlerleme çubuğu (0.13.0) kodlanan kare sayısından ilerler: x264 kareleri önden bakış ve B-kareler yüzünden geriden
+    kodlar (TikTok ayarında ~266 kare); FFmpeg'in zamanına göre çubuk %85–90'da durup birden bitiyordu.
+  - x264'ün açılışta reddettiği ya da çöktüğü birleşimler (0.13.0) kendiliğinden düzeltilip yeniden kodlanır, satırın
+    ipucunda yazar: bellek yetmezse iş parçacığı / önden bakış azaltılır; geçmeli kodlamada kısıtlı intra kapalı ve arama
+    aralığı en az 16; 2 / 3 geçişte çok düşük bit hızı x264'ün en azına; nicemleme matrisiyle olanaksız QP aralığında
+    düz matris. Bir boyut küçülüp öbürü büyürken Spline / Lanczos önce küçülen boyutta çalışır (FFmpeg açmıyordu).
+  - FDK AAC (0.13.0): FDK'nin kodlayamadığı hız, kanal düzeni, profil ve bit hızı en yakın çalışan ayara çevrilir
+    (FDK AAC 3.0.0 ile bütün birleşimler ölçüldü); AAC-LD / ELD yalnızca çalınabildiği 22,05–48 kHz'te. Ses gecikmesi
+    dosyanın süresini değiştirmez.
   - Varsayılan kayıt yeri: İndirilenler klasörü.
   - Dikey 9:16 ayarı (1216×2160, 29,97 fps, x264 Main@L5.0 CRF 18, FDK AAC 128 kb/s 48 kHz; önceki TikTok
     varsayılanı) yalnızca kodda durur: YouTube varsayılanının temeli ve GitHub doğrulamasının hedef ayarı.
@@ -62,17 +77,24 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
     sesinki) tavanı aşmaz. AAC kodlaması ve örnekleme hızı dönüşümü tepeyi biraz yükseltir (kullanıcının videolarında
     AAC 128 kb/s'de 0,1–1 dB: -1'de tutulan tepe çözülünce -0,9'a, hazır yüksek müzik 0 dB'nin üstüne çıkıyordu). Ses
     önce yalnızca ses olarak kodlanıp (WAV'da kodlanmadan) ölçülür; tepe tavanı aşıyorsa sınırlayıcı görülen taşma +
-    0,1 dB aşağıda çalışır ve yeniden denenir (en çok 6 deneme, LUFS eşitlemenin telafisiyle birlikte; yükseklik yine
+    0,1 dB aşağıda çalışır ve yeniden denenir (en çok 10 deneme, LUFS eşitlemenin telafisiyle birlikte; yükseklik yine
     -14). Ses yükseltilmese de tepesi tavanı aşan seste yalnızca tepeler tutulur; tepesi tavanın altında kalan sese
     dokunulmaz (WAV'da bit bit aynı). Kutu kapalıysa dokunulmayan ses olduğu gibi kalır (LUFS eşitleme sesi
     yükseltiyorsa tepe yine tutulur). Platform (TikTok, YouTube) sesi yeniden kodlar: onun kodlayıcısına giren ses
     bizim çözülen sesimizdir, standart (AES TD1008) kodlayıcı girişinde en çok -1 dBTP ister.
+  - LUFS eşitleme (0.13.0): sonuç hedefe 0,02 LU içine getirilir; 0,1 LU'dan uzak kalırsa satırda "hedefe ulaşılamadı"
+    ve ipucunda nedeni yazar (6 dB'lik telafi yetmedi, sınırlayıcı doydu, çok düşük bit hızında AAC yüksekliği
+    sıçrayarak değiştiriyor). Denemeler sınırlayıcının ölçekten bağımsızlığıyla ve hedefin iki yanı daraltılarak yapılır
+    (en çok 10). Seviye (elle kazanç) ölçüme girmez, ölçülene eklenir: FFmpeg'in ölçeri +10 LUFS'un üstünü ölçemez
+    (çok yüksek seste ölçüm ses kısılarak yinelenir), -70'in altını sessiz sayar.
   - Ayarlar program klasöründeki `ayarlar.json` dosyasında, hata günlükleri `Günlük` klasöründe durur
     (kurulum yok). Program bir arşivin içinden (WinRAR, 7-Zip, zip) açılırsa arşiv programı exe'yi geçici bir
     klasöre açar ve kapanınca siler; o durumda ayarlar ve günlükler `%LOCALAPPDATA%\Relios Export` klasörüne yazılır.
 - `ffmpeg-build/` : FFmpeg'in (libfdk_aac dahil, ağ desteği kapalı) Windows 64-bit derlemesi.
   GitHub Actions'ta en son kararlı sürümlerle derlenir.
-- `tools/` : GitHub'daki doğrulama araçları (deneme videoları, çıktı kontrolleri, 0.3.0 komut karşılaştırması).
+- `tools/` : GitHub'daki doğrulama araçları (deneme videoları, çıktı kontrolleri, 0.3.0 komut karşılaştırması,
+  kombinasyon denemesi: her ayarın her değeri ve değer çiftleri 73 kaynakla gerçek kodlamayla, 4754 deneme; önerilen
+  ayarların ölçülen kodlamalarla karşılaştırılması).
 
 Not: libfdk_aac içeren FFmpeg derlemesi "nonfree"dir; yalnızca kişisel kullanım içindir,
 yeniden dağıtılamaz.
