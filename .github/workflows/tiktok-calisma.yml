@@ -104,15 +104,30 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ref
-          case "$URL" in
-            *.xz) curl -sSL --retry 3 "$URL" | xz -dc > kaynak.y4m ;;
-            *) curl -sSL --retry 3 "$URL" -o kaynak.y4m ;;
-          esac
+          # y4m'nin yalnizca gereken kareleri indirilir (dosyalar 10 GB): baslik + BAS. kareden KARE kare.
+          curl -sSL --retry 3 -r 0-1023 "$URL" -o bas.bin
+          read -r L ARALIK < <(python3 - <<'EOF'
+          import os, re
+          b = open("bas.bin", "rb").read()
+          i = b.index(b"\n")
+          h = b[:i].decode("ascii")
+          print(h, file=__import__("sys").stderr)
+          w = int(re.search(r" W(\d+)", h).group(1)); hh = int(re.search(r" H(\d+)", h).group(1))
+          c = (re.search(r" C(\S+)", h) or [None, "420"])[1]
+          assert b[i + 1:i + 7] == b"FRAME\n", b[i + 1:i + 20]
+          bps = 2 if "p1" in c else 1
+          fs = w * hh * bps * (3 if c.startswith("444") else 2 if c.startswith("422") else 1.5)
+          kare = 6 + int(fs)
+          bas, n = int(os.environ["BAS"]), int(os.environ["KARE"])
+          s = i + 1 + bas * kare
+          print(i + 1, f"{s}-{s + n * kare - 1}")
+          EOF
+          )
+          [ -n "${L:-}" ] && [ -n "${ARALIK:-}" ] || { echo "y4m basligi okunamadi"; exit 1; }
+          echo "baslik $L bayt, aralik $ARALIK"
+          { head -c "$L" bas.bin; curl -sSL --retry 3 -r "$ARALIK" "$URL"; } > kaynak.y4m
           ls -la kaynak.y4m
-          head -c 200 kaynak.y4m | head -1 || true
-          son=$((BAS + KARE))
-          ff/bin/ffmpeg -hide_banner -nostdin -v error -y -i kaynak.y4m -an \
-            -vf "trim=start_frame=$BAS:end_frame=$son,setpts=PTS-STARTPTS,format=yuv420p" \
+          ff/bin/ffmpeg -hide_banner -nostdin -v error -y -i kaynak.y4m -an -vf "format=yuv420p" \
             -c:v ffv1 -level 3 -slices 24 -slicecrc 0 -g 1 -threads 4 "ref/${{ matrix.klip.ad }}.mkv"
           rm -f kaynak.y4m
           ff/bin/ffprobe -v error -count_frames -show_entries stream=width,height,r_frame_rate,pix_fmt,nb_read_frames -of compact "ref/${{ matrix.klip.ad }}.mkv"
