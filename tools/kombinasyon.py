@@ -611,6 +611,9 @@ def calistir(arg):
             for f in s['farklar']:
                 print(f'       FARK {f}', flush=True)
             if not s['tamam'] and s.get('gunluk'):
+                iz = [x for x in s['gunluk'][:-25] if x.startswith(('DENEME ', 'OLCUM_KISILDI'))]
+                if iz:
+                    print('       --- denemeler:\n' + '\n'.join('       ' + x for x in iz), flush=True)
                 print('       --- günlük (son satırlar):\n' + '\n'.join('       ' + x for x in s['gunluk'][-25:]), flush=True)
     with open(arg.sonuc, 'w', encoding='utf-8') as f:
         json.dump(sonuclar, f, ensure_ascii=False)
@@ -1217,10 +1220,14 @@ def ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v,
             if abs(i - hedef) > 0.105:
                 f.append(f'yükseklik {i:.2f} LUFS (hedef {hedef}, karar {karar})')
         elif ana == 'Dogrusal' and ulasilamadi and not sinirda:
-            # telafi sınırına (± 6 dB) gelinmeden hedefe ulaşılamadıysa nedeni incelenmeli (denemeler bitti, ölçüm...)
-            bitti = any(y.startswith('Eşitleme ayrıntısı') for y in gunluk) and any('Denemeler bitti' in y for y in gunluk)
-            f.append(f'hedefe ulaşılamadı: yükseklik {i:.2f} LUFS (hedef {hedef}, telafi {telafi:+.2f}, karar {karar}'
-                     + (', denemeler bitti' if bitti else '') + ')')
+            # Telafi sınırına (± 6 dB) gelinmeden hedefe ulaşılamadıysa: yalnızca kodlayıcı yüksekliği sıçrayarak
+            # değiştiriyorsa (hedefin iki yanındaki denemeler arasında 0,01 dB kaldı) kabul; denemelerin bitmesi ya da
+            # denemeyle kodlamanın farklı çıkması incelenmeli.
+            yakin_yok = any('denemeler arasında 0,01 dB kaldı' in y for y in gunluk)
+            bitti = any('Denemeler bitti' in y for y in gunluk)
+            if not yakin_yok:
+                f.append(f'hedefe ulaşılamadı: yükseklik {i:.2f} LUFS (hedef {hedef}, telafi {telafi:+.2f}, karar {karar}'
+                         + (', denemeler bitti' if bitti else '') + ')')
         else:
             # dokunulmayan seste tepe koruması sınırlayıcıyı tavanın altına çektiyse yükseklik o kadar düşebilir
             pay = 0.6 + (tepe_payi(gunluk) if '/Sinirli' in karar else 0)
@@ -1228,8 +1235,8 @@ def ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v,
                 f.append(f'yükseklik {i:.2f} LUFS, karar Hedefte (hedef {hedef})')
             elif ana == 'ZatenYuksek' and i < hedef - pay:
                 f.append(f'yükseklik {i:.2f} LUFS, karar ZatenYuksek (hedef {hedef})')
-        if ulasilamadi and i > hedef + 0.1 and not (sinirda and telafi < 0):
-            f.append(f'"hedefe ulaşılamadı" ama yükseklik {i:.2f} > hedef {hedef}')
+        if ulasilamadi and abs(i - hedef) <= 0.1:
+            f.append(f'"hedefe ulaşılamadı" ama yükseklik {i:.2f} hedefe 0,1 LU yakın (hedef {hedef})')
     yukseltildi = s['Esitleme'] and karar is not None and karar.startswith('Dogrusal')
     if (s['Sinirlayici'] or yukseltildi) and tepe is not None and tepe > tavan + 0.001:
         if not (s['Seviye'] > 0 and not s['Sinirlayici'] and not yukseltildi):

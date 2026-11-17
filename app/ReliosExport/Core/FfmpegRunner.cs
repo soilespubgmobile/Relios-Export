@@ -442,6 +442,7 @@ public static class Exporter
                 var sinir = false;
                 var denendi = false;
                 var denemelerBitti = false;
+                var ilerlemeYok = false;
                 if (tepeDenemesi || YukseklikDenemesi(duzeltme))
                 {
                     // Gerekirse telafi ve sınırlayıcının tavanı düzeltilip yeniden denenir; kodlama denenmiş bir ayarla
@@ -500,6 +501,9 @@ public static class Exporter
 
                         if (yeni is null)
                         {
+                            // Hedefe gelinmeden durduysa (telafi sınırında değil): hedefin iki yanındaki denemeler arasında
+                            // 0,01 dB kaldı, daha yakın ayar yok.
+                            ilerlemeYok = yukseklik is { } yd && Math.Abs(yd - hedef) > Esitleme.KayipliPayi && !sinirda;
                             break;
                         }
 
@@ -510,21 +514,30 @@ public static class Exporter
                         }
                     }
 
-                    // Denemeler bitti ama son ayar denenmedi: tepe her durumda tavanın altında kalmalı. Tepesi tavanın altında
-                    // ölçülen denemelerden hedefe en yakını (yükseklik denenmediyse sınırlayıcıyı en az kısanı); hiçbiri
-                    // değilse telafi sabit, yalnızca sınırlayıcı aşağı çekilerek denenir.
-                    if (koruma && denenenler.Count > 0 && denenenler[^1].D != duzeltme)
+                    // Kodlama denenmiş bir ayarla: son deneme tamamsa (tepe tavanın altında, yükseklik hedefte) o; değilse
+                    // (denemeler bitti, hedefe gelinemedi) tepesi tavanın altında ölçülen denemelerden hedefe en yakını
+                    // (yükseklik denenmediyse sınırlayıcıyı en az kısanı); hiçbiri değilse telafi sabit, yalnızca
+                    // sınırlayıcı aşağı çekilerek denenir.
+                    if (koruma && denenenler.Count > 0)
                     {
-                        denemelerBitti = true;
+                        var son = denenenler[^1];
+                        var sonuDenendi = son.D == duzeltme;
+                        denemelerBitti = !sonuDenendi;
                         var uygun = denenenler.Where(x => x.TepeTamam)
                             .OrderBy(x => x.Yukseklik is { } y ? Math.Abs(y - hedef) : 0)
                             .ThenBy(x => x.D.TasmaPayi)
                             .ToList();
-                        if (uygun.Count > 0)
+                        // Son deneme hedefte ve tepesi tavanın altındaysa kodlama onunla.
+                        var sonTamam = sonuDenendi && son.TepeTamam
+                            && (son.Yukseklik is not { } sy || Math.Abs(sy - hedef) <= Esitleme.KayipliPayi);
+                        if (!sonTamam && uygun.Count > 0)
                         {
                             duzeltme = uygun[0].D;
+
+                            // Telafi sınırı yalnızca seçilen ayar sınırdaysa (denemeler sınıra varmadan bittiyse değil).
+                            sinir = sinir && Math.Abs(duzeltme.Telafi) >= Esitleme.EnCokTelafi - (Esitleme.KayipliAdim / 2);
                         }
-                        else
+                        else if (!sonTamam && !sonuDenendi)
                         {
                             for (var d = 0; d < Esitleme.EnCokDeneme; d++)
                             {
@@ -564,6 +577,7 @@ public static class Exporter
                         Telafi = duzeltme.Telafi,
                         TelafiSiniri = sinir,
                         DenemelerBitti = denemelerBitti,
+                        YakinAyarYok = ilerlemeYok,
                         Kayipli = kayipli && denendi,
                         TasmaPayi = duzeltme.TasmaPayi,
                         Tasma = tasma,

@@ -832,7 +832,9 @@ internal static class BirimKontrol
         Kontrol("Biten satır: hedeften yüksek -13,84 → hedefe ulaşılamadı", "-13,8 LUFS (hedefe ulaşılamadı)",
             (ulas with { SonucYukseklik = -13.84 }).SatirMetni ?? "yok");
         Kontrol("Ayrıntı: denemeler bitti", "True", (ulas with { SonucYukseklik = -14.3, DenemelerBitti = true }).Ayrinti
-            .Contains("Denemeler bitti (en çok 6): tepesi tavanın altında kalan denemelerden hedefe en yakını kullanıldı.", StringComparison.Ordinal).ToString());
+            .Contains("Denemeler bitti (en çok 10): tepesi tavanın altında kalan denemelerden hedefe en yakını kullanıldı.", StringComparison.Ordinal).ToString());
+        Kontrol("Ayrıntı: daha yakın ayar yok (kodlayıcı sıçrıyor)", "True", (ulas with { SonucYukseklik = -14.15, YakinAyarYok = true }).Ayrinti
+            .Contains("hedefin altında ve üstünde ölçülen denemeler arasında 0,01 dB kaldı; hedefe en yakını kullanıldı.", StringComparison.Ordinal).ToString());
         Kontrol("Ayrıntı: telafi sınırında ayrıca neden yazılmaz", "False", (ulas with { SonucYukseklik = -16, TelafiSiniri = true, Telafi = 6 }).Ayrinti
             .Contains("hedefe en yakın", StringComparison.Ordinal).ToString());
 
@@ -941,6 +943,14 @@ internal static class BirimKontrol
         Kontrol("Ölçekli: eğim çok küçük (sınırlayıcı doydu) → en çok 6", "6.00/sinir", Olcekli(-5, 0.5, (2, 0.5, -6), (3, 0.5, -5.98)));
         Kontrol("Ölçekli: sınırda, yine eksik, pay aynı → dur", "dur/sinir", Olcekli(-5, 0.5, (5, 0.5, -6), (6, 0.5, -5.9)));
         Kontrol("Ölçekli: sınırda ama pay büyüyor → 6 kalır, yeni payla denenir", "6.00/sinir", Olcekli(-5, 0.8, (5, 0.5, -6), (6, 0.5, -5.9)));
+
+        // Hedef iki denemenin arasında: doğrusal aradeğerleme (CI'da AAC-LD 32 kb/s'de 0,1 dB kazanç yüksekliği 0,39 LU
+        // değiştiriyordu, HE-AAC v2 12 kb/s'de 0,22 dB 0,61 LU: eğimle yürüyen adım iki yana gidip geliyordu).
+        Kontrol("Aradeğerleme: 0,88 → -39,85, 0,78 → -40,236 (hedef -40)", "0.84", Olcekli(-40, 0, (0.88, 0, -39.85), (0.78, 0, -40.236)));
+        Kontrol("Aradeğerleme: üç deneme, iki yandaki en yakınla (0,78 ile 0,84)", "0.82",
+            Olcekli(-40, 0, (0.88, 0, -39.85), (0.78, 0, -40.236), (0.84, 0, -39.9)));
+        Kontrol("Aradeğerleme: aralık 0,01 dB'ye indi, daha yakın sonuç yok → dur", "dur", Olcekli(-40, 0, (0.81, 0, -40.2), (0.82, 0, -39.8)));
+        Kontrol("Aradeğerleme: o telafi denendiyse aralığın ortası", "0.86", Olcekli(-40, 0, (0.90, 0, -39.0), (0.82, 0, -40.05)));
         Kontrol("Kayıplı mı: TikTok sesi (FDK AAC 44,1 kHz)", "True", Esitleme.KayipliMi(Varsayilanlar.TikTok().Ses).ToString());
         Kontrol("Kayıplı mı: TikTok NVENC ayarının sesi (WAV)", "False", Esitleme.KayipliMi(Varsayilanlar.TikTokNvenc().Ses).ToString());
         Kontrol("Kayıplı mı: YouTube sesi (FDK AAC)", "True", Esitleme.KayipliMi(Varsayilanlar.YouTube().Ses).ToString());

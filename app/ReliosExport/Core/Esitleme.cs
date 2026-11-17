@@ -123,6 +123,13 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, SesOlcum? Olcum, doubl
     public bool DenemelerBitti { get; init; }
 
     /// <summary>
+    /// Hedefe gelinemedi, daha yakın ayar da yok: hedefin altında ve üstünde ölçülen denemeler arasında 0,01 dB kaldı
+    /// (ses kodlayıcısı yüksekliği bu aralıkta sıçrayarak değiştiriyor; ör. çok düşük bit hızında AAC). Kodlama hedefe en
+    /// yakın denemenin ayarıyla.
+    /// </summary>
+    public bool YakinAyarYok { get; init; }
+
+    /// <summary>
     /// Sonuç hedeften <see cref="Esitleme.SonucPayi"/> LU'dan uzak mı (ör. çok tepeli seste telafi sınırına gelindi,
     /// sınırlayıcı sesi daha fazla yükseltemiyor).
     /// </summary>
@@ -252,11 +259,14 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, SesOlcum? Olcum, doubl
                              + (HedefeUlasilamadi ? " · hedefe ulaşılamadı" : string.Empty));
                 if (HedefeUlasilamadi && !TelafiSiniri)
                 {
-                    satirlar.Add(DenemelerBitti
-                        ? $"Denemeler bitti (en çok {Esitleme.EnCokDeneme}): tepesi tavanın altında kalan denemelerden hedefe en yakını kullanıldı."
-                        : Sinirli
-                            ? "Sınırlayıcı tepeleri tavanda tutarken ses daha fazla yükselmiyor: hedefe en yakın sonuç bu."
-                            : "Ses kodlamadan sonra hedefe getirilemedi: hedefe en yakın sonuç bu.");
+                    satirlar.Add(YakinAyarYok
+                        ? "Ses kodlayıcısı yüksekliği kazançla sıçrayarak değiştiriyor (ör. çok düşük bit hızı): hedefin altında ve"
+                          + " üstünde ölçülen denemeler arasında 0,01 dB kaldı; hedefe en yakını kullanıldı."
+                        : DenemelerBitti
+                            ? $"Denemeler bitti (en çok {Esitleme.EnCokDeneme}): tepesi tavanın altında kalan denemelerden hedefe en yakını kullanıldı."
+                            : Sinirli
+                                ? "Sınırlayıcı tepeleri tavanda tutarken ses daha fazla yükselmiyor: hedefe en yakın sonuç bu."
+                                : "Ses kodlamadan sonra hedefe getirilemedi: hedefe en yakın sonuç bu.");
                 }
             }
 
@@ -361,8 +371,11 @@ public static class Esitleme
     /// </summary>
     public const double TepeDenemesiPayi = 6;
 
-    /// <summary>Telafi ve tepe koruması için en çok bu kadar deneme yapılır (yalnızca ses).</summary>
-    public const int EnCokDeneme = 6;
+    /// <summary>
+    /// Telafi ve tepe koruması için en çok bu kadar deneme yapılır (yalnızca ses). Olağan seste 1–3 deneme yeter; çok düşük
+    /// bit hızında AAC ve sınırlayıcının doyduğu seste hedefin iki yanı daraltılarak aranır (0.13.0'a kadar 6).
+    /// </summary>
+    public const int EnCokDeneme = 10;
 
     /// <summary>
     /// Deneme ölçümü hedefe bu kadar (LU) yakınsa telafi tamamdır (AAC ve WAV). AAC'nin kaybı küçüktür (kullanıcının
@@ -478,17 +491,54 @@ public static class Esitleme
             return (null, false);
         }
 
-        var x0 = son.Telafi + son.Pay;
-        var y0 = son.Olculen + son.Pay;
+        static double X(YukseklikDenemesi n) => n.Telafi + n.Pay;
+        static double Y(YukseklikDenemesi n) => n.Olculen + n.Pay;
         var hedefY = hedef + yeniPay;
+        var hepsi = onceki.Append(son).ToList();
+
+        // Bu telafi yeni payla denendi mi (telafi 0,01 dB'ye yuvarlıdır).
+        bool Denendi(double t) => hepsi.Any(n => Math.Abs(n.Telafi - t) < KayipliAdim / 2 && Math.Abs(n.Pay - yeniPay) < 1e-9);
+
+        (double? Yeni, bool Sinir) Sonuc(double istenen)
+        {
+            var sinir = Math.Abs(istenen) > EnCokTelafi;
+            var yeni = Math.Round(Math.Clamp(istenen, -EnCokTelafi, EnCokTelafi), 2);
+            if (yeni == 0)
+            {
+                // -0 (yuvarlanan küçük eksi sayı) yazıda "-0,00" görünmesin.
+                yeni = 0;
+            }
+
+            return Denendi(yeni) ? (null, sinir) : (yeni, sinir);
+        }
+
+        // Hedef iki denemenin arasındaysa (altındaki ve üstündeki en yakın deneme): doğrusal aradeğerleme; eğim ne
+        // olursa olsun aralığın içinde kalır (çok düşük bit hızında AAC yüksekliği kazançla 3–4 kat dik ya da sıçrayarak
+        // değiştiriyor: eğimle yürüyen adım iki yana gidip geliyordu). O telafi denendiyse aralığın ortası; o da
+        // denendiyse aralık 0,01 dB'ye indi: daha yakın sonuç yok (null).
+        var altta = hepsi.Where(n => Y(n) < hedefY).ToList();
+        var ustte = hepsi.Where(n => Y(n) > hedefY).ToList();
+        if (altta.Count > 0 && ustte.Count > 0)
+        {
+            var a = altta.MaxBy(Y);
+            var u = ustte.MinBy(Y);
+            if (Math.Abs(X(u) - X(a)) >= KayipliAdim / 2)
+            {
+                var xi = X(a) + ((hedefY - Y(a)) * (X(u) - X(a)) / (Y(u) - Y(a)));
+                var t = Math.Round(xi - yeniPay, 2);
+                return Sonuc(Denendi(t) ? ((X(a) + X(u)) / 2) - yeniPay : t);
+            }
+        }
+
+        var x0 = X(son);
+        var y0 = Y(son);
         var egim = 1.0;
-        var adaylar = onceki.Where(x => Math.Abs(x.Telafi + x.Pay - x0) >= KayipliAdim).ToList();
+        var adaylar = onceki.Where(n => Math.Abs(X(n) - x0) >= KayipliAdim / 2).ToList();
         if (adaylar.Count > 0)
         {
-            // Hedefin öbür yanında deneme varsa aradeğerleme (eğri tekdüze: hedef arada kalır), yoksa en yakınla.
-            var karsi = adaylar.Where(x => (x.Olculen + x.Pay - hedefY) * (y0 - hedefY) < 0).ToList();
-            var secilen = (karsi.Count > 0 ? karsi : adaylar).MinBy(x => Math.Abs(x.Olculen + x.Pay - hedefY));
-            var e = (y0 - (secilen.Olculen + secilen.Pay)) / (x0 - (secilen.Telafi + secilen.Pay));
+            // Hedef denemelerin hep bir yanında: hedefe en yakın öbür denemeyle eğim.
+            var secilen = adaylar.MinBy(n => Math.Abs(Y(n) - hedefY));
+            var e = (y0 - Y(secilen)) / (x0 - X(secilen));
             if (double.IsFinite(e) && e > 0)
             {
                 egim = Math.Clamp(e, EnKucukEgim, EnBuyukEgim);
@@ -497,16 +547,7 @@ public static class Esitleme
 
         // Yükseklik hedefteyse (yalnızca pay büyüyor) hedefte sayılır: adım yalnızca payın sınırlayıcıda kıstığı kadar.
         var simdiki = Math.Abs(hedef - son.Olculen) <= KayipliPayi ? hedef + son.Pay : y0;
-        var istenen = x0 + ((hedefY - simdiki) / egim) - yeniPay;
-        var sinir = Math.Abs(istenen) > EnCokTelafi;
-        var yeni = Math.Round(Math.Clamp(istenen, -EnCokTelafi, EnCokTelafi), 2);
-        if (yeni == 0)
-        {
-            // -0 (yuvarlanan küçük eksi sayı) yazıda "-0,00" görünmesin.
-            yeni = 0;
-        }
-
-        return Math.Abs(yeni - son.Telafi) < KayipliAdim && payAyni ? (null, sinir) : (yeni, sinir);
+        return Sonuc(x0 + ((hedefY - simdiki) / egim) - yeniPay);
     }
 
     /// <summary>Ölçülen gerçek tepe tavanın altında mı (ölçerin yuvarlaması kadar pay bırakılarak).</summary>
