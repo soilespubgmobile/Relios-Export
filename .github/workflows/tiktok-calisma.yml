@@ -1,0 +1,194 @@
+name: TikTok sikistirma calismasi
+
+# TikTok'a yuklenecek x264 dosyasi icin ayar ve CRF karsilastirmasi (tools/tiktok_calisma.py): her ayar ve CRF ile
+# kodlanan dosya TikTok'un yeniden kodlamasinin benzetiminden gecirilir, kalite kaynaga gore olculur (VMAF, PSNR,
+# SSIM, CAMBI). Kaynaklar herkese acik deneme videolari (Xiph). Programin parcasi degildir.
+on:
+  workflow_dispatch:
+    inputs:
+      klipler:
+        description: "Kaynaklar: ad=URL (virgulle). Bos: yalnizca Xiph twitch listesi"
+        required: false
+        default: ""
+      bas:
+        description: "Kesitin ilk karesi"
+        required: false
+        default: "0"
+      kare:
+        description: "Kesitin kare sayisi"
+        required: false
+        default: "480"
+      gruplar:
+        description: "Ayar gruplari (tools/tiktok_calisma.py varyantlar)"
+        required: false
+        default: "A,B,C,D,E"
+      crfler:
+        description: "CRF degerleri"
+        required: false
+        default: "22,24,26,28,30"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  hazirla:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      ffurl: ${{ steps.ff.outputs.url }}
+      klipler: ${{ steps.m.outputs.klipler }}
+      gruplar: ${{ steps.m.outputs.gruplar }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: FFmpeg (BtbN, en son surum dali, GPL; libx264 + libx265 + libvmaf)
+        id: ff
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh release list -R BtbN/FFmpeg-Builds --limit 20 --json tagName -q '[.[] | select(.tagName | startswith("autobuild-"))][0].tagName')
+          echo "Surum: $tag"
+          ad=$(gh release view "$tag" -R BtbN/FFmpeg-Builds --json assets -q '.assets[].name' \
+            | grep -E '^ffmpeg-n[0-9]+\.[0-9]+.*-linux64-gpl-[0-9]+\.[0-9]+\.tar\.xz$' | sort -V | tail -1)
+          echo "Dosya: $ad"
+          echo "url=https://github.com/BtbN/FFmpeg-Builds/releases/download/$tag/$ad" >> "$GITHUB_OUTPUT"
+      - name: Xiph twitch listesi
+        run: |
+          for u in https://media.xiph.org/video/derf/twitch/ https://media.xiph.org/video/derf/twitch/y4m/; do
+            echo "== $u"
+            curl -sSL --max-time 60 "$u" | sed -e 's/<[^>]*>/ /g' | grep -E '\.(y4m|xz|mkv|mp4|webm)|/ ' | sed 's/  */ /g' | head -100 || true
+          done
+      - name: Matris
+        id: m
+        env:
+          KLIPLER: ${{ inputs.klipler }}
+          GRUPLAR: ${{ inputs.gruplar }}
+        run: |
+          python3 - <<'EOF'
+          import json, os, re
+          k = []
+          for parca in [p.strip() for p in os.environ.get("KLIPLER", "").split(",") if p.strip()]:
+              ad, url = parca.split("=", 1)
+              k.append({"ad": re.sub(r"[^A-Za-z0-9_-]", "_", ad.strip()), "url": url.strip()})
+          g = [x.strip() for x in os.environ.get("GRUPLAR", "").split(",") if x.strip()]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("klipler=" + json.dumps(k) + "\n")
+              f.write("gruplar=" + json.dumps(g) + "\n")
+          print(json.dumps(k), json.dumps(g))
+          EOF
+
+  kaynak:
+    needs: hazirla
+    if: needs.hazirla.outputs.klipler != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        klip: ${{ fromJSON(needs.hazirla.outputs.klipler) }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: FFmpeg
+        run: |
+          set -euo pipefail
+          curl -sSL --retry 3 "${{ needs.hazirla.outputs.ffurl }}" -o ff.tar.xz
+          mkdir ff && tar -xJf ff.tar.xz -C ff --strip-components=1
+          ff/bin/ffmpeg -hide_banner -version | head -1
+          ff/bin/ffmpeg -hide_banner -filters | grep -E ' libvmaf ' || { echo "libvmaf yok"; exit 1; }
+      - name: Kaynagi indir ve kes
+        env:
+          URL: ${{ matrix.klip.url }}
+          BAS: ${{ inputs.bas }}
+          KARE: ${{ inputs.kare }}
+        run: |
+          set -euo pipefail
+          mkdir -p ref
+          case "$URL" in
+            *.xz) curl -sSL --retry 3 "$URL" | xz -dc > kaynak.y4m ;;
+            *) curl -sSL --retry 3 "$URL" -o kaynak.y4m ;;
+          esac
+          ls -la kaynak.y4m
+          head -c 200 kaynak.y4m | head -1 || true
+          son=$((BAS + KARE))
+          ff/bin/ffmpeg -hide_banner -nostdin -v error -y -i kaynak.y4m -an \
+            -vf "trim=start_frame=$BAS:end_frame=$son,setpts=PTS-STARTPTS,format=yuv420p" \
+            -c:v ffv1 -level 3 -slices 24 -slicecrc 0 -g 1 -threads 4 "ref/${{ matrix.klip.ad }}.mkv"
+          rm -f kaynak.y4m
+          ff/bin/ffprobe -v error -count_frames -show_entries stream=width,height,r_frame_rate,pix_fmt,nb_read_frames -of compact "ref/${{ matrix.klip.ad }}.mkv"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ref-${{ matrix.klip.ad }}
+          path: ref/${{ matrix.klip.ad }}.mkv
+          retention-days: 3
+          compression-level: 0
+      - name: Kaynagin kendisi yuklenseydi
+        run: |
+          set -o pipefail
+          FFMPEG=ff/bin/ffmpeg FFPROBE=ff/bin/ffprobe ISP=4 python3 -X utf8 -I tools/tiktok_calisma.py kaynak \
+            --kaynak "ref/${{ matrix.klip.ad }}.mkv" --ad "${{ matrix.klip.ad }}" | tee "kaynak-${{ matrix.klip.ad }}.txt"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: kaynak-${{ matrix.klip.ad }}
+          path: kaynak-${{ matrix.klip.ad }}.txt
+          retention-days: 7
+
+  olc:
+    needs: [hazirla, kaynak]
+    if: needs.hazirla.outputs.klipler != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        klip: ${{ fromJSON(needs.hazirla.outputs.klipler) }}
+        grup: ${{ fromJSON(needs.hazirla.outputs.gruplar) }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: FFmpeg
+        run: |
+          set -euo pipefail
+          curl -sSL --retry 3 "${{ needs.hazirla.outputs.ffurl }}" -o ff.tar.xz
+          mkdir ff && tar -xJf ff.tar.xz -C ff --strip-components=1
+          ff/bin/ffmpeg -hide_banner -version | head -1
+          nproc
+      - uses: actions/download-artifact@v8
+        with:
+          name: ref-${{ matrix.klip.ad }}
+          path: ref
+      - name: Olc
+        env:
+          CRFLER: ${{ inputs.crfler }}
+        run: |
+          set -o pipefail
+          FFMPEG=ff/bin/ffmpeg FFPROBE=ff/bin/ffprobe ISP=4 python3 -X utf8 -I tools/tiktok_calisma.py olc \
+            --kaynak "ref/${{ matrix.klip.ad }}.mkv" --ad "${{ matrix.klip.ad }}" --grup "${{ matrix.grup }}" \
+            --crf "$CRFLER" | tee "sonuc-${{ matrix.klip.ad }}-${{ matrix.grup }}.txt"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: sonuc-${{ matrix.klip.ad }}-${{ matrix.grup }}
+          path: sonuc-${{ matrix.klip.ad }}-${{ matrix.grup }}.txt
+          retention-days: 7
+
+  ozet:
+    needs: [hazirla, kaynak, olc]
+    if: always() && needs.hazirla.outputs.klipler != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: "kaynak-*"
+          path: s
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: "sonuc-*"
+          path: s
+          merge-multiple: true
+      - name: Tum sonuclar
+        run: |
+          ls -la s
+          cat s/*.txt | grep -E '^(KAYNAK|SONUC|X264)\|' | sort -u
+          echo "SATIR: $(cat s/*.txt | grep -cE '^SONUC\|')"
