@@ -196,6 +196,7 @@ NVENC = [
     Alan('Video.Nvenc.ZamansalAq', ['true', 'false']),
     Alan('Video.Nvenc.BKare', ['null', '0', '2', '4']),
     Alan('Video.Nvenc.BRefModu', ['disabled', 'each', 'middle'], liste='BRefModlari'),
+    Alan('Video.Nvenc.UyarlamaliB', ['true', 'false']),
     Alan('Video.Nvenc.Ref', ['null', '1', '3', '16']),
     Alan('Video.Nvenc.AgirlikliTahmin', ['true', 'false']),
     Alan('Video.Nvenc.Kodlama', ['cabac', 'cavlc'], liste='Kodlamalar'),
@@ -1268,6 +1269,11 @@ def nvenc_dogrula(gunluk, ayar):
     dpb = re.search(r'-dpb_size (\d+)', komut)
     if m and int(m.group(1)) > 0 and n['BRefModu'] != 'disabled' and dpb and int(dpb.group(1)) < 3:
         f.append('B-kare referans: DPB en az 3')
+    # Uyarlamalı B-kare kapalı: B-kare olabiliyorsa (sayı 0 değil) -b_adapt 0; B-kare yoksa ya da açıkken yok.
+    b_olabilir = not (m and m.group(1) == '0')
+    if (not n.get('UyarlamaliB', True) and b_olabilir) != ('-b_adapt 0' in komut):
+        f.append(f"uyarlamalı B-kare {n.get('UyarlamaliB', True)}, B-kare {m.group(1) if m else 'boş'}: "
+                 f"-b_adapt 0 {'yok' if '-b_adapt 0' not in komut else 'olmamalı'}")
     if '-hwaccel cuda' in komut and not n['GpuCozme']:
         f.append('ekran kartıyla çözme seçili değil ama komutta var')
     return f

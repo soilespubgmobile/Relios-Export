@@ -813,6 +813,8 @@ internal static class ArayuzTaramasi
             await Bosta(w);
             var bKutusu = liste.Select(d => d.Oge).OfType<TextBox>().First(t => t.GetBindingExpression(TextBox.TextProperty)?.ParentBinding.Path.Path == "BKare");
             Esit2("Ağırlıklı tahmin açıkken B-kare kutusu kapalı", false, bKutusu.IsEnabled);
+            var uyarlamaliB = liste.Select(d => d.Oge).OfType<CheckBox>().First(c => c.GetBindingExpression(ToggleButton.IsCheckedProperty)?.ParentBinding.Path.Path == "UyarlamaliB");
+            Esit2("Ağırlıklı tahmin açıkken uyarlamalı B-kare kutusu kapalı", false, uyarlamaliB.IsEnabled);
             p.Sonuc.AgirlikliTahmin = false;
             await Bosta(w);
 
@@ -1178,7 +1180,22 @@ internal static class ArayuzTaramasi
                 Esit2($"{onerilenler[i].Ad}: yüklendi, ayarlar önerilenle aynı", Json(onerilenler[i].Ayarlar), Json(w.KontrolAyarlari));
                 Esit2($"{onerilenler[i].Ad}: kullanıcının ön ayarlarına eklenmedi", 0, dosya.OnAyarlar.Count);
                 var hata = await Kodla(w.KontrolAyarlari);
-                Kontrol($"{onerilenler[i].Ad}: FFmpeg'de çalışıyor", "çalıştı", hata ?? "çalıştı", hata is null);
+                if (hata == Atlandi)
+                {
+                    // 0.13.1'den beri ekran kartıyla (NVENC): burada ekran kartı yok. Komutu kurulur; kodlama x264'e
+                    // çevrilerek denenir (ses, kap, ölçekleme aynı kalır). Gerçek NVENC kodlaması kullanıcının kartında.
+                    var nvKomut = ArgsBuilder.NvencKomutMetni(w.KontrolAyarlari, 30);
+                    Kontrol($"{onerilenler[i].Ad}: kodlayıcı ekran kartı (NVENC komutu)", "h264_nvenc",
+                        nvKomut.Contains("h264_nvenc", StringComparison.Ordinal) ? "h264_nvenc" : Kisa(nvKomut), nvKomut.Contains("h264_nvenc", StringComparison.Ordinal));
+                    var x264 = w.KontrolAyarlari.Kopya();
+                    x264.Video.Kodlayici = VideoKodlayici.X264;
+                    hata = await Kodla(x264);
+                    Kontrol($"{onerilenler[i].Ad}: x264'e çevrilince FFmpeg'de çalışıyor", "çalıştı", hata ?? "çalıştı", hata is null);
+                }
+                else
+                {
+                    Kontrol($"{onerilenler[i].Ad}: FFmpeg'de çalışıyor", "çalıştı", hata ?? "çalıştı", hata is null);
+                }
             }
 
             await Task.Delay(300);

@@ -508,6 +508,7 @@ public sealed class NvencAyarlari : Gozlenebilir
     private bool _zamansalAq = true;
     private int? _bKare = 3;
     private string _bRefModu = "middle";
+    private bool _uyarlamaliB = true;
     private int? _ref;
     private bool _agirlikliTahmin;
     private string _kodlama = "cabac";
@@ -540,6 +541,10 @@ public sealed class NvencAyarlari : Gozlenebilir
     /// <summary>disabled, qres, fullres.</summary>
     public string CokGecis { get => _cokGecis; set => Set(ref _cokGecis, value); }
 
+    /// <summary>
+    /// Önden bakış (kare). Boşsa kartın ön ayarınınki: p7'de kart yine önden bakar (sahne değişiminde anahtar kare,
+    /// uyarlamalı B-kare; kullanıcının kartında ölçüldü), yani boş "kapalı" demek değildir.
+    /// </summary>
     public int? IleriBakis { get => _ileriBakis; set => Set(ref _ileriBakis, value); }
 
     public bool UzamsalAq { get => _uzamsalAq; set => Set(ref _uzamsalAq, value); }
@@ -552,6 +557,14 @@ public sealed class NvencAyarlari : Gozlenebilir
 
     /// <summary>disabled, each, middle.</summary>
     public string BRefModu { get => _bRefModu; set => Set(ref _bRefModu, value); }
+
+    /// <summary>
+    /// Uyarlamalı B-kare (b_adapt). Açıkken kart hızlı sahnelerde B-kare yerine P-kare koyabilir; kapalıyken B-kareler
+    /// hep aynı dizilir (1 B-karede IPBPB). Kullanıcının kartında ölçüldü (0.13.1, 38m örneği, 193 kare, 1 B-kare): p7'de
+    /// önden bakış kutusu boşken de kart B-kareleri uyarlıyordu (73 B-kare, hızlı yerlerde PPPP); "-b_adapt 0" ile 90
+    /// B-kare, her GOP IPBPB…BPP (önden bakış boşken de 16'yken de).
+    /// </summary>
+    public bool UyarlamaliB { get => _uyarlamaliB; set => Set(ref _uyarlamaliB, value); }
 
     public int? Ref { get => _ref; set => Set(ref _ref, value); }
 

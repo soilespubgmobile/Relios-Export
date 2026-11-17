@@ -1532,13 +1532,21 @@ public static class ArgsBuilder
         }
 
         args.AddRange(["-temporal-aq", n.ZamansalAq && !n.Kayipsiz ? "1" : "0"]);
-        if (NvencBKare(n, profil) is { } bf)
+        var bKare = NvencBKare(n, profil);
+        if (bKare is { } bf)
         {
             args.AddRange(["-bf", bf.ToString(Inv)]);
             if (bf > 0)
             {
                 args.AddRange(["-b_ref_mode", n.BRefModu]);
             }
+        }
+
+        // Uyarlamalı B-kare kapalı: B-kareler hep aynı dizilir. B-kare yoksa söylenecek bir şey yok; sayı boşsa (kartın
+        // ön ayarı B-kare koyar) yine verilir.
+        if (!n.UyarlamaliB && bKare is not 0)
+        {
+            args.AddRange(["-b_adapt", "0"]);
         }
 
         if (n.Ref is { } refs)

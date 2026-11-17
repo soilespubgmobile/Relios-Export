@@ -26,11 +26,20 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
     verilir (`-dpb_size`): ffmpeg'de `-refs` yalnızca kare başına referanstır, DPB boş kalınca kart 6 kare seçer
     ve 1080p'de 4.x seviyelerini (en fazla 4 kare) aşar.
   - Ön ayar listesine program kendiliğinden bir şey koymaz; yalnızca kullanıcının kaydettikleri durur.
-  - Önerilen ayarlar (0.13.0): ön ayar penceresinde ayrı bir bölüm; programla gelir, yalnızca yüklenir (silinmez, ayar
-    dosyasına ve kayıtlı ön ayarlara yazılmaz). "38m videosu gibi": x264 veryslow High, 2 geçiş 12 Mb/s (en çok 16),
-    2 referans kare, IPBPB, her saniye anahtar kare, MOV, FDK AAC-LC 128 kb/s 44,1 kHz. "1717504691091 videosu gibi":
-    x264 veryslow Main, 2 geçiş 52 Mb/s (en çok 62), 3 referans kare, B-kare yok, 30 karede bir anahtar kare, MP4, FDK
-    AAC-LC 512 kb/s 48 kHz. İkisinde de boyut, kare hızı ve seviye kaynakla aynı; ses yüksekliği -14 LUFS.
+  - Önerilen ayarlar (0.13.0; 0.13.1'den beri ekran kartıyla): ön ayar penceresinde ayrı bir bölüm; programla gelir,
+    yalnızca yüklenir (silinmez, ayar dosyasına ve kayıtlı ön ayarlara yazılmaz). İki örnek video da donanımla
+    kodlanmış (38m telefonda, 1717504691091 bilgisayarda NVENC'le: başlıkları kartın çıktısıyla birebir).
+    "38m videosu gibi": NVENC p7, VBR 12 Mb/s (en çok 16, tampon 16), High, P-kare tek referans (DPB 2), 1 B-kare
+    (referans değil, uyarlamalı B-kare kapalı: hep IPBPB), uzamsal AQ, her saniye anahtar kare, MOV, FDK AAC-LC 128 kb/s
+    44,1 kHz. "1717504691091 videosu gibi": NVENC p7, VBR 52 Mb/s (en çok 62, tampon 62), Main, 3 referans kare,
+    B-kare yok, AQ yok, 30 karede bir anahtar kare, MP4, FDK AAC-LC 512 kb/s 48 kHz. İkisinde de boyut, kare hızı ve
+    seviye kaynakla aynı, sahne değişiminde ek anahtar kare yok, ses yüksekliği -14 LUFS. Kodlayıcı x264'e çevrilirse
+    aynı yapı x264'le (2 geçiş). Kullanıcının kartında denendi: H.264 başlıkları, kare düzeni, IDR aralığı ve ses
+    örneklerinkiyle aynı.
+  - NVENC penceresinde "Uyarlamalı B-kare" (0.13.1, `-b_adapt`): kapalıyken B-kareler hep aynı dizilir (1 B-karede
+    IPBPB); açıkken (varsayılan) kart hızlı sahnelerde B-kare yerine P-kare koyabilir. "Önden bakış" kutusu boşsa kartın
+    ön ayarınınki kullanılır: p7'de kart yine önden bakar (sahne değişiminde anahtar kare, uyarlamalı B-kare; kullanıcının
+    kartında ölçüldü), kutu eskiden "kapalı" yazıyordu.
   - Varsayılan düğmesi (0.13.0) ayarlar zaten varsayılandayken kapalıdır, bir ayar değişince açılır.
   - İlerleme çubuğu (0.13.0) kodlanan kare sayısından ilerler: x264 kareleri önden bakış ve B-kareler yüzünden geriden
     kodlar (TikTok ayarında ~266 kare); FFmpeg'in zamanına göre çubuk %85–90'da durup birden bitiyordu.
@@ -94,7 +103,8 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
   GitHub Actions'ta en son kararlı sürümlerle derlenir.
 - `tools/` : GitHub'daki doğrulama araçları (deneme videoları, çıktı kontrolleri, 0.3.0 komut karşılaştırması,
   kombinasyon denemesi: her ayarın her değeri ve değer çiftleri 73 kaynakla gerçek kodlamayla, 4754 deneme; önerilen
-  ayarların ölçülen kodlamalarla karşılaştırılması).
+  ayarların ölçülen kodlamalarla karşılaştırılması; ekran kartıyla kodlanmış önerilen ayar çıktılarını kullanıcının
+  bilgisayarında denetleyen `onerilen_nvenc_kontrol.py` ve H.264 başlık özetçisi `h264_basliklar.py`).
 
 Not: libfdk_aac içeren FFmpeg derlemesi "nonfree"dir; yalnızca kişisel kullanım içindir,
 yeniden dağıtılamaz.

@@ -93,7 +93,7 @@
                         </DockPanel>
                         <DockPanel Style="{StaticResource FormSatiri}">
                             <TextBlock Text="Önden bakış (rc-lookahead)" Style="{StaticResource PencereEtiketi}"/>
-                            <TextBox Style="{StaticResource SayiKutusu}" Tag="kapalı" Text="{Binding IleriBakis, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
+                            <TextBox Style="{StaticResource SayiKutusu}" Tag="ön ayarın" Text="{Binding IleriBakis, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
                         </DockPanel>
 
                         <TextBlock Text="UYARLAMALI NİCELEME (AQ)" Style="{StaticResource AltBaslik}"/>
@@ -117,6 +117,8 @@
                             <TextBlock Text="B-kare referans modu" Style="{StaticResource PencereEtiketi}"/>
                             <ComboBox ItemsSource="{x:Static a:Secenekler.BRefModlari}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding BRefModu}"/>
                         </DockPanel>
+                        <CheckBox Content="Uyarlamalı B-kare (b_adapt)" IsChecked="{Binding UyarlamaliB}" Margin="0,0,0,10"
+                                  IsEnabled="{Binding AgirlikliTahmin, Converter={StaticResource Degil}}"/>
                         <DockPanel Style="{StaticResource FormSatiri}">
                             <TextBlock Text="Referans kare (refs)" Style="{StaticResource PencereEtiketi}"/>
                             <TextBox Style="{StaticResource SayiKutusu}" Tag="sürücü" Text="{Binding Ref, Converter={StaticResource Sayi}, UpdateSourceTrigger=LostFocus}"/>
@@ -127,7 +129,7 @@
                         </DockPanel>
                         <CheckBox Content="Ağırlıklı tahmin (weighted_pred)" IsChecked="{Binding AgirlikliTahmin}" Margin="0,2,0,6"/>
                         <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,8"
-                                   Text="Ağırlıklı tahmin B-karelerle birlikte kullanılamaz (NVENC desteklemez): açıkken B-kare kullanılmaz. B-kareler referans olarak kullanılınca referans kare tamponu en az 3 kare olur. Baseline ve High 4:4:4 profilde ekran kartı yalnızca CAVLC kullanır."/>
+                                   Text="Ağırlıklı tahmin B-karelerle birlikte kullanılamaz (NVENC desteklemez): açıkken B-kare kullanılmaz. B-kareler referans olarak kullanılınca referans kare tamponu en az 3 kare olur. Uyarlamalı B-kare açıkken kart hızlı sahnelerde B-kare yerine P-kare koyabilir; kapalıyken B-kareler hep aynı dizilir (1 B-karede IPBPB). Önden bakış boşsa kartın ön ayarınınki kullanılır (p7'de de önden bakılır). Baseline ve High 4:4:4 profilde ekran kartı yalnızca CAVLC kullanır."/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

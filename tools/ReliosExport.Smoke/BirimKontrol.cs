@@ -242,6 +242,37 @@ internal static class BirimKontrol
         });
         Iceriyor("2 B-kare + referans 4 (yeter)", k, " -refs 4 -dpb_size 4 ");
 
+        // Uyarlamalı B-kare (0.13.1): kapalıyken -b_adapt 0 (B-kareler hep aynı dizilir); B-kare yoksa söylenmez.
+        Icermiyor("Uyarlamalı B-kare açık (varsayılan)", NvencKomutu(hd, a => a.Video.Nvenc.BKare = 2), "-b_adapt");
+        k = NvencKomutu(hd, a =>
+        {
+            a.Video.Nvenc.BKare = 1;
+            a.Video.Nvenc.BRefModu = "disabled";
+            a.Video.Nvenc.UyarlamaliB = false;
+            a.Video.Nvenc.Ref = 1;
+        });
+        Iceriyor("Uyarlamalı B-kare kapalı, 1 B-kare (IPBPB)", k, " -bf 1 -b_ref_mode disabled -b_adapt 0 -refs 1 -dpb_size 2 ");
+        k = NvencKomutu(hd, a =>
+        {
+            a.Video.Nvenc.BKare = null;
+            a.Video.Nvenc.UyarlamaliB = false;
+        });
+        Iceriyor("Uyarlamalı B-kare kapalı, B-kare boş (kartın ön ayarı B-kare koyar)", k, " -b_adapt 0 ");
+        Icermiyor("Uyarlamalı B-kare kapalı, B-kare boş", k, " -bf ");
+        Icermiyor("Uyarlamalı B-kare kapalı, B-kare 0", NvencKomutu(hd, a => a.Video.Nvenc.UyarlamaliB = false), "-b_adapt");
+        Icermiyor("Uyarlamalı B-kare kapalı + ağırlıklı tahmin (B-kare 0)", NvencKomutu(hd, a =>
+        {
+            a.Video.Nvenc.BKare = 2;
+            a.Video.Nvenc.UyarlamaliB = false;
+            a.Video.Nvenc.AgirlikliTahmin = true;
+        }), "-b_adapt");
+        Icermiyor("Uyarlamalı B-kare kapalı + Baseline (B-kare yok)", NvencKomutu(hd, a =>
+        {
+            a.Video.Nvenc.Profil = "baseline";
+            a.Video.Nvenc.BKare = 2;
+            a.Video.Nvenc.UyarlamaliB = false;
+        }), "-b_adapt");
+
         // Ağırlıklı tahmin B-karelerle kullanılamaz ("Weighted Prediction not supported with B-frames"): B-kare 0.
         k = NvencKomutu(hd, a =>
         {
@@ -1973,32 +2004,70 @@ internal static class BirimKontrol
             return (" " + string.Join(' ', plan.Gecisler[0]) + " ", " " + string.Join(' ', plan.Gecisler[^1]) + " ");
         }
 
-        var (ilk, son) = Komut(liste[0].Ayarlar, Kaynak(1080, 1920, 30, "High", 41));
-        Iceriyor("38m: x264 veryslow High, seviye kaynağın (4.1)", son, " -c:v libx264 -preset veryslow -profile:v high -level:v 4.1 -b:v 12000k -pass 2 ");
-        Iceriyor("38m: 1. geçiş hızlı", ilk, " -pass 1 -passlogfile GECIS -fastfirstpass 1 ");
-        Iceriyor("38m: referans 2", son, "-x264-params threads=8:ref=2:");
-        Iceriyor("38m: 8x8 DCT", son, ":8x8dct=1:");
-        Iceriyor("38m: 1 B-kare, ağırlıklı P yok, anahtar kare 30 (1 sn), sahne eşiği 0", son, ":bframes=1:weightp=0:keyint=30:scenecut=0:");
-        Iceriyor("38m: VBV 16000 / 16000", son, ":vbv-maxrate=16000:vbv-bufsize=16000:");
-        Iceriyor("38m: uyarlamalı B-kare ve piramit kapalı, ağırlıklı B yok", son, ":b-adapt=0:b-pyramid=none:weightb=0");
-        Icermiyor("38m: açık GOP yok", son, "open-gop");
+        // 0.13.1: ekran kartıyla (NVENC). Komutlar kullanıcının kartında denenen ayarlarla aynı.
+        var nv38 = liste[0].Ayarlar;
+        Kontrol("38m: kodlayıcı ekran kartı", "Nvenc", nv38.Video.Kodlayici.ToString());
+        var (ilk, son) = Komut(nv38, Kaynak(1080, 1920, 30, "High", 41));
+        Kontrol("38m: NVENC tek geçiş (komut 1)", "True", (ilk == son).ToString());
+        Iceriyor("38m: NVDEC (kaynak ekran kartıyla çözülür)", son, " -hwaccel cuda ");
+        Iceriyor("38m: NVENC p7 hq High, seviye kaynağın (4.1)", son, " -c:v h264_nvenc -preset p7 -tune hq -profile:v high -level:v 4.1 ");
+        Iceriyor("38m: VBR 12000, en çok 16000, tampon 16000, çok geçiş, uzamsal AQ 8, zamansal AQ yok", son,
+            " -rc vbr -b:v 12000k -maxrate 16000k -bufsize 16000k -multipass fullres -spatial-aq 1 -aq-strength 8 -temporal-aq 0 ");
+        Iceriyor("38m: 1 B-kare referans değil, uyarlamalı B-kare kapalı (IPBPB), P tek referans, DPB 2", son,
+            " -bf 1 -b_ref_mode disabled -b_adapt 0 -refs 1 -dpb_size 2 ");
+        Iceriyor("38m: CABAC, anahtar kare 30 (1 sn), sahne değişiminde ek anahtar kare yok", son, " -coder cabac -g 30 -no-scenecut 1 ");
+        Icermiyor("38m: önden bakış kartın ön ayarınınki", son, "-rc-lookahead");
+        Icermiyor("38m: ağırlıklı tahmin yok", son, "-weighted_pred");
         Iceriyor("38m: ses FDK AAC-LC 128 kb/s 44,1 kHz stereo", son, " -c:a libfdk_aac -profile:a aac_low -b:a 128k -ar 44100 -ac 2 ");
-        Kontrol("38m: kap MOV", ".mov", liste[0].Ayarlar.Uzanti);
-        Kontrol("38m: kaynak 1080p60 High@4.2: anahtar kare 60 kare (1 sn)", "60",
-            Regex(Komut(liste[0].Ayarlar, Kaynak(1080, 1920, 60, "High", 42)).Son, @":keyint=(\d+):"));
+        Kontrol("38m: kap MOV", ".mov", nv38.Uzanti);
+        Kontrol("38m: kaynak 1080p60 High@4.2: anahtar kare 60 kare (1 sn), seviye 4.2", "60 4.2",
+            Regex(Komut(nv38, Kaynak(1080, 1920, 60, "High", 42)).Son, @" -g (\d+) ") + " "
+            + Regex(Komut(nv38, Kaynak(1080, 1920, 60, "High", 42)).Son, @" -level:v (\S+) "));
 
-        (ilk, son) = Komut(liste[1].Ayarlar, Kaynak(1920, 1920, 60, "Main", 51));
-        Iceriyor("1717504691091: x264 veryslow Main, seviye kaynağın (5.1)", son, " -c:v libx264 -preset veryslow -profile:v main -level:v 5.1 -b:v 52000k -pass 2 ");
-        Iceriyor("1717504691091: referans 3", son, "-x264-params threads=8:ref=3:");
-        Iceriyor("1717504691091: 8x8 DCT kapalı", son, ":8x8dct=0:");
-        Iceriyor("1717504691091: B-kare yok, ağırlıklı P yok, anahtar kare 30, sahne eşiği 0", son, ":bframes=0:weightp=0:keyint=30:scenecut=0:");
-        Iceriyor("1717504691091: VBV 62000 / 62000", son, ":vbv-maxrate=62000:vbv-bufsize=62000:");
+        // Kodlayıcı x264'e çevrilirse aynı yapı x264'le (ekran kartı olmayan bilgisayar için).
+        var x38 = Varsayilanlar.Onerilenler()[0].Ayarlar;
+        x38.Video.Kodlayici = VideoKodlayici.X264;
+        (ilk, son) = Komut(x38, Kaynak(1080, 1920, 30, "High", 41));
+        Iceriyor("38m (x264'e çevrilince): veryslow High, seviye kaynağın (4.1)", son, " -c:v libx264 -preset veryslow -profile:v high -level:v 4.1 -b:v 12000k -pass 2 ");
+        Iceriyor("38m (x264): 1. geçiş hızlı", ilk, " -pass 1 -passlogfile GECIS -fastfirstpass 1 ");
+        Iceriyor("38m (x264): referans 2", son, "-x264-params threads=8:ref=2:");
+        Iceriyor("38m (x264): 8x8 DCT", son, ":8x8dct=1:");
+        Iceriyor("38m (x264): 1 B-kare, ağırlıklı P yok, anahtar kare 30 (1 sn), sahne eşiği 0", son, ":bframes=1:weightp=0:keyint=30:scenecut=0:");
+        Iceriyor("38m (x264): VBV 16000 / 16000", son, ":vbv-maxrate=16000:vbv-bufsize=16000:");
+        Iceriyor("38m (x264): uyarlamalı B-kare ve piramit kapalı, ağırlıklı B yok", son, ":b-adapt=0:b-pyramid=none:weightb=0");
+        Icermiyor("38m (x264): açık GOP yok", son, "open-gop");
+        Icermiyor("38m (x264): ekran kartıyla çözme yok", son, "-hwaccel");
+
+        var nv17 = liste[1].Ayarlar;
+        Kontrol("1717504691091: kodlayıcı ekran kartı", "Nvenc", nv17.Video.Kodlayici.ToString());
+        (ilk, son) = Komut(nv17, Kaynak(1920, 1920, 60, "Main", 51));
+        Kontrol("1717504691091: NVENC tek geçiş (komut 1)", "True", (ilk == son).ToString());
+        Iceriyor("1717504691091: NVDEC", son, " -hwaccel cuda ");
+        Iceriyor("1717504691091: NVENC p7 hq Main, seviye kaynağın (5.1)", son, " -c:v h264_nvenc -preset p7 -tune hq -profile:v main -level:v 5.1 ");
+        Iceriyor("1717504691091: VBR 52000, en çok 62000, tampon 62000, çok geçiş, AQ yok", son,
+            " -rc vbr -b:v 52000k -maxrate 62000k -bufsize 62000k -multipass fullres -spatial-aq 0 -temporal-aq 0 ");
+        Iceriyor("1717504691091: B-kare yok, 3 referans, DPB 3", son, " -bf 0 -refs 3 -dpb_size 3 ");
+        Iceriyor("1717504691091: CABAC, anahtar kare 30, sahne değişiminde ek anahtar kare yok", son, " -coder cabac -g 30 -no-scenecut 1 ");
+        Icermiyor("1717504691091: AQ gücü yok (AQ kapalı)", son, "-aq-strength");
+        Icermiyor("1717504691091: B-kare yokken -b_adapt yok", son, "-b_adapt");
+        Icermiyor("1717504691091: önden bakış kartın ön ayarınınki", son, "-rc-lookahead");
         Iceriyor("1717504691091: ses FDK AAC-LC 512 kb/s 48 kHz stereo", son, " -c:a libfdk_aac -profile:a aac_low -b:a 512k -ar 48000 -ac 2 ");
-        Kontrol("1717504691091: kap MP4", ".mp4", liste[1].Ayarlar.Uzanti);
+        Kontrol("1717504691091: kap MP4", ".mp4", nv17.Uzanti);
         Iceriyor("1717504691091: kaynak 1080x1920 60 fps Main@4.2: 62 Mb/s 4.2'yi aşar, seviye 5.0",
-            Komut(liste[1].Ayarlar, Kaynak(1080, 1920, 60, "Main", 42)).Son, " -level:v 5.0 ");
+            Komut(nv17, Kaynak(1080, 1920, 60, "Main", 42)).Son, " -level:v 5.0 ");
         Kontrol("1717504691091: kaynak 30 fps'te de 30 kare", "30",
-            Regex(Komut(liste[1].Ayarlar, Kaynak(1080, 1920, 30, "Main", 42)).Son, @":keyint=(\d+):"));
+            Regex(Komut(nv17, Kaynak(1080, 1920, 30, "Main", 42)).Son, @" -g (\d+) "));
+
+        var x17 = Varsayilanlar.Onerilenler()[1].Ayarlar;
+        x17.Video.Kodlayici = VideoKodlayici.X264;
+        (ilk, son) = Komut(x17, Kaynak(1920, 1920, 60, "Main", 51));
+        Iceriyor("1717504691091 (x264'e çevrilince): veryslow Main, seviye kaynağın (5.1)", son, " -c:v libx264 -preset veryslow -profile:v main -level:v 5.1 -b:v 52000k -pass 2 ");
+        Iceriyor("1717504691091 (x264): referans 3", son, "-x264-params threads=8:ref=3:");
+        Iceriyor("1717504691091 (x264): 8x8 DCT kapalı", son, ":8x8dct=0:");
+        Iceriyor("1717504691091 (x264): B-kare yok, ağırlıklı P yok, anahtar kare 30, sahne eşiği 0", son, ":bframes=0:weightp=0:keyint=30:scenecut=0:");
+        Iceriyor("1717504691091 (x264): VBV 62000 / 62000", son, ":vbv-maxrate=62000:vbv-bufsize=62000:");
+        Kontrol("1717504691091 (x264): kaynak 30 fps'te de 30 kare", "30",
+            Regex(Komut(x17, Kaynak(1080, 1920, 30, "Main", 42)).Son, @":keyint=(\d+):"));
         foreach (var o in liste)
         {
             Kontrol($"{o.Ad}: eşitleme açık -14 LUFS, yalnızca kısık ses yükseltilir, sınırlayıcı -1 dB", "True -14 YalnizcaYukselt True -1",
