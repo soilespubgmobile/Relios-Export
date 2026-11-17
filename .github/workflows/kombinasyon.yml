@@ -1,0 +1,127 @@
+name: Kombinasyon denemesi (her ayarin her degeri, Windows)
+
+# Programin her ayarinin her degeri ve deger ciftleri gercek kodlamayla denenir (tools/kombinasyon.py):
+# 1) Linux'ta 73 kaynak uretilir (12 goruntu kaynagi; sesin her bicimi, hizi, kanal duzeni; ayni adli harici ses) ve
+#    deneme listesi (her etkin deger cifti en az bir kez birlikte) hazirlanir.
+# 2) Windows'ta programin FFmpeg'iyle (onayli derleme) programin kendi kodlama kodu (Smoke) her denemeyi kodlar; cikti
+#    ffprobe ile okunur, bastan sona cozulur, goruntu / ses beklenenle karsilastirilir, ses yuksekligi ve gercek tepe
+#    olculur. NVENC: GitHub'da ekran karti yok, yalnizca komut uretilip denetlenir.
+# 3) Ozet: sorunlu deneme ya da hicbir basarili gercek kodlamada denenmemis ayar / secenek varsa basarisiz.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "FFmpeg derlemesinin run numarasi"
+        required: true
+        default: "43369861243"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  hazirla:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: ffmpeg kur (yalnizca kaynaklari uretmek icin)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg > /dev/null
+          ffmpeg -hide_banner -version | head -1
+
+      - name: Kaynaklari ve deneme listesini uret
+        run: |
+          python3 -I tools/kombinasyon_kaynaklari.py komb
+          python3 -I tools/kombinasyon.py uret --manifest komb/manifest.json --cikti komb/durumlar.json
+
+      - name: Yukle
+        uses: actions/upload-artifact@v7
+        with:
+          name: kombinasyon-kaynaklari
+          path: komb
+          retention-days: 3
+
+  dene:
+    needs: hazirla
+    runs-on: windows-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        parca: [1, 2, 3, 4, 5, 6, 7, 8]
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: .NET 11 SDK (en son kararli)
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'ga'
+
+      - name: FFmpeg derlemesini indir
+        uses: actions/download-artifact@v8
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: art
+
+      - name: Kaynaklari indir
+        uses: actions/download-artifact@v8
+        with:
+          name: kombinasyon-kaynaklari
+          path: komb
+
+      - name: Programin kodlama kodunu derle
+        run: |
+          $zip = Get-ChildItem -Recurse art -Filter *.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath ff
+          $bin = (Get-ChildItem -Recurse ff -Filter ffmpeg.exe | Select-Object -First 1).DirectoryName
+          dotnet build tools/ReliosExport.Smoke -c Release -o smoke --nologo -v q
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory smoke/ffmpeg -Force | Out-Null
+          Copy-Item "$bin/ffmpeg.exe","$bin/ffprobe.exe" smoke/ffmpeg/
+          & ./smoke/ReliosExport.Smoke.exe --ayar-alanlari | Out-File -Encoding utf8 alanlar.txt
+
+      - name: Denemeler (parca ${{ matrix.parca }} / 8)
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          python -X utf8 -I tools/kombinasyon.py calistir --durumlar komb/durumlar.json --smoke smoke/ReliosExport.Smoke.exe `
+            --kaynak komb --ffmpeg smoke/ffmpeg --sonuc sonuc_${{ matrix.parca }}.json --parca ${{ matrix.parca }}/8 --paralel 2
+          exit 0  # sonuc ozet isinde degerlendirilir
+
+      - name: Sonucu yukle
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kombinasyon-sonuc-${{ matrix.parca }}
+          path: |
+            sonuc_${{ matrix.parca }}.json
+            alanlar.txt
+          retention-days: 7
+
+  ozet:
+    needs: dene
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Sonuclari indir
+        uses: actions/download-artifact@v8
+        with:
+          pattern: kombinasyon-*
+          path: sonuc
+
+      - name: Ozet ve kapsam
+        run: |
+          alanlar=$(ls sonuc/kombinasyon-sonuc-1/alanlar.txt)
+          python3 -X utf8 -I tools/kombinasyon.py ozet --durumlar sonuc/kombinasyon-kaynaklari/durumlar.json \
+            --sonuc 'sonuc/kombinasyon-sonuc-*/sonuc_*.json' --alanlar "$alanlar" --secenekler app/ReliosExport/Arayuz/Secenekler.cs

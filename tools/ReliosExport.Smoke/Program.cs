@@ -20,6 +20,17 @@ if (args.Length >= 1 && args[0] == "--birim-kontrol")
     return BirimKontrol.Calistir();
 }
 
+// Kombinasyon denemesinin kapsam denetimi için programın bütün ayarları (yol, tür, enum değerleri), JSON satırları.
+if (args.Length >= 1 && args[0] == "--ayar-alanlari")
+{
+    foreach (var alan in AyarAlanlari(typeof(ProfilAyarlari), string.Empty))
+    {
+        Console.WriteLine(alan);
+    }
+
+    return 0;
+}
+
 if (args.Length < 2)
 {
     Console.Error.WriteLine("Kullanım: ReliosExport.Smoke <kaynak> <çıktı klasörü> [--profil tiktok|tiktok-nvenc|tiktok-916|youtube] [--ayar dosya.json] [--sadece-komut]");
@@ -69,6 +80,13 @@ foreach (var d in degisiklikler)
     Ayarla(ayarlar, d);
     Console.WriteLine("Ayar: " + d);
 }
+
+// Doğrulama (kombinasyon denemesi) ayarların son hâlini okur: tek satır JSON.
+Console.WriteLine("AYAR_JSON=" + System.Text.Json.JsonSerializer.Serialize(ayarlar, new System.Text.Json.JsonSerializerOptions
+{
+    Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+}));
 
 Console.WriteLine($"ffmpeg: {Tools.Ffmpeg} (bulundu: {Tools.Available})");
 if (!Tools.Available)
@@ -153,6 +171,36 @@ catch (FfmpegHatasi ex)
     Console.WriteLine("HATA: " + ex.Message);
     Console.WriteLine("Günlük: " + (ex.GunlukDosyasi ?? "(yazılamadı)"));
     return 5;
+}
+
+// Ayar nesnesinin yazılabilir her alanı (iç içe ayar nesnelerine girerek): {"yol", "tur", "bos", "degerler"}.
+static IEnumerable<string> AyarAlanlari(Type tip, string onek)
+{
+    foreach (var p in tip.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+    {
+        if (p.SetMethod is not { IsPublic: true } || p.GetIndexParameters().Length > 0)
+        {
+            continue;
+        }
+
+        var yol = onek + p.Name;
+        if (typeof(Gozlenebilir).IsAssignableFrom(p.PropertyType))
+        {
+            foreach (var alt in AyarAlanlari(p.PropertyType, yol + "."))
+            {
+                yield return alt;
+            }
+
+            continue;
+        }
+
+        var alttaki = Nullable.GetUnderlyingType(p.PropertyType);
+        var t = alttaki ?? p.PropertyType;
+        var bos = alttaki is not null || (!t.IsValueType && new System.Reflection.NullabilityInfoContext().Create(p).WriteState
+            == System.Reflection.NullabilityState.Nullable);
+        var degerler = t.IsEnum ? Enum.GetNames(t) : [];
+        yield return System.Text.Json.JsonSerializer.Serialize(new { yol, tur = t.Name, bos, degerler, json = p.GetCustomAttributes(typeof(System.Text.Json.Serialization.JsonIgnoreAttribute), true).Length == 0 });
+    }
 }
 
 // "Video.X264.BitHizi=4000" gibi bir ifadeyle ayar nesnesindeki tek bir özelliği değiştirir ("null": boş).

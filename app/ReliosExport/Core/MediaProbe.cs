@@ -7,6 +7,9 @@ namespace ReliosExport.Core;
 /// <summary>Kaynaktaki bir ses akışı (bilgi için).</summary>
 public sealed record SesAkisi(int Indeks, string Codec, int OrnekHizi, int Kanal, int? BitDerinligi, int? BitHizi)
 {
+    /// <summary>Kanal düzeni (ffprobe adı: "stereo", "5.1(side)", "quad"...); bilinmiyorsa null.</summary>
+    public string? Duzen { get; init; }
+
     /// <summary>Ör. "PCM 16 bit · 44,1 kHz · 2 kanal".</summary>
     public string Ozet
     {
@@ -229,13 +232,17 @@ public static class MediaProbe
         }
 
         var bitRate = Int(s, "bit_rate");
+        var duzen = ReadString(s, "channel_layout");
         return new SesAkisi(
             Int(s, "index"),
             ReadString(s, "codec_name") ?? "?",
             Int(s, "sample_rate"),
             Int(s, "channels"),
             bits > 0 ? bits : null,
-            bitRate > 0 ? bitRate : null);
+            bitRate > 0 ? bitRate : null)
+        {
+            Duzen = string.IsNullOrWhiteSpace(duzen) ? null : duzen,
+        };
     }
 
     private static bool IsAttachedPicture(JsonElement s) =>

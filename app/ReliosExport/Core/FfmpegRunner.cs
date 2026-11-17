@@ -580,7 +580,19 @@ public static class Exporter
             }
         }
 
+        if (ArgsBuilder.X264KayipsizNotu(a, media) is { } kayipsiz)
+        {
+            // Ör. "Main profilde kayıpsız yok: CRF 1" (kayıpsız yalnızca High 4:4:4'te; profil her ayarın önüne geçer).
+            text += " · " + kayipsiz;
+        }
+
         text += " · Ses: " + ses.Aciklama;
+        if (ArgsBuilder.FdkKarari(a.Ses, ses)?.Not is { } fdk)
+        {
+            // Ör. "FDK AAC LC 48 kHz stereo sesi en çok 576 kb/s kodlar", "HE-AAC v2 yalnızca stereo sesi kodlar: ...".
+            text += " · " + fdk;
+        }
+
         if (esitleme is not null)
         {
             // Ör. "-21,3 → -14 LUFS (yalnızca yükseltilir)", "-9,2 LUFS · zaten yüksek, dokunulmuyor"

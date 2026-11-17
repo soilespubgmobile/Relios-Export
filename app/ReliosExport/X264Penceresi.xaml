@@ -67,6 +67,8 @@
                             <TextBlock Text="Seviye (level)" Style="{StaticResource PencereEtiketi}"/>
                             <ComboBox ItemsSource="{x:Static a:Secenekler.Seviyeler}" DisplayMemberPath="Ad" SelectedValuePath="Deger" SelectedValue="{Binding Seviye}"/>
                         </DockPanel>
+                        <TextBlock Style="{StaticResource Ipucu}" Margin="0,2,0,4"
+                                   Text="Profil, x264'teki gibi bütün ayarların önüne geçer: dosya hep seçilen profilde olur. Baseline'da B-kare, 8x8 DCT, ağırlıklı P, özel niceleme matrisi ve geçmeli kodlama; Main'de 8x8 DCT ve özel matris kullanılmaz. Kayıpsız kodlama (QP 0, 8 bitte CRF 1'in altı) yalnızca High 4:4:4'te ya da otomatik profilde var; başka profilde o profilin en yüksek kalitesiyle (QP 1, CRF 1) kodlanır. Ek parametreler profilin de önüne geçer."/>
 
                         <TextBlock Text="İŞLEMCİ" Style="{StaticResource AltBaslik}"/>
                         <DockPanel Style="{StaticResource FormSatiri}">

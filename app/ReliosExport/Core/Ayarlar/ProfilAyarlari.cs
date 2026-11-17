@@ -623,8 +623,8 @@ public sealed class SesAyarlari : Gozlenebilir
     /// <summary>Desibel; 0 değiştirmez.</summary>
     public double Seviye { get => _seviye; set => Set(ref _seviye, Math.Clamp(Math.Round(value, 1), -60, 30)); }
 
-    /// <summary>Hz; null: kaynakla aynı.</summary>
-    public int? OrnekHizi { get => _ornekHizi; set => Set(ref _ornekHizi, value); }
+    /// <summary>Hz; null: kaynakla aynı. Ayar dosyasında 1 Hz'in altı "kaynakla aynı" sayılır, 768 kHz'in üstü 768 kHz.</summary>
+    public int? OrnekHizi { get => _ornekHizi; set => Set(ref _ornekHizi, value is > 0 ? Math.Min(value.Value, 768_000) : null); }
 
     public DonusumKalitesi Kalite { get => _kalite; set => Set(ref _kalite, value); }
 

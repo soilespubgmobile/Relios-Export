@@ -51,7 +51,7 @@
                         </DockPanel>
                         <CheckBox Content="Afterburner (daha yüksek kalite, biraz daha yavaş)" IsChecked="{Binding Afterburner}" Margin="0,4,0,10"/>
                         <TextBlock Style="{StaticResource Ipucu}" Margin="0,0,0,4"
-                                   Text="HE-AAC ve HE-AAC v2 düşük bit hızları içindir; 128 kb/s ve üstünde AAC-LC daha iyi sonuç verir."/>
+                                   Text="HE-AAC ve HE-AAC v2 düşük bit hızları içindir; 128 kb/s ve üstünde AAC-LC daha iyi sonuç verir. FDK AAC her profilde, örnekleme hızında ve kanal sayısında belli bir bit hızı aralığını kodlar (ör. 48 kHz stereo AAC-LC en çok 576 kb/s): dışındaki değer sınıra çekilir, gerçek değer satırdaki bilgide görünür. HE-AAC v2 yalnızca stereo sesi kodlar (mono / çok kanallı seste HE-AAC); HE-AAC 16 kHz'in altında ve AAC-LD / ELD 7.1'de yoktur (AAC-LC)."/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

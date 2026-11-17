@@ -118,9 +118,10 @@ public static class BoyutTahmini
         }
 
         var f = s.Fdk;
+        // CBR: FDK'nin bu hız ve kanal düzeninde kodlayacağı bit hızı (sınırın dışındakini FDK sınıra çeker).
         return f.Mod switch
         {
-            FdkModu.Cbr => f.BitHizi,
+            FdkModu.Cbr => ArgsBuilder.FdkKarari(s, ses)?.BitHizi ?? f.BitHizi,
             FdkModu.Vbr1 => 32 * kanal,
             FdkModu.Vbr2 => 40 * kanal,
             FdkModu.Vbr3 => 56 * kanal,
