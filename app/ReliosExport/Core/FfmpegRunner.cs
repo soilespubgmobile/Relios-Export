@@ -212,6 +212,40 @@ public static class Exporter
         return path;
     }
 
+    /// <summary>
+    /// Tanı için (programın kendisi kullanmaz; deneme aracı yazar): sesin her denemesinin ayarı ve ölçümü, ölçümün
+    /// yinelenmesi.
+    /// </summary>
+    public static Action<string>? DenemeIzi { get; set; }
+
+    /// <summary>
+    /// Ölçer komutunu (<see cref="Esitleme.OlcumFiltresi"/> ile biten) çalıştırır, yüksekliği ve gerçek tepeyi okur.
+    /// FFmpeg'in ölçeri +10 LUFS'un üstündeki blokları +10 sayar (<see cref="Esitleme.OlcerUstSiniri"/>): ses o kadar
+    /// yüksek olabilecekse (gerçek tepe ve kanal sayısıyla, <see cref="Esitleme.OlcumKisilmasi"/>) ölçüm ses kısılarak
+    /// yinelenir; yükseklik ve aralık ondan (kısılan kadar eklenir), gerçek tepe ilk ölçümden (0,001 hassasiyetle).
+    /// <paramref name="kanal"/>: ölçülen sesin kanal sayısı (en çok).
+    /// </summary>
+    private static async Task<(SesOlcum? Olcum, (double Db, bool Hassas)? Tepe)> Olc(
+        IReadOnlyList<string> komut, int kanal, CancellationToken ct)
+    {
+        var cikti = new List<string>();
+        await FfmpegRunner.RunAsync(komut, 0, null, ct, cikti);
+        var gunluk = string.Join('\n', cikti);
+        var olcum = ArgsBuilder.OlcumOku(gunluk);
+        var tepe = ArgsBuilder.TepeOku(gunluk);
+        if (tepe is { } t && Esitleme.OlcumKisilmasi(t.Db, kanal) is var kis && kis > 0)
+        {
+            var ikinci = new List<string>();
+            await FfmpegRunner.RunAsync(ArgsBuilder.OlcumuKis(komut, kis), 0, null, ct, ikinci);
+            var kisik = ArgsBuilder.OlcumOku(string.Join('\n', ikinci));
+            DenemeIzi?.Invoke(string.Create(CultureInfo.InvariantCulture,
+                $"OLCUM_KISILDI={kis} ILK={olcum?.Yukseklik.ToString("0.000", CultureInfo.InvariantCulture) ?? "-"} KISIK={kisik?.Yukseklik.ToString("0.000", CultureInfo.InvariantCulture) ?? "-"}"));
+            olcum = kisik is null ? olcum : kisik with { Yukseklik = kisik.Yukseklik + kis, Tepe = t.Db, TepeHassas = t.Hassas };
+        }
+
+        return (olcum, tepe);
+    }
+
     /// <param name="onInfo">Kaynak incelendikten sonra kısa bilgi verir (ör. "1920×1080 · 60 fps · 9:16 kırpılıyor").</param>
     /// <param name="onEsitleme">LUFS eşitleme açıksa, bitince eşitlemenin raporu (ölçüm, karar, çıktının ölçülen yüksekliği).</param>
     /// <param name="onNot">
@@ -262,13 +296,16 @@ public static class Exporter
             // (sabit kazanç) hedefe. Tepe koruması kaynağın tepesiyle başlar (sınırlayıcı açıksa ya da eşitleme sesi
             // değiştiriyorsa).
             onInfo?.Invoke(Describe(media, a, ses) + " · ses ölçülüyor");
-            var cikti = new List<string>();
             // Ölçüm, denemeler ve kodlama aynı süreyle (aynı adlı harici ses videonun süresine tam getirilir).
             var sesSuresi = ArgsBuilder.SesSuresi(media, ses);
             var olcumKomutu = ArgsBuilder.OlcumKomutu(a.Ses, input, ses, sesSuresi);
+
+            // Ölçülen sesin kanal sayısı (en çok): ölçerin üst sınırı için.
+            var olcumKanali = ArgsBuilder.OlcumKanali(a.Ses, ses);
+            (SesOlcum? Olcum, (double Db, bool Hassas)? Tepe) kaynak;
             try
             {
-                await FfmpegRunner.RunAsync(olcumKomutu, 0, null, ct, cikti);
+                kaynak = await Olc(olcumKomutu, olcumKanali, ct);
             }
             catch (FfmpegHatasi ex)
             {
@@ -277,9 +314,12 @@ public static class Exporter
                 throw;
             }
 
-            var olcumGunlugu = string.Join('\n', cikti);
-            var kaynakOlcum = ArgsBuilder.OlcumOku(olcumGunlugu);
-            var kaynakTepe = ArgsBuilder.TepeOku(olcumGunlugu)?.Db;
+            // Seviye (elle kazanç) ölçümün zincirine girmez, ölçülene eklenir: kayan noktalı zincirde kazanç doğrusaldır;
+            // ölçer +10 LUFS'un üstünü saymaz, -70'in altını sessiz sayar (+30 dB'deki 10 kanallı ses 2,5 LU kısık,
+            // -60 dB'deki ses sessiz ölçülüyordu).
+            var seviye = a.Ses.Seviye;
+            var kaynakOlcum = kaynak.Olcum is { } ko ? ko with { Yukseklik = ko.Yukseklik + seviye, Tepe = ko.Tepe + seviye } : null;
+            var kaynakTepe = kaynak.Tepe?.Db + seviye;
             var hedef = a.Ses.EsitlemeHedef;
             var tavan = a.Ses.SinirlayiciTavan;
             var kayipli = Esitleme.KayipliMi(a.Ses);
@@ -288,10 +328,10 @@ public static class Exporter
                 : null;
 
             // Deneme (yalnızca ses): ses kodlamadaki zincirle ölçülür; çıktının sesi AAC ise önce AAC'ye çevrilir
-            // (ölçülen, çözülen sesinki: oynatıcıların ve platformların duyduğu). Ölçerin çıktısını döndürür.
-            async Task<string> Dene(SesOlcum? o, SesDuzeltme d)
+            // (ölçülen, çözülen sesinki: oynatıcıların ve platformların duyduğu). Ölçülen yüksekliği ve gerçek tepeyi
+            // döndürür.
+            async Task<(SesOlcum? Olcum, (double Db, bool Hassas)? Tepe)> Dene(SesOlcum? o, SesDuzeltme d)
             {
-                var denemeCikti = new List<string>();
                 var denemeler = new List<List<string>>();
                 if (denemeDosyasi is not null)
                 {
@@ -312,15 +352,18 @@ public static class Exporter
                         await FfmpegRunner.RunAsync(denemeler[0], 0, null, ct);
                     }
 
-                    await FfmpegRunner.RunAsync(denemeler[^1], 0, null, ct, denemeCikti);
+                    var sonuc = await Olc(denemeler[^1], olcumKanali, ct);
+                    DenemeIzi?.Invoke(string.Create(CultureInfo.InvariantCulture,
+                        $"DENEME telafi={d.Telafi:0.00} pay={d.TasmaPayi:0.00} sinirla={d.Sinirla} olcum={(o is null ? "yok" : "var")}"
+                        + $" yukseklik={sonuc.Olcum?.Yukseklik.ToString("0.000", CultureInfo.InvariantCulture) ?? "-"}"
+                        + $" tepe={sonuc.Tepe?.Db.ToString("0.000", CultureInfo.InvariantCulture) ?? "-"}"));
+                    return sonuc;
                 }
                 catch (FfmpegHatasi ex)
                 {
                     ex.GunlukDosyasi = HataAciklamasi.GunlukYaz(input, GunlukMetni(ex, input, profile, media, a, ses, rapor, denemeler));
                     throw;
                 }
-
-                return string.Join('\n', denemeCikti);
             }
 
             try
@@ -332,10 +375,12 @@ public static class Exporter
                 // "hedefte" kararı çıktının gerçek yüksekliğiyle verilir. Kazanç: zincirde sınırlayıcı yoksa çıktıdaki
                 // hâlinden (AAC'nin kaybı, DRC, kesim kazançla değişmez); varsa kaynağın ölçümünden (sınırlayıcının
                 // kıstığı kazançla değişir, ses kısılınca hiç çalışmayabilir: kısılan ses hedefin üstünde kalıyordu),
-                // gerisi denemelerle telafi edilir. WAV'da sınırlayıcı yoksa ölçüm zaten çıktının sesidir (aynı kanallar,
-                // aynı hız). Tepe: kaynağınki (kodlayıcıya giren sesin tahmini).
+                // gerisi denemelerle telafi edilir; kodlayıcıya giren ses tam ölçeği aşıyorsa da (elle yükseltme, kayan
+                // noktalı kaynak) kaynağın ölçümünden: kazançsız denemede kodlayıcı tepeleri kırpar, kazanç değişince
+                // kırpılan pay da değişir. WAV'da sınırlayıcı yoksa ölçüm zaten çıktının sesidir (aynı kanallar, aynı
+                // hız). Tepe: kaynağınki (kodlayıcıya giren sesin tahmini).
                 var ilk = new SesDuzeltme(Sinirla: a.Ses.Sinirlayici && kaynakTepe is { } t0 && t0 + Esitleme.TepePayi > tavan);
-                string? ilkGunluk = null;
+                (SesOlcum? Olcum, (double Db, bool Hassas)? Tepe)? ilkSonuc = null;
                 if (a.Ses.Esitleme)
                 {
                     var kazancOlcum = kaynakOlcum;
@@ -344,11 +389,11 @@ public static class Exporter
                     if (kaynakOlcum is not null && (kayipli || ilkSinirlayici))
                     {
                         onInfo?.Invoke(Describe(media, a, ses) + " · sesin çıktıdaki yüksekliği ölçülüyor");
-                        ilkGunluk = await Dene(null, ilk);
-                        if (ArgsBuilder.OlcumOku(ilkGunluk) is { } cikis)
+                        ilkSonuc = await Dene(null, ilk);
+                        if (ilkSonuc.Value.Olcum is { } cikis)
                         {
                             kararYukseklik = cikis.Yukseklik;
-                            if (!ilkSinirlayici)
+                            if (!ilkSinirlayici && kaynakOlcum.Tepe + Esitleme.TepePayi <= 0)
                             {
                                 kazancOlcum = kaynakOlcum with { Yukseklik = cikis.Yukseklik };
                             }
@@ -396,13 +441,13 @@ public static class Exporter
                 var tasma = 0.0;
                 var sinir = false;
                 var denendi = false;
+                var denemelerBitti = false;
                 if (tepeDenemesi || YukseklikDenemesi(duzeltme))
                 {
                     // Gerekirse telafi ve sınırlayıcının tavanı düzeltilip yeniden denenir; kodlama denenmiş bir ayarla
                     // yapılır (denemeler biterse tepesi tavanın altında ölçülen ayarla).
                     var denenenler = new List<(SesDuzeltme D, double? Yukseklik, bool TepeTamam)>();
-                    (double Telafi, double Olculen)? onceki = null;
-                    SesDuzeltme? oncekiAyar = null;
+                    var noktalar = new List<YukseklikDenemesi>();
                     for (var d = 0; d < Esitleme.EnCokDeneme; d++)
                     {
                         var yukseklikDenemesi = YukseklikDenemesi(duzeltme);
@@ -413,16 +458,16 @@ public static class Exporter
                             : (kayipli ? " · AAC'nin tepeye etkisi ölçülüyor" : " · tepe ölçülüyor")));
 
                         // Kazançsız ilk deneme kararın ölçümüyle aynı zincirse yeniden yapılmaz.
-                        var denemeGunlugu = ilkGunluk is not null && olcum is null && duzeltme == ilk
-                            ? ilkGunluk
+                        var denemeSonucu = ilkSonuc is { } ilkS && olcum is null && duzeltme == ilk
+                            ? ilkS
                             : await Dene(olcum, duzeltme);
-                        ilkGunluk = null;
+                        ilkSonuc = null;
                         denendi = true;
-                        var tepe = koruma ? ArgsBuilder.TepeOku(denemeGunlugu) : null;
+                        var tepe = koruma ? denemeSonucu.Tepe : null;
                         double? yukseklik = null;
                         if (yukseklikDenemesi)
                         {
-                            if (ArgsBuilder.OlcumOku(denemeGunlugu) is not { } olculen)
+                            if (denemeSonucu.Olcum is not { } olculen)
                             {
                                 break;
                             }
@@ -439,10 +484,9 @@ public static class Exporter
                         denenenler.Add((duzeltme, yukseklik, tepe is not { } tp || Esitleme.TepeTavandaMi(tp.Db, tp.Hassas, tavan)));
                         var giris = Esitleme.GirisTepesi(kaynakTepe, Kazanc(duzeltme), Sinirlayici(duzeltme), tavan - duzeltme.TasmaPayi);
 
-                        // İki denemenin eğimi (sekant) yalnızca sınırlayıcının ayarı aynıysa: tavan değişince yükseklik de değişir.
-                        var sekant = oncekiAyar is { } oa && oa.TasmaPayi == duzeltme.TasmaPayi && oa.Sinirla == duzeltme.Sinirla ? onceki : null;
+                        // Adım bütün önceki yükseklik denemeleriyle (sınırlayıcının payı değişse de: Esitleme.TelafiAdimi).
                         var (yeni, sinirda, gorulen) = Esitleme.DenemeAdimi(
-                            duzeltme, tasma, yukseklik, hedef, tepe?.Db, tepe?.Hassas ?? false, tavan, giris, sekant);
+                            duzeltme, tasma, yukseklik, hedef, tepe?.Db, tepe?.Hassas ?? false, tavan, giris, noktalar);
                         tasma = gorulen;
                         if (yukseklikDenemesi)
                         {
@@ -451,8 +495,7 @@ public static class Exporter
 
                         if (yukseklik is { } yk)
                         {
-                            onceki = (duzeltme.Telafi, yk);
-                            oncekiAyar = duzeltme;
+                            noktalar.Add(new YukseklikDenemesi(duzeltme.Telafi, duzeltme.TasmaPayi, yk));
                         }
 
                         if (yeni is null)
@@ -472,6 +515,7 @@ public static class Exporter
                     // değilse telafi sabit, yalnızca sınırlayıcı aşağı çekilerek denenir.
                     if (koruma && denenenler.Count > 0 && denenenler[^1].D != duzeltme)
                     {
+                        denemelerBitti = true;
                         var uygun = denenenler.Where(x => x.TepeTamam)
                             .OrderBy(x => x.Yukseklik is { } y ? Math.Abs(y - hedef) : 0)
                             .ThenBy(x => x.D.TasmaPayi)
@@ -485,7 +529,7 @@ public static class Exporter
                             for (var d = 0; d < Esitleme.EnCokDeneme; d++)
                             {
                                 onInfo?.Invoke(Describe(media, a, ses, rapor) + (kayipli ? " · AAC'nin tepeye etkisi ölçülüyor" : " · tepe ölçülüyor"));
-                                if (ArgsBuilder.TepeOku(await Dene(olcum, duzeltme)) is not { } tepe)
+                                if ((await Dene(olcum, duzeltme)).Tepe is not { } tepe)
                                 {
                                     break;
                                 }
@@ -519,6 +563,7 @@ public static class Exporter
                     {
                         Telafi = duzeltme.Telafi,
                         TelafiSiniri = sinir,
+                        DenemelerBitti = denemelerBitti,
                         Kayipli = kayipli && denendi,
                         TasmaPayi = duzeltme.TasmaPayi,
                         Tasma = tasma,
@@ -606,9 +651,7 @@ public static class Exporter
             onInfo?.Invoke(Describe(media, a, ses, rapor, ekler) + " · çıktının sesi ölçülüyor");
             try
             {
-                var cikti = new List<string>();
-                await FfmpegRunner.RunAsync(Esitleme.SonucOlcumKomutu(output), 0, null, ct, cikti);
-                if (ArgsBuilder.OlcumOku(string.Join('\n', cikti)) is { } sonuc)
+                if ((await Olc(Esitleme.SonucOlcumKomutu(output), ArgsBuilder.OlcumKanali(a.Ses, ses), ct)).Olcum is { } sonuc)
                 {
                     rapor = rapor with { SonucYukseklik = sonuc.Yukseklik, SonucTepe = sonuc.Tepe };
                 }

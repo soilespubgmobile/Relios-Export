@@ -1589,7 +1589,7 @@ public static class ArgsBuilder
     /// yükseklik çıktıdaki kanallarla ölçülür, sınırlayıcı çıktıdaki kanalları sınırlar. FDK AAC'de kanal "kaynakla aynı"
     /// ise ses burada FDK'nin kodlayabildiği düzene çevrilir (<see cref="FdkDuzenDonusumu"/>).
     /// </summary>
-    private static List<string> OnSesFiltreleri(SesAyarlari s, int? kaynakKanal, string? kaynakDuzen = null)
+    private static List<string> OnSesFiltreleri(SesAyarlari s, int? kaynakKanal, string? kaynakDuzen = null, bool seviyesiz = false)
     {
         var af = new List<string>();
         if (s.Gecikme > 0)
@@ -1601,7 +1601,7 @@ public static class ArgsBuilder
             af.Add(string.Create(Inv, $"atrim=start={(-s.Gecikme / 1000.0):0.###},asetpts=PTS-STARTPTS"));
         }
 
-        if (s.Seviye != 0)
+        if (s.Seviye != 0 && !seviyesiz)
         {
             af.Add(string.Create(Inv, $"volume={s.Seviye:0.#}dB"));
         }
@@ -1731,7 +1731,9 @@ public static class ArgsBuilder
     /// LUFS eşitlemenin ölçüm geçişi: sesi yalnızca okur (görüntü yok); ölçer değerleri ffmpeg çıktısına yazar
     /// (okumak için <see cref="OlcumOku"/>). <paramref name="sureSaniye"/>: <see cref="SesSuresi"/>. Videonun kendi
     /// sesi bu süreyle sınırlanır; aynı adlı harici ses, kodlamadaki gibi tam bu süreye getirilir (uzunsa kesilir,
-    /// kısaysa sonu sessizlikle doldurulur): ölçülen ses çıktıdakiyle aynı uzunluktadır.
+    /// kısaysa sonu sessizlikle doldurulur): ölçülen ses çıktıdakiyle aynı uzunluktadır. Seviye (elle kazanç) zincire
+    /// girmez: ölçülen yüksekliğe ve tepeye eklenir (ölçer +10 LUFS'un üstünü saymaz, -70'in altını sessiz sayar;
+    /// zincirdeki her şey kayan noktalı ve doğrusaldır).
     /// </summary>
     public static List<string> OlcumKomutu(SesAyarlari s, string input, SesSecimi ses, double sureSaniye)
     {
@@ -1743,7 +1745,7 @@ public static class ArgsBuilder
             args.AddRange(["-t", sureSaniye.ToString("0.###", Inv)]);
         }
 
-        var af = OnSesFiltreleri(s, ses.Kanal, ses.Duzen);
+        var af = OnSesFiltreleri(s, ses.Kanal, ses.Duzen, seviyesiz: true);
         if (CiktiHizi(s, ses) is { } hz && hz != ses.OrnekHizi)
         {
             // Ses çıktının hızında ölçülür: hız dönüşümü sesin en tizini keser (48 → 44,1 kHz'te beyaz gürültüde
@@ -1760,6 +1762,27 @@ public static class ArgsBuilder
         args.AddRange(["-af", string.Join(',', af), "-f", "null", "-"]);
         return args;
     }
+
+    /// <summary>
+    /// Ölçülen (çıktıdaki) sesin kanal sayısı, en çok: mono / stereo seçiliyse o; kaynakla aynıysa kaynağınki (FDK AAC
+    /// kodlayamadığı düzeni daha az kanala indirir). Ölçerin üst sınırı için (<see cref="Esitleme.OlcumKisilmasi"/>).
+    /// </summary>
+    public static int OlcumKanali(SesAyarlari s, SesSecimi ses) => s.Kanal switch
+    {
+        KanalModu.Mono => 1,
+        KanalModu.Stereo => 2,
+        _ => Math.Max(1, ses.Kanal ?? 2),
+    };
+
+    /// <summary>
+    /// Ölçer komutunun (<see cref="Esitleme.OlcumFiltresi"/> ile biten süzgeç zinciri) ölçerden hemen önce sesi
+    /// <paramref name="db"/> kadar kısan kopyası: ölçerin üst sınırını (<see cref="Esitleme.OlcerUstSiniri"/>) aşabilecek
+    /// kadar yüksek ses için (yükseklik kısılan kadar eklenerek okunur).
+    /// </summary>
+    public static List<string> OlcumuKis(IReadOnlyList<string> komut, double db) =>
+        komut.Select(x => x.Contains(Esitleme.OlcumFiltresi, StringComparison.Ordinal)
+            ? x.Replace(Esitleme.OlcumFiltresi, string.Create(Inv, $"volume=-{db:0.##}dB,") + Esitleme.OlcumFiltresi, StringComparison.Ordinal)
+            : x).ToList();
 
     /// <summary>
     /// Ölçerin ffmpeg çıktısından değerleri okur: tümleşik yükseklik son "lavfi.r128.I=" satırından (her 100 ms'de

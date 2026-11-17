@@ -132,6 +132,8 @@ var progress = new Progress<double>(p =>
     }
 });
 
+// Sesin her denemesi (telafi, pay, ölçülen yükseklik / tepe) ve ölçümün kısılarak yinelenmesi: tanı için.
+Exporter.DenemeIzi = Console.WriteLine;
 try
 {
     var output = await Exporter.ExportAsync(

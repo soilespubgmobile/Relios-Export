@@ -1213,9 +1213,14 @@ def ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v,
         telafi = next((float(y[len('ESITLEME_TELAFI='):]) for y in gunluk if y.startswith('ESITLEME_TELAFI=')), 0.0)
         sinirda = abs(abs(telafi) - 6) < 0.005  # telafi en çok ± 6 dB: hedefe 0,5 LU (programın payı) içinde kalabilir
         if ana == 'Dogrusal' and not ulasilamadi:
-            pay = 0.5 if sinirda else 0.3 if '/Sinirli' in karar else 0.1
-            if abs(i - hedef) > pay:
+            # 0.13.0: program sonucu hedeften 0,1 LU'dan uzaksa "hedefe ulaşılamadı" yazar (eskiden 0,5)
+            if abs(i - hedef) > 0.105:
                 f.append(f'yükseklik {i:.2f} LUFS (hedef {hedef}, karar {karar})')
+        elif ana == 'Dogrusal' and ulasilamadi and not sinirda:
+            # telafi sınırına (± 6 dB) gelinmeden hedefe ulaşılamadıysa nedeni incelenmeli (denemeler bitti, ölçüm...)
+            bitti = any(y.startswith('Eşitleme ayrıntısı') for y in gunluk) and any('Denemeler bitti' in y for y in gunluk)
+            f.append(f'hedefe ulaşılamadı: yükseklik {i:.2f} LUFS (hedef {hedef}, telafi {telafi:+.2f}, karar {karar}'
+                     + (', denemeler bitti' if bitti else '') + ')')
         else:
             # dokunulmayan seste tepe koruması sınırlayıcıyı tavanın altına çektiyse yükseklik o kadar düşebilir
             pay = 0.6 + (tepe_payi(gunluk) if '/Sinirli' in karar else 0)

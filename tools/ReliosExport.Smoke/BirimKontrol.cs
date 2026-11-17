@@ -794,6 +794,48 @@ internal static class BirimKontrol
             " -map 0:a:0 -vn -sn -dn -t 10 -af ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I,ametadata=mode=print:key=lavfi.r128.true_peak -f null - ");
         Icermiyor("Ölçüm komutunda loudnorm yok (sesin son ~2,9 sn'sini iki kez sayar)", " " + string.Join(' ', olc) + " ", "loudnorm");
 
+        // Seviye (elle kazanç) ölçümün zincirine girmez, ölçülene eklenir (0.13.0): FFmpeg'in ölçeri +10 LUFS'un üstünü
+        // +10 sayar (+30 dB'deki 10 kanallı ses 9,9 ölçülüp -2,5 LUFS çıkıyordu, hedef -5), -70'in altını sessiz sayar.
+        var seviyeli = Varsayilanlar.TikTok();
+        seviyeli.Ses.Seviye = 30;
+        var olcSeviye = " " + string.Join(' ', ArgsBuilder.OlcumKomutu(seviyeli.Ses, "KAYNAK.mp4",
+            ArgsBuilder.SesSec(seviyeli.Ses, Kaynak48(), "KAYNAK.mp4"), 10)) + " ";
+        Icermiyor("Seviye +30: ölçümde seviye yok (ölçülene eklenir)", olcSeviye, "volume=");
+        Iceriyor("Seviye +30: kodlamada seviye zincirde", Komut(seviyeli), " -af volume=30dB,");
+        var kisilan = " " + string.Join(' ', ArgsBuilder.OlcumuKis(olc, 12)) + " ";
+        Iceriyor("Ölçümü kısma: ölçerden hemen önce", kisilan, " -af volume=-12dB,ebur128=peak=true:metadata=1,");
+        Iceriyor("Ölçümü kısma: sonuç ölçümünde de", " " + string.Join(' ', ArgsBuilder.OlcumuKis(Esitleme.SonucOlcumKomutu("CIKTI.mov"), 3)) + " ",
+            " -af volume=-3dB,ebur128=");
+        string Kis(double tepe, int kanal) => Esitleme.OlcumKisilmasi(tepe, kanal).ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+        Kontrol("Ölçüm kısılmaz: stereo, tepe -1 (blok en çok 6,85 LUFS)", "0", Kis(-1, 2));
+        Kontrol("Ölçüm kısılmaz: stereo, tepe +1 (kayan noktalı ses, blok en çok 8,85)", "0", Kis(1, 2));
+        Kontrol("Ölçüm kısılır: stereo, tepe +4 (blok en çok 11,85; 9'a 3 dB)", "3", Kis(4, 2));
+        Kontrol("Ölçüm kısılır: 10 kanal, tepe 0 (blok en çok 14,84)", "6", Kis(0, 10));
+        Kontrol("Ölçüm kısılır: 10 kanal, tepe -4 (blok en çok 10,84)", "2", Kis(-4, 10));
+        Kontrol("Ölçüm kısılmaz: 10 kanal, tepe -6 (blok en çok 8,84)", "0", Kis(-6, 10));
+        Kontrol("Ölçüm kısılır: 24 kanal, tepe -1 (blok en çok 17,64)", "9", Kis(-1, 24));
+        Kontrol("Ölçüm kısılmaz: sessiz ses (tepe -inf)", "0", Kis(double.NegativeInfinity, 2));
+        var kanalSes = new SesSecimi(SesSecimTuru.Video, Kanal: 10);
+        var kanalAyar = Varsayilanlar.TikTok().Ses;
+        Kontrol("Ölçülen kanal: stereo seçili (10 kanallı kaynak indirilir)", "2", ArgsBuilder.OlcumKanali(kanalAyar, kanalSes).ToString());
+        kanalAyar.Kanal = KanalModu.Mono;
+        Kontrol("Ölçülen kanal: mono seçili", "1", ArgsBuilder.OlcumKanali(kanalAyar, kanalSes).ToString());
+        kanalAyar.Kanal = KanalModu.Kaynak;
+        Kontrol("Ölçülen kanal: kaynakla aynı (en çok kaynağınki)", "10", ArgsBuilder.OlcumKanali(kanalAyar, kanalSes).ToString());
+
+        // Sonuç hedeften 0,1 LU'dan uzaksa "hedefe ulaşılamadı" (0.13.0'a kadar 0,5: -5,45 / hedef -5 etiketsizdi).
+        var kaUlas = Varsayilanlar.YouTube().Ses;
+        kaUlas.Esitleme = true;
+        var ulas = Esitleme.KararVer(kaUlas, new SesOlcum(-25, -12.1, 5));
+        Kontrol("Biten satır: -14,08 (0,1 içinde)", "-14,1 LUFS", (ulas with { SonucYukseklik = -14.08 }).SatirMetni ?? "yok");
+        Kontrol("Biten satır: -14,16 → hedefe ulaşılamadı", "-14,2 LUFS (hedefe ulaşılamadı)", (ulas with { SonucYukseklik = -14.16 }).SatirMetni ?? "yok");
+        Kontrol("Biten satır: hedeften yüksek -13,84 → hedefe ulaşılamadı", "-13,8 LUFS (hedefe ulaşılamadı)",
+            (ulas with { SonucYukseklik = -13.84 }).SatirMetni ?? "yok");
+        Kontrol("Ayrıntı: denemeler bitti", "True", (ulas with { SonucYukseklik = -14.3, DenemelerBitti = true }).Ayrinti
+            .Contains("Denemeler bitti (en çok 6): tepesi tavanın altında kalan denemelerden hedefe en yakını kullanıldı.", StringComparison.Ordinal).ToString());
+        Kontrol("Ayrıntı: telafi sınırında ayrıca neden yazılmaz", "False", (ulas with { SonucYukseklik = -16, TelafiSiniri = true, Telafi = 6 }).Ayrinti
+            .Contains("hedefe en yakın", StringComparison.Ordinal).ToString());
+
         foreach (var (ad, a) in new[] { ("TikTok", Varsayilanlar.TikTok()), ("YouTube", Varsayilanlar.YouTube()) })
         {
             Kontrol(ad + ": eşitleme yönü", "YalnizcaYukselt", a.Ses.EsitlemeYonu.ToString());
@@ -875,8 +917,30 @@ internal static class BirimKontrol
         Kontrol("Sekant: eğim 0,6 (0 → -17,79, 3,79 → -15,5): 3,79 + 1,5 / 0,604 = 6,27 → en çok 6", "6.00/sinir", Sekant(0, -17.79, 3.79, -15.5));
         Kontrol("Sekant: eğim 1 (sınırlayıcısız): adım eksik kadar", "2.50", Sekant(0, -16.5, 2, -14.5));
         Kontrol("Sekant: eğim eksi (ölçüm oynadı): adım eksik kadar", "2.60", Sekant(1, -14.5, 2, -14.6));
-        Kontrol("Sekant: eğim çok küçük (0,05 → 0,25 sayılır): 1 + 0,2 × 4", "1.80", Sekant(0, -14.25, 1, -14.2));
+        Kontrol("Sekant: eğim çok küçük (0,05 → 0,1 sayılır, 0.13.0'a kadar 0,25): 1 + 0,2 × 10", "3.00", Sekant(0, -14.25, 1, -14.2));
         Kontrol("Sekant: aynı telafi (eğim yok): adım eksik kadar", "1.30", Sekant(1, -14.4, 1, -14.3));
+
+        // Sınırlayıcının ölçek değişmezliği (0.13.0): pay değişse de önceki denemeler (telafi + pay, ölçülen + pay)
+        // düzleminde aynı eğridedir. CI'daki hedef -5 / tavan -0,1 denemesi 6 denemede yakınsamıyordu (-5,45).
+        string Olcekli(double hedef, double yeniPay, params (double T, double P, double O)[] d)
+        {
+            var noktalar = d.Select(x => new YukseklikDenemesi(x.T, x.P, x.O)).ToList();
+            var (yeni, sinir) = Esitleme.TelafiAdimi(noktalar[^1], hedef, yeniPay, noktalar[..^1]);
+            return (yeni?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) ?? "dur") + (sinir ? "/sinir" : string.Empty);
+        }
+
+        Kontrol("Ölçekli: tek deneme, pay 0 → 0,64 (eğim 1: sınırlayıcı çalışmıyor sayılır, telafi eksik kadar)", "0.70",
+            Olcekli(-5, 0.64, (0, 0, -5.7)));
+        Kontrol("Ölçekli: iki deneme, pay değişti; düzlemde eğim (−5,45+0,64 − (−5,7)) / 1,34 = 0,66: 0,7 + (0,45 / 0,66)", "1.38",
+            Olcekli(-5, 0.64, (0, 0, -5.7), (0.7, 0.64, -5.45)));
+        Kontrol("Ölçekli: yükseklik hedefte ama pay 0,3 büyüyor (eğim 0,5): telafi 0,3 × (1/0,5 − 1) daha", "2.30",
+            Olcekli(-5, 0.94, (0, 0.64, -6), (2, 0.64, -5.0)));
+        Kontrol("Ölçekli: yükseklik hedefte, pay aynı → dur", "dur", Olcekli(-5, 0.64, (0, 0.64, -6), (1, 0.64, -5.01)));
+        Kontrol("Ölçekli: hedefin iki yanında deneme varsa aradeğerleme (−5,2 ile −4,78 arasında; −4,7 değil)", "1.38",
+            Olcekli(-5, 0, (1, 0, -5.2), (2, 0, -4.7), (1.8, 0, -4.78)));
+        Kontrol("Ölçekli: eğim çok küçük (sınırlayıcı doydu) → en çok 6", "6.00/sinir", Olcekli(-5, 0.5, (2, 0.5, -6), (3, 0.5, -5.98)));
+        Kontrol("Ölçekli: sınırda, yine eksik, pay aynı → dur", "dur/sinir", Olcekli(-5, 0.5, (5, 0.5, -6), (6, 0.5, -5.9)));
+        Kontrol("Ölçekli: sınırda ama pay büyüyor → 6 kalır, yeni payla denenir", "6.00/sinir", Olcekli(-5, 0.8, (5, 0.5, -6), (6, 0.5, -5.9)));
         Kontrol("Kayıplı mı: TikTok sesi (FDK AAC 44,1 kHz)", "True", Esitleme.KayipliMi(Varsayilanlar.TikTok().Ses).ToString());
         Kontrol("Kayıplı mı: TikTok NVENC ayarının sesi (WAV)", "False", Esitleme.KayipliMi(Varsayilanlar.TikTokNvenc().Ses).ToString());
         Kontrol("Kayıplı mı: YouTube sesi (FDK AAC)", "True", Esitleme.KayipliMi(Varsayilanlar.YouTube().Ses).ToString());
