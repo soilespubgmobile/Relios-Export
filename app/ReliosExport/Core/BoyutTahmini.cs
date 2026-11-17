@@ -47,6 +47,17 @@ public static class BoyutTahmini
     public const int EnCokIcinQpMax = 20;
 
     /// <summary>
+    /// x264'ün en yüksek QP'de (8 bitte 51) bile harcadığı bit hızının kabası (kb/s): makroblok başına karede 6 bit
+    /// (GitHub'da ölçüldü: 3840×2160 25 fps gürültülü görüntü, VBV 100 kb/s, QP 51'de ~5,3 bit; dosya "en çok" tahmininin
+    /// 40 katı çıkıyordu). VBV'nin en yüksek bit hızı bunun altındaysa x264 ona uyamaz: "en çok" söylenemez.
+    /// </summary>
+    public static double EnAzVbvBitHizi(ProfilAyarlari a, MediaInfo m)
+    {
+        var (w, h) = ArgsBuilder.CiktiBoyutu(a, m);
+        return Math.Ceiling(w / 16.0) * Math.Ceiling(h / 16.0) * ArgsBuilder.CiktiKareHizi(a, m) * 6 / 1000;
+    }
+
+    /// <summary>
     /// Videonun bit hızı (kb/s) ve tahminin türü; ayarlardan belli değilse null. <paramref name="m"/>: "kaynakla aynı"
     /// profil için (kayıpsız olup olmadığı profile bağlı).
     /// </summary>
@@ -82,7 +93,8 @@ public static class BoyutTahmini
             case X264Modu.Crf when x.VbvMaks is > 0 && x.VbvTampon is > 0:
                 // x264 CRF'de VBV'yi yalnızca ikisi birlikte verilince kullanır (ArgsBuilder.X264Vbv ile aynı kural).
                 // Kayıpsızda (8 bit CRF 0) x264 VBV'yi yok sayar; qpmax çok düşükse VBV'ye uyamaz: üst sınır yok.
-                if (ArgsBuilder.X264KayipsizMi(a, m) || x.QpMax is < EnCokIcinQpMax)
+                if (ArgsBuilder.X264KayipsizMi(a, m) || x.QpMax is < EnCokIcinQpMax
+                    || (m is not null && x.VbvMaks.Value < EnAzVbvBitHizi(a, m)))
                 {
                     return null;
                 }

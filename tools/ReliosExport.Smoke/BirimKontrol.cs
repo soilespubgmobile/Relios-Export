@@ -832,7 +832,8 @@ internal static class BirimKontrol
         Kontrol("Ayrıntı (telafi sınırı)", "True", (rt with { Telafi = 6, TelafiSiniri = true }).Ayrinti.Contains("(telafi en çok 6 dB)", StringComparison.Ordinal).ToString());
         Kontrol("Biten satır (sonuç -16,04)", "-16,0 LUFS (hedefe ulaşılamadı)", (rt with { SonucYukseklik = -16.04 }).SatirMetni ?? "yok");
 
-        // Telafi adımı: deneme ölçümü hedefin altındaysa eksik kadar artar (en çok 6 dB), 0,2 LU içindeyse durur.
+        // Telafi adımı: deneme ölçümü hedefin altındaysa eksik kadar artar, üstündeyse azalır (en çok ± 6 dB); AAC'de de
+        // WAV'da da 0,02 LU içindeyse durur (0.13.0'a kadar WAV'da 0,2 LU, yalnızca artardı).
         string Adim(double telafi, double olculen)
         {
             var (yeni, sinir) = Esitleme.TelafiAdimi(telafi, olculen, -14);
@@ -841,7 +842,8 @@ internal static class BirimKontrol
 
         Kontrol("Telafi: -17,79 ölçüldü → 3,79", "3.79", Adim(0, -17.79));
         Kontrol("Telafi: 3,79 ile -14,25 → 4,04", "4.04", Adim(3.79, -14.25));
-        Kontrol("Telafi: -14,15 (0,2 içinde) → dur", "dur", Adim(4.04, -14.15));
+        Kontrol("Telafi: -14,15 → 4,19 (WAV'da da 0,02 LU içine kadar)", "4.19", Adim(4.04, -14.15));
+        Kontrol("Telafi: -14,015 (0,02 içinde) → dur", "dur", Adim(4.19, -14.015));
         Kontrol("Telafi: -24 ölçüldü → en çok 6", "6.00/sinir", Adim(0, -24));
         Kontrol("Telafi: sınırda, yine eksik → dur", "dur/sinir", Adim(6, -15));
         Kontrol("Telafi: hedefi geçti → azalır", "2.50", Adim(3, -13.5));
@@ -850,7 +852,7 @@ internal static class BirimKontrol
         // durur, adım 0,01, AAC yüksekliği artırdıysa eksi olabilir. WAV'da (yalnızca sınırlayıcı) 0,2 LU.
         string AdimAac(double telafi, double olculen)
         {
-            var (yeni, sinir) = Esitleme.TelafiAdimi(telafi, olculen, -14, kayipli: true);
+            var (yeni, sinir) = Esitleme.TelafiAdimi(telafi, olculen, -14);
             return (yeni?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) ?? "dur") + (sinir ? "/sinir" : string.Empty);
         }
 
@@ -859,7 +861,22 @@ internal static class BirimKontrol
         Kontrol("AAC telafi: 0,16 ile -14,03 → 0,19", "0.19", AdimAac(0.16, -14.03));
         Kontrol("AAC telafi: AAC yüksekliği artırdı (-13,9) → -0,10", "-0.10", AdimAac(0, -13.9));
         Kontrol("AAC telafi: en çok 6 dB", "6.00/sinir", AdimAac(0, -24));
-        Kontrol("Sınırlayıcı telafisi (WAV): -14,16 (0,2 içinde) → dur", "dur", Adim(0, -14.16));
+        Kontrol("Sınırlayıcı telafisi (WAV): -14,16 → 0,16 (0.13.0'a kadar 0,2 LU içinde dururdu)", "0.16", Adim(0, -14.16));
+        Kontrol("WAV, hedeften yüksek (çok kısık seste ölçer kayması): -13,62 → -0,38", "-0.38", Adim(0, -13.62));
+
+        // Sekant: aynı sınırlayıcı ayarıyla iki deneme varsa adım eğime göre (sınırlayıcı kazancın bir kısmını yer).
+        string Sekant(double t0, double o0, double t1, double o1)
+        {
+            var (yeni, sinir) = Esitleme.TelafiAdimi(t1, o1, -14, (t0, o0));
+            return (yeni?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) ?? "dur") + (sinir ? "/sinir" : string.Empty);
+        }
+
+        Kontrol("Sekant: 0 → -15, 2 → -14,4 (eğim 0,3): 2 + 0,4 / 0,3 = 3,33", "3.33", Sekant(0, -15, 2, -14.4));
+        Kontrol("Sekant: eğim 0,6 (0 → -17,79, 3,79 → -15,5): 3,79 + 1,5 / 0,604 = 6,27 → en çok 6", "6.00/sinir", Sekant(0, -17.79, 3.79, -15.5));
+        Kontrol("Sekant: eğim 1 (sınırlayıcısız): adım eksik kadar", "2.50", Sekant(0, -16.5, 2, -14.5));
+        Kontrol("Sekant: eğim eksi (ölçüm oynadı): adım eksik kadar", "2.60", Sekant(1, -14.5, 2, -14.6));
+        Kontrol("Sekant: eğim çok küçük (0,05 → 0,25 sayılır): 1 + 0,2 × 4", "1.80", Sekant(0, -14.25, 1, -14.2));
+        Kontrol("Sekant: aynı telafi (eğim yok): adım eksik kadar", "1.30", Sekant(1, -14.4, 1, -14.3));
         Kontrol("Kayıplı mı: TikTok sesi (FDK AAC 44,1 kHz)", "True", Esitleme.KayipliMi(Varsayilanlar.TikTok().Ses).ToString());
         Kontrol("Kayıplı mı: TikTok NVENC ayarının sesi (WAV)", "False", Esitleme.KayipliMi(Varsayilanlar.TikTokNvenc().Ses).ToString());
         Kontrol("Kayıplı mı: YouTube sesi (FDK AAC)", "True", Esitleme.KayipliMi(Varsayilanlar.YouTube().Ses).ToString());
@@ -1024,9 +1041,9 @@ internal static class BirimKontrol
 
         // Deneme adımı (bilgisayarda FDK AAC 128 kb/s ile ölçülen dizilerle): tepe aşarsa sınırlayıcı görülen taşma +
         // 0,1 dB aşağı çekilir; ikisi de tamamsa bu denemenin ayarı son ayardır.
-        string Adim(SesDuzeltme d, double tasma, double? yukseklik, double? tepe, double? giris, bool kayipli = true)
+        string Adim(SesDuzeltme d, double tasma, double? yukseklik, double? tepe, double? giris)
         {
-            var (yeni, sinir, t) = Esitleme.DenemeAdimi(d, tasma, yukseklik, -14, kayipli, tepe, true, -1, giris);
+            var (yeni, sinir, t) = Esitleme.DenemeAdimi(d, tasma, yukseklik, -14, tepe, true, -1, giris);
             return (yeni is { } y ? string.Create(inv, $"telafi {y.Telafi:0.00} pay {y.TasmaPayi:0.00} {(y.Sinirla ? "sınırla" : "-")}") : "bitti")
                    + string.Create(inv, $" / taşma {t:0.00}") + (sinir ? " / sınır" : string.Empty);
         }
@@ -1042,7 +1059,8 @@ internal static class BirimKontrol
             Adim(d0, 0, null, -0.7, -1.2));
         Kontrol("Hazır yüksek ses (tepe -0,1, sınırlayıcı -1'de): -0,19 → pay 0,91", "telafi 0.00 pay 0.91 sınırla / taşma 0.81",
             Adim(new SesDuzeltme(0, 0, true), 0, null, -0.19, -1));
-        Kontrol("Pay en çok 6 dB: sınırda, yine aşıyor → bitti", "bitti / taşma 6.50", Adim(new SesDuzeltme(0, 6, true), 0, null, -0.5, -7));
+        Kontrol("Pay 6 dB ile yine aşıyor (AAC-LD, ezilmiş ses): 6,6", "telafi 0.00 pay 6.60 sınırla / taşma 6.50", Adim(new SesDuzeltme(0, 6, true), 0, null, -0.5, -7));
+        Kontrol("Pay en çok 12 dB: sınırda, yine aşıyor → bitti", "bitti / taşma 12.50", Adim(new SesDuzeltme(0, 12, true), 0, null, -0.5, -13));
         Kontrol("Yalnızca yükseklik (AAC -14,16) → telafi 0,16", "telafi 0.16 pay 0.00 - / taşma 0.00", Adim(d0, 0, -14.16, -3, -3.1));
         Kontrol("İkisi de tamam → bitti", "bitti / taşma 0.00", Adim(d0, 0, -14.01, -1.2, -1.25));
         Kontrol("Tepe ve yükseklik birlikte: -0,92 ve -14,16 → telafi 0,16, pay 0,18", "telafi 0.16 pay 0.18 sınırla / taşma 0.08",
@@ -1068,6 +1086,10 @@ internal static class BirimKontrol
             .Contains("Karar: zaten hedeften yüksek, sesin yüksekliğine dokunulmadı", StringComparison.Ordinal).ToString());
         Kontrol("Zaten yüksek + tepe koruması: sınırlı", "True", yuksek.Sinirli.ToString());
         Kontrol("Zaten yüksek, koruma yok: eskisi gibi", "-9,2 LUFS (dokunulmadı)", Esitleme.KararVer(ka, new SesOlcum(-9.24, -3, 4)).SatirMetni ?? "yok");
+        var ezik = Esitleme.KararVer(ka, new SesOlcum(1.1, 10, 20), kararYukseklik: -6.9)
+                   with { SinirlayiciCalisti = true, SonucYukseklik = -12.81, TasmaPayi = 6 };
+        Kontrol("Zaten yüksek, sınırlayıcı zincirde (elle +30 dB): satır sonuçla", "-12,8 LUFS (yalnızca tepeler sınırlandı)", ezik.SatirMetni ?? "yok");
+        Iceriyor("Zaten yüksek, sınırlayıcı zincirde: bilgi satırı", ezik.BilgiMetni, "-6,9 LUFS · zaten yüksek, dokunulmuyor (tepeler -1 dB'de tutulur)");
         var kapaliRapor = new EsitlemeRaporu(EsitlemeKarari.Kapali, new SesOlcum(-12, -0.4, 5), -14, -1)
         {
             TepeZorla = true, SinirlayiciCalisti = true, TasmaPayi = 0.2, Tasma = 0.1, SonucYukseklik = -12.2, SonucTepe = -1.02,
@@ -2082,7 +2104,8 @@ internal static class BirimKontrol
         Kontrol("DRC: WAV'da yok", "False", Esitleme.DrcVar(drc).ToString());
 
         var tts = Varsayilanlar.TikTok().Ses;
-        var r = Esitleme.KararVer(tts, new SesOlcum(-34.8, -14.2, 20)) with { KaynakYukseklik = -21.7 };
+        // AAC (DRC) ve sınırlayıcısız deneme: kazanç çıktıdaki hâlinden.
+        var r = Esitleme.KararVer(tts, new SesOlcum(-34.8, -14.2, 20), kararYukseklik: -34.8) with { KaynakYukseklik = -21.7 };
         Kontrol("Karar çıktıdaki hâliyle (-34,8): yükseltilir", "Dogrusal", r.Karar.ToString());
         Iceriyor("Ayrıntı: kaynağın ölçümü", r.Ayrinti, "Ölçülen: -21,7 LUFS · tepe -14,2 dBTP · ses aralığı 20,0 LU");
         Iceriyor("Ayrıntı: çıktıdaki hâli ve karar", r.Ayrinti, "Çıktıdaki hâli -34,8 LUFS (ses kodlamadaki zinciriyle denenip ölçüldü): karar bununla verildi.");
@@ -2090,8 +2113,30 @@ internal static class BirimKontrol
         var r2 = Esitleme.KararVer(tts, new SesOlcum(-14.1, -3, 5)) with { KaynakYukseklik = -14.12 };
         Icermiyor("Ayrıntı: kaynak ile çıktı aynıysa (0,05'ten az) tek satır", r2.Ayrinti, "Çıktıdaki hâli");
         Kontrol("Karar: çıktıdaki hâli -14,1 → hedefte", "Hedefte", r2.Karar.ToString());
-        var r3 = Esitleme.KararVer(tts, new SesOlcum(-23.9, 20.8, 20)) with { KaynakYukseklik = 9.8 };
-        Kontrol("Karar: kaynak 9,8 LUFS ama çıktıda -23,9 (sınırlayıcı): yükseltilir", "Dogrusal", r3.Karar.ToString());
+        // Sınırlayıcılı deneme: karar çıktıdaki hâliyle, kazanç kaynağın ölçümünden (sınırlayıcının kıstığı kazançla değişir).
+        var r3 = Esitleme.KararVer(tts, new SesOlcum(9.8, 20.8, 20), kararYukseklik: -23.9) with { KaynakYukseklik = 9.8 };
+        Kontrol("Karar: kaynak 9,8 LUFS ama çıktıda -23,9 (sınırlayıcı): eşitlenir", "Dogrusal", r3.Karar.ToString());
+        Iceriyor("Bilgi satırı: kazanç kaynağın ölçümünden (9,8 → -14: -23,8 dB)", r3.BilgiMetni, "9,8 → -14 LUFS (bütün ses -23,8 dB");
+        Iceriyor("Ayrıntı: karar çıktıdaki hâliyle", r3.Ayrinti, "Çıktıdaki hâli -23,9 LUFS (ses kodlamadaki zinciriyle denenip ölçüldü): karar bununla verildi.");
+        Iceriyor("Ayrıntı: kısıldı", r3.Ayrinti, "Karar: bütün ses aynı miktarda -23,8 dB kısıldı");
+        var wav40 = Varsayilanlar.YouTube().Ses;
+        wav40.Kodlayici = SesKodlayici.Wav;
+        wav40.EsitlemeHedef = -40;
+        wav40.EsitlemeYonu = EsitlemeYonu.IkiYon;
+        var r4 = Esitleme.KararVer(wav40, new SesOlcum(-20.9, -0.8, 20), kararYukseklik: -25.9) with { KaynakYukseklik = -20.9 };
+        Kontrol("Kısma (hedef -40, sınırlayıcı -12'de denendi: -25,9): eşitlenir", "Dogrusal", r4.Karar.ToString());
+        Iceriyor("Kısma: kazanç kaynağın ölçümünden (-19,1; eskiden -14,1 ve ses -35'te kalıyordu)", r4.BilgiMetni, "-20,9 → -40 LUFS (bütün ses -19,1 dB");
+        var r5 = Esitleme.KararVer(tts, new SesOlcum(-13.0, -1, 5), kararYukseklik: -14.2);
+        Kontrol("Kaynak -13 ama çıktıda -14,2: hedefte", "Hedefte", r5.Karar.ToString());
+        Kontrol("Hedefte: bilgi satırı çıktıdaki hâliyle", "-14,2 LUFS · zaten hedefte, dokunulmuyor", r5.BilgiMetni);
+        Kontrol("Hedefte: biten satır çıktıdaki hâliyle", "-14,2 LUFS (dokunulmadı)", r5.SatirMetni ?? "yok");
+        var r6 = Esitleme.KararVer(tts, new SesOlcum(-15.5, -3, 5), kararYukseklik: -12.6);
+        Kontrol("Kaynak -15,5 ama çıktıda -12,6: zaten yüksek", "ZatenYuksek", r6.Karar.ToString());
+        Kontrol("Zaten yüksek: biten satır çıktıdaki hâliyle", "-12,6 LUFS (dokunulmadı)", r6.SatirMetni ?? "yok");
+        var kisikRapor = Esitleme.KararVer(wav40, new SesOlcum(-68.28, -60, 0)) with { Telafi = -0.37, KisikOlcum = true };
+        Iceriyor("Çok kısık ses: ölçerin kapısı için düzeltme yazılır", kisikRapor.Ayrinti,
+            "Ses çok kısık olduğu için (ölçer -70 LUFS'un altındaki bölümleri saymaz) yükseklik çıktının seviyesinde yeniden ölçüldü: kazanç -0,4 dB düzeltildi.");
+        Kontrol("Çok kısık sınırı: -45 LUFS", "-45", Esitleme.KisikSinir.ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     /// <summary>0.13.0: x264'ün açılmadığı ayarlar (geçmeli yükseklik, matris QP, düşük 2 geçiş), kırpma, tahmini boyut.</summary>
@@ -2150,6 +2195,32 @@ internal static class BirimKontrol
         nvencGecmeli.Video.Kodlayici = VideoKodlayici.Nvenc;
         Kontrol("NVENC: x264'ün geçmeli ayarı geçerli değil (2'nin katı)", "2", ArgsBuilder.YukseklikKati(nvencGecmeli, hd).ToString());
 
+        // Çok büyük küçültme: FFmpeg'in ölçekleyicisi bir adımda en çok 256 dokunuş (ör. 576 → 16 Spline'da açılmıyordu).
+        static string Ara(int kw, int kh, int hw, int hh, string olcek, bool korunur) =>
+            string.Join(" ", ArgsBuilder.AraOlcekler(kw, kh, hw, hh, olcek, korunur).Select(x => $"{x.W}x{x.H}")) is { Length: > 0 } t ? t : "yok";
+        Kontrol("Ara ölçek: Spline 720×576 → 16×1080 (esnet): genişlik önce 128'e", "128x576", Ara(720, 576, 16, 1080, "spline", false));
+        Kontrol("Ara ölçek: Area 8192 → 16 (oran 512): önce 128'e", "128x2160", Ara(8192, 2160, 16, 2160, "area", false));
+        Kontrol("Ara ölçek: Bicubic 576 → 16 (145 dokunuş): gerekmez", "yok", Ara(720, 576, 720, 16, "bicubic", false));
+        Kontrol("Ara ölçek: Bicubic 1080 → 16 (271 dokunuş): 128'e", "1920x128", Ara(1920, 1080, 1920, 16, "bicubic", false));
+        Kontrol("Ara ölçek: Lanczos 1920×1080 → 1080×1920: gerekmez", "yok", Ara(1920, 1080, 1080, 1920, "lanczos", false));
+        Kontrol("Ara ölçek: en yakın komşu: gerekmez", "yok", Ara(8192, 8192, 16, 16, "neighbor", false));
+        Kontrol("Ara ölçek: oran korunur (kırpma 330×576 → 16×28): ikisi aynı oranla", "128x224", Ara(330, 576, 16, 28, "spline", true));
+        Kontrol("Ara ölçek: Lanczos 480×270 → 16×8192 (30 kat küçültme, 30 kat büyütme): önce 128", "128x270", Ara(480, 270, 16, 8192, "lanczos", false));
+        Kontrol("Ara ölçek: Lanczos 128 → 16 (8 kat): gerekmez", "yok", Ara(128, 270, 16, 8192, "lanczos", false));
+        Kontrol("Ara ölçek: Spline 320×180 → 8192×16 (11,25 kat): yükseklik önce 128", "320x128", Ara(320, 180, 8192, 16, "spline", false));
+        var dar = Varsayilanlar.TikTok();
+        dar.Video.Cozunurluk = CozunurlukModu.Hedef;
+        dar.Video.Genislik = 16;
+        dar.Video.Yukseklik = 1080;
+        dar.Video.Oran = OranUyumu.Esnet;
+        dar.Video.Olcekleme = "spline";
+        var dk = Komut(dar, V(720, 576));
+        Iceriyor("Spline 16×1080 (esnet): önce Area ile 128×576", dk, "scale=128:576:flags=area");
+        Iceriyor("Spline 16×1080: son adım Spline", dk, "scale=128:576:flags=area" + (dar.Video.HassasYuvarlama ? "+accurate_rnd+full_chroma_int" : string.Empty)
+                                                         + ",scale=16:1080:flags=spline");
+        dar.Video.Olcekleme = "bicubic";
+        Icermiyor("Bicubic 16×1080 (720 → 16: 181 dokunuş): ara ölçek yok", Komut(dar, V(720, 576)), "flags=area");
+
         // Çok dar hedefte kırpma genişliği / yüksekliği en az 2 (eskiden 0 çıkıp ffmpeg duruyordu).
         static string P(CropPlan p) => $"{p.Width}x{p.Height}+{p.X}+{p.Y}";
         var kucuk = V(320, 180);
@@ -2186,6 +2257,74 @@ internal static class BirimKontrol
         var nv = Varsayilanlar.YouTube();
         nv.Video.Kodlayici = VideoKodlayici.Nvenc;
         Kontrol("NVENC: x264 düzeltmesi yok", "yok", ArgsBuilder.X264Duzelt("requested bitrate is too low. estimated minimum is 43 kbps", nv) ?? "yok");
+
+        // 2 / 3 geçiş, en yüksek bit hızı ortalamadan düşük: x264 CBR sayar, kodlanan bit hızı en yüksek bit hızıdır.
+        var cbrSay = Varsayilanlar.YouTube();
+        cbrSay.Video.X264.Mod = X264Modu.UcGecis;
+        cbrSay.Video.X264.BitHizi = 4000;
+        cbrSay.Video.X264.VbvMaks = 100;
+        not = ArgsBuilder.X264Duzelt("[libx264 @ 0x1] max bitrate less than average bitrate, assuming CBR\n"
+                                     + "[libx264 @ 0x1] requested bitrate is too low. estimated minimum is 213 kbps", cbrSay);
+        Kontrol("CBR sayılan 3 geçiş (4 Mb/s, en yüksek 100): en yüksek bit hızı 219'a", "219/4000",
+            $"{cbrSay.Video.X264.VbvMaks}/{cbrSay.Video.X264.BitHizi}");
+        Kontrol("CBR sayılan 3 geçiş: not", "en yüksek bit hızı 100 kb/s bu videoda 3 geçişle kodlanamıyor (x264: en az 213 kb/s): 219 kb/s", not ?? "yok");
+        var cbrSay2 = Varsayilanlar.YouTube();
+        cbrSay2.Video.X264.Mod = X264Modu.IkiGecis;
+        cbrSay2.Video.X264.BitHizi = 64;
+        cbrSay2.Video.X264.VbvMaks = 32;
+        ArgsBuilder.X264Duzelt("requested bitrate is too low. estimated minimum is 138 kbps", cbrSay2);
+        Kontrol("CBR sayılan 2 geçiş (64, en yüksek 32): ikisi de 142 (tek denemede)", "142/142",
+            $"{cbrSay2.Video.X264.VbvMaks}/{cbrSay2.Video.X264.BitHizi}");
+
+        // Matris: QP aralığı boş (min > max): önce kullanıcının sınırı, sonra düz matris.
+        var matris = Varsayilanlar.YouTube();
+        matris.Video.X264.Cqm = "jvt";
+        matris.Video.X264.QpMax = null;
+        matris.Video.X264.QpMin = 10;
+        const string Bos = "[libx264 @ 0x1] Impossible QP constraints for CQM (min=5, max=4)";
+        Kontrol("Matris, qpmin 10 > en çok 4: qpmin 4", "JVT nicemleme matrisiyle en düşük QP en çok 4 olabilir (x264): qpmin 10 → 4",
+            ArgsBuilder.X264Duzelt(Bos, matris) ?? "yok");
+        Kontrol("Matris, yine boş (en az 5 > 4): düz matris", "JVT nicemleme matrisi bu ayarlarla kullanılamıyor (x264: QP en az 5, en çok 4): düz matris",
+            ArgsBuilder.X264Duzelt(Bos, matris) ?? "yok");
+        Kontrol("Matris düz oldu", "flat", matris.Video.X264.Cqm ?? "yok");
+        Kontrol("Matris düzken yine aynı ileti: düzeltilecek bir şey yok", "yok", ArgsBuilder.X264Duzelt(Bos, matris) ?? "yok");
+
+        // Geçmeli (MBAFF): kısıtlı intra kapalı, arama aralığı en az 16.
+        var mbaff = Gecmeli("high");
+        mbaff.Video.X264.KisitliIntra = true;
+        mbaff.Video.X264.MeAraligi = 4;
+        mbaff.Video.X264.IsParcacigi = 8;
+        var mk = Komut(mbaff, hd);
+        Iceriyor("Geçmeli + kısıtlı intra: kısıtlı intra kapalı", mk, ":constrained-intra=0:");
+        Iceriyor("Geçmeli + kısıtlı intra: geçmeli kalır", mk, ":interlaced=1:");
+        Iceriyor("Geçmeli + arama aralığı 4 + 8 iş parçacığı: 16", mk, ":merange=16:");
+        Kontrol("Geçmeli: notlar", "geçmeli 4:2:0'da yükseklik 4'ün katı: 1350 → 1348 | geçmeli kodlamada kısıtlı intra tahmin kapatıldı (x264 ikisi birlikteyken çözülemeyen kare üretebiliyor) | geçmeli kodlamada arama aralığı en az 16 (x264 daha küçüğünde çok iş parçacığıyla düşüyor): 4 → 16",
+            string.Join(" | ", Exporter.Notlar(hd, mbaff, SesSecimi.Yok)));
+        mbaff.Video.X264.IsParcacigi = 1;
+        Iceriyor("Geçmeli, tek iş parçacığı: arama aralığı olduğu gibi (4)", Komut(mbaff, hd), ":merange=4:");
+        mbaff.Video.X264.IsParcacigi = null;
+        Iceriyor("Geçmeli, iş parçacığı otomatik: 16", Komut(mbaff, hd), ":merange=16:");
+        mbaff.Video.X264.MeAraligi = 24;
+        Iceriyor("Geçmeli, arama aralığı 24: olduğu gibi", Komut(mbaff, hd), ":merange=24:");
+        var tabanGecmeli = Gecmeli("baseline");
+        tabanGecmeli.Video.X264.KisitliIntra = true;
+        tabanGecmeli.Video.X264.MeAraligi = 4;
+        var tk = Komut(tabanGecmeli, hd);
+        Iceriyor("Baseline (geçmeli yok) + kısıtlı intra: açık kalır", tk, ":constrained-intra=1:");
+        Iceriyor("Baseline (geçmeli yok): arama aralığı 4 kalır", tk, ":merange=4:");
+        var ilerleyenKisitli = Varsayilanlar.TikTok();
+        ilerleyenKisitli.Video.X264.KisitliIntra = true;
+        Iceriyor("İlerleyen + kısıtlı intra: açık", Komut(ilerleyenKisitli, hd), ":constrained-intra=1:");
+        Kontrol("İlerleyen: not yok", "yok", ArgsBuilder.KisitliIntraNotu(ilerleyenKisitli, hd) ?? "yok");
+
+        // Tahmini boyut: VBV x264'ün en yüksek QP'de bile harcayacağının altındaysa "en çok" söylenmez.
+        Kontrol("En az VBV bit hızı: 1920×1080 30 fps (120 × 68 makroblok × 30 × 6 bit)", "1469",
+            BoyutTahmini.EnAzVbvBitHizi(Varsayilanlar.YouTube(), V(1920, 1080)).ToString("0"));
+        var dusukVbv = Varsayilanlar.YouTube();
+        dusukVbv.Video.X264.VbvMaks = 100;
+        dusukVbv.Video.X264.VbvTampon = 100;
+        Kontrol("4K 25 fps, VBV 100 kb/s: \"en çok\" yok (dosya tahminin 40 katı çıkıyordu)", "yok",
+            BoyutTahmini.Hesapla(dusukVbv, V(3840, 2160, 3, 25), SesSecimi.Yok)?.Metin ?? "yok");
 
         // Bellek yetmedi (GitHub'da ölçüldü: 2160×3840'ta 128 iş parçacığı ~47 GB, 64: 23,8 GB, 32: 12,5 GB, 16: 7 GB).
         const string Bellek = "x264 [error]: malloc of size 42881664 failed\n[vost#0:0/libx264 @ 0x1] [enc:libx264 @ 0x2] Error while "

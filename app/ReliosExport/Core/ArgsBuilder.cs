@@ -420,6 +420,15 @@ public static class ArgsBuilder
         {
             var w = v.Genislik - (v.Genislik % 2);
             var h = v.Yukseklik - (v.Yukseklik % kat);
+            var araFlags = "flags=area" + (v.HassasYuvarlama ? "+accurate_rnd+full_chroma_int" : string.Empty);
+            void Ara(int kw, int kh, int hw, int hh, bool oranKorunur)
+            {
+                foreach (var (aw, ah) in AraOlcekler(kw, kh, hw, hh, v.Olcekleme, oranKorunur))
+                {
+                    filters.Add(string.Create(Inv, $"scale={aw}:{ah}:{araFlags}"));
+                }
+            }
+
             switch (v.Oran)
             {
                 case OranUyumu.OrtadanKirp:
@@ -429,14 +438,20 @@ public static class ArgsBuilder
                         filters.Add(string.Create(Inv, $"crop={crop.Width}:{crop.Height}:{crop.X}:{crop.Y}"));
                     }
 
+                    Ara(crop.Width, crop.Height, w, h, oranKorunur: true);
                     filters.Add(string.Create(Inv, $"scale={w}:{h}:{flags}:{renk}"));
                     break;
                 case OranUyumu.KenarEkle:
+                    // Sığdırılan boyut (ffmpeg'in force_original_aspect_ratio=decrease hesabı gibi, piksel boyutundan).
+                    var sigdir = Math.Min((double)w / media.DisplayWidth, (double)h / media.DisplayHeight);
+                    Ara(media.DisplayWidth, media.DisplayHeight, (int)Math.Max(2, media.DisplayWidth * sigdir),
+                        (int)Math.Max(2, media.DisplayHeight * sigdir), oranKorunur: true);
                     filters.Add(string.Create(Inv,
                         $"scale={w}:{h}:force_original_aspect_ratio=decrease:force_divisible_by=2:{flags}:{renk}"));
                     filters.Add(string.Create(Inv, $"pad={w}:{h}:-1:-1:color=black"));
                     break;
                 default:
+                    Ara(media.DisplayWidth, media.DisplayHeight, w, h, oranKorunur: false);
                     filters.Add(string.Create(Inv, $"scale={w}:{h}:{flags}:{renk}"));
                     break;
             }
@@ -449,6 +464,90 @@ public static class ArgsBuilder
         // tek başına etiketsiz kaynakta işe yaramıyor.
         filters.Add("setparams=color_primaries=bt709:color_trc=bt709");
         return filters;
+    }
+
+    /// <summary>
+    /// Ölçekleyicinin süzgeç çarpanı (FFmpeg swscale): küçültmede süzgeç boyu 1 + çarpan × oran; en yakın komşu tek
+    /// dokunuş (0).
+    /// </summary>
+    private static int OlcekleyiciCarpani(string olcekleme) => olcekleme switch
+    {
+        "spline" => 20,
+        "lanczos" => 6,
+        "bicubic" => 4,
+        "bilinear" => 2,
+        "area" => 1,
+        _ => 0,
+    };
+
+    /// <summary>
+    /// Çok büyük küçültmede ara ölçekler. FFmpeg'in ölçekleyicisi bir adımda en çok 256 dokunuşlu süzgeç kullanır (süzgeç
+    /// boyu 1 + çarpan × küçültme oranı, kaynak boyu - 2 ile sınırlı); Spline ve Lanczos öbür boyut büyütülürken 8 kattan
+    /// büyük küçültmede de açılmıyordu ("Failed initializing scaling graph"; ör. 16×8192 hedefte). O zaman önce Area ile
+    /// (çarpan 1; her adımda en çok 200 kat) hedefin 8 katına küçültülür, son adım seçilen ölçekleyiciyle.
+    /// <paramref name="oranKorunur"/>: iki boyut aynı oranla küçülür (kırpma / kenar eklemede en-boy oranı korunur).
+    /// Gerekmiyorsa boş.
+    /// </summary>
+    public static List<(int W, int H)> AraOlcekler(int kw, int kh, int hw, int hh, string olcekleme, bool oranKorunur)
+    {
+        var f = OlcekleyiciCarpani(olcekleme);
+        // Spline ve Lanczos öbür boyut büyütülürken 8 kattan büyük küçültmede de açılmıyor (GitHub'da ölçüldü: 480×270 →
+        // 16×8192 Lanczos'ta 181 dokunuşla bile); öbürlerinde süzgeç boyu.
+        bool Asar(int k, int hd) => k > hd && hd > 0
+            && (f >= 6 ? (double)k / hd > 8 : Math.Min(1 + ((f * (long)k) + hd - 1) / hd, k - 2) >= 250);
+        var adimlar = new List<(int W, int H)>();
+        if (f == 0 || !(Asar(kw, hw) || Asar(kh, hh)))
+        {
+            return adimlar;
+        }
+
+        static int Cift(double d) => Math.Max(2, (int)Math.Ceiling(d / 2) * 2);
+        if (oranKorunur)
+        {
+            // Ortak oran: ikisinden büyüğü; ara boy hedefin 8 katı (kaynaktan büyükse kaynak).
+            var oran = Math.Max((double)kw / hw, (double)kh / hh);
+            var kalan = oran / 8;
+            var adimOran = 1.0;
+            while (kalan > 1)
+            {
+                var bu = Math.Min(kalan, 200);
+                adimOran *= bu;
+                kalan /= bu;
+                adimlar.Add((Cift(kw / adimOran), Cift(kh / adimOran)));
+            }
+
+            return adimlar;
+        }
+
+        // Boyutlar ayrı ayrı (esnetme): her boyut kendi oranıyla; adımı olmayan boyut olduğu gibi kalır.
+        List<int> Boyut(int k, int hd)
+        {
+            var liste = new List<int>();
+            if (!Asar(k, hd))
+            {
+                return liste;
+            }
+
+            double kalan = (double)k / hd / 8, oranAdim = 1;
+            while (kalan > 1)
+            {
+                var bu = Math.Min(kalan, 200);
+                oranAdim *= bu;
+                kalan /= bu;
+                liste.Add(Cift(k / oranAdim));
+            }
+
+            return liste;
+        }
+
+        var ws = Boyut(kw, hw);
+        var hs = Boyut(kh, hh);
+        for (var i = 0; i < Math.Max(ws.Count, hs.Count); i++)
+        {
+            adimlar.Add((i < ws.Count ? ws[i] : ws.Count > 0 ? ws[^1] : kw, i < hs.Count ? hs[i] : hs.Count > 0 ? hs[^1] : kh));
+        }
+
+        return adimlar;
     }
 
     /// <summary>
@@ -592,7 +691,10 @@ public static class ArgsBuilder
         }
 
         Ekle("mixed-refs", x.KarisikRef);
-        Ekle("merange", x.MeAraligi);
+        // Geçmeli (MBAFF) kodlamada çerçeve iş parçacıklarıyla x264 küçük arama aralığında düşüyor ("Assertion failed:
+        // a->l0.me16x16.mv[1] <= h->mb.mv_max_spel[1]"; GitHub'da ölçüldü: merange 4 + umh, 1080p'de 32, 576'da 16 iş
+        // parçacığından itibaren): en az 16 (x264'ün varsayılanı). Bkz. AramaAraligiNotu.
+        Ekle("merange", GecmeliAramaAraligi(a, media) ?? x.MeAraligi);
         Ekle("chroma-me", x.KromaMe);
         Ekle("trellis", x.Trellis);
         // x264 dosyaya kullanılan özelliklerin gerektirdiği en düşük profili yazar: 8x8 DCT kapalıysa High
@@ -607,7 +709,10 @@ public static class ArgsBuilder
         Ekle("dct-decimate", x.DctSeyreltme);
         Ekle("interlaced", x.Gecmeli && !baseline);
         Ekle("bluray-compat", x.BlurayUyumlu);
-        Ekle("constrained-intra", x.KisitliIntra);
+        // Geçmeli (MBAFF) kodlamada kısıtlı intra tahmin yazılmaz: x264 ikisi birlikteyken bazı karelerde çözülemeyen akış
+        // üretiyor (FFmpeg: "left block unavailable for requested intra4x4 mode"; GitHub'da ölçüldü: ikisi birlikte 64
+        // kodlamanın 1'inde, ayrı ayrı 0). Bkz. KisitliIntraNotu.
+        Ekle("constrained-intra", x.KisitliIntra && !(x.Gecmeli && !baseline));
         Ekle("bframes", baseline && x.BKare is > 0 ? null : x.BKare);
         Ekle("weightp", baseline && x.AgirlikliP is > 0 ? null : x.AgirlikliP);
         var aralik = AnahtarKareHesabi.Aralik(k, fps);
@@ -798,28 +903,89 @@ public static class ArgsBuilder
         if (dusuk.Success && x.Mod is X264Modu.IkiGecis or X264Modu.UcGecis
             && int.TryParse(dusuk.Groups[1].Value, NumberStyles.Integer, Inv, out var enAz))
         {
-            var eski = x.BitHizi;
+            // En yüksek bit hızı (VBV) ortalamadan düşükse x264 CBR sayar ve ortalamayı ona indirir ("max bitrate less than
+            // average bitrate, assuming CBR"): kodlanan bit hızı en yüksek bit hızıdır, o yükseltilir (ortalama da en az o).
+            var vbvKisitli = x.VbvMaks is > 0 && x.VbvMaks < x.BitHizi;
+            var eski = vbvKisitli ? x.VbvMaks!.Value : x.BitHizi;
             var yeni = Math.Max((int)Math.Ceiling(enAz * 1.02) + 1, eski + 1);
             if (yeni > 1_000_000)
             {
                 return null;
             }
 
+            var gecis = x.Mod == X264Modu.IkiGecis ? 2 : 3;
+            if (vbvKisitli)
+            {
+                x.VbvMaks = yeni;
+                x.BitHizi = Math.Max(x.BitHizi, yeni);
+                return $"en yüksek bit hızı {Bicim.BitHizi(eski)} bu videoda {gecis} geçişle kodlanamıyor "
+                       + $"(x264: en az {enAz} kb/s): {Bicim.BitHizi(yeni)}";
+            }
+
             x.BitHizi = yeni;
-            return $"{Bicim.BitHizi(eski)} bu videoda {(x.Mod == X264Modu.IkiGecis ? 2 : 3)} geçişle kodlanamıyor "
-                   + $"(x264: en az {enAz} kb/s): {Bicim.BitHizi(yeni)}";
+            return $"{Bicim.BitHizi(eski)} bu videoda {gecis} geçişle kodlanamıyor (x264: en az {enAz} kb/s): {Bicim.BitHizi(yeni)}";
         }
 
         var cqm = System.Text.RegularExpressions.Regex.Match(gunluk, @"Impossible QP constraints for CQM \(min=(\d+), max=(-?\d+)\)");
         if (cqm.Success && int.TryParse(cqm.Groups[1].Value, NumberStyles.Integer, Inv, out var qpEnAz)
-            && x.QpMax is { } qpMax && qpMax < qpEnAz)
+            && int.TryParse(cqm.Groups[2].Value, NumberStyles.Integer, Inv, out var qpEnCok))
         {
-            x.QpMax = qpEnAz;
-            return $"{(x.Cqm ?? "JVT").ToUpperInvariant()} nicemleme matrisiyle en yüksek QP en az {qpEnAz} olabilir "
-                   + $"(x264): qpmax {qpMax} → {qpEnAz}";
+            var matris = (x.Cqm ?? "JVT").ToUpperInvariant();
+            if (x.QpMax is { } qpMax && qpMax < qpEnAz)
+            {
+                x.QpMax = qpEnAz;
+                return $"{matris} nicemleme matrisiyle en yüksek QP en az {qpEnAz} olabilir (x264): qpmax {qpMax} → {qpEnAz}";
+            }
+
+            if (x.QpMin is { } qpMin && qpMin >= qpEnAz && qpMin > qpEnCok && qpEnCok >= 0)
+            {
+                x.QpMin = qpEnCok;
+                return $"{matris} nicemleme matrisiyle en düşük QP en çok {qpEnCok} olabilir (x264): qpmin {qpMin} → {qpEnCok}";
+            }
+
+            if (x.Cqm is { } c && !c.Equals("flat", StringComparison.OrdinalIgnoreCase))
+            {
+                // Matrisin kendisi bu ayarlarla (ör. eksi kroma QP ofseti, psy) hiçbir QP'de kullanılamıyor.
+                x.Cqm = "flat";
+                return $"{matris} nicemleme matrisi bu ayarlarla kullanılamıyor (x264: QP en az {qpEnAz}, en çok {qpEnCok}): düz matris";
+            }
         }
 
         return null;
+    }
+
+    /// <summary>Geçmeli (MBAFF) kodlamada x264'ün güvenle kullanabildiği en küçük arama aralığı (piksel).</summary>
+    public const int GecmeliEnAzAramaAraligi = 16;
+
+    /// <summary>
+    /// Geçmeli kodlamada arama aralığı en az <see cref="GecmeliEnAzAramaAraligi"/> yapıldıysa yeni değer (tek iş
+    /// parçacığında gerekmez), değilse null.
+    /// </summary>
+    public static int? GecmeliAramaAraligi(ProfilAyarlari a, MediaInfo? media)
+    {
+        var x = a.Video.X264;
+        return a.Video.Kodlayici == VideoKodlayici.X264 && x.Gecmeli && ProfilCoz(x.Profil, media) != "baseline"
+               && x.IsParcacigi != 1 && x.MeAraligi is { } r && r < GecmeliEnAzAramaAraligi
+            ? GecmeliEnAzAramaAraligi
+            : null;
+    }
+
+    /// <summary>Geçmeli kodlamada arama aralığı büyütüldüyse kısa açıklama, değilse null.</summary>
+    public static string? AramaAraligiNotu(ProfilAyarlari a, MediaInfo? media) =>
+        GecmeliAramaAraligi(a, media) is { } yeni
+            ? $"geçmeli kodlamada arama aralığı en az {yeni} (x264 daha küçüğünde çok iş parçacığıyla düşüyor): {a.Video.X264.MeAraligi} → {yeni}"
+            : null;
+
+    /// <summary>
+    /// Geçmeli kodlamada kısıtlı intra tahmin kapatıldıysa kısa açıklama (satırdaki bilgi için), değilse null. Bkz.
+    /// <see cref="X264Parametreleri"/>.
+    /// </summary>
+    public static string? KisitliIntraNotu(ProfilAyarlari a, MediaInfo? media)
+    {
+        var x = a.Video.X264;
+        return a.Video.Kodlayici == VideoKodlayici.X264 && x.KisitliIntra && x.Gecmeli && ProfilCoz(x.Profil, media) != "baseline"
+            ? "geçmeli kodlamada kısıtlı intra tahmin kapatıldı (x264 ikisi birlikteyken çözülemeyen kare üretebiliyor)"
+            : null;
     }
 
     /// <summary>Günlükte bellek ayrılamadığı yazıyor mu (x264: "malloc of size N failed"; FFmpeg: "Cannot allocate memory").</summary>

@@ -49,6 +49,19 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, SesOlcum? Olcum, doubl
     public double? KaynakYukseklik { get; init; }
 
     /// <summary>
+    /// Kararın verildiği yükseklik (LUFS): sesin çıktıdaki hâli, bir kez kazançsız denenip ölçüldüyse (AAC'de kodlanıp
+    /// çözülen, sınırlayıcıdan geçen ses); denenmediyse null (karar <see cref="Olcum"/> ile). Kazanç yine
+    /// <see cref="Olcum"/>'dan hesaplanır: sınırlayıcı kazançla birlikte değişir (ses kısılınca hiç çalışmayabilir).
+    /// </summary>
+    public double? KararYukseklik { get; init; }
+
+    /// <summary>
+    /// Ses ya da hedef çok kısık (<see cref="Esitleme.KisikSinir"/>): yükseklik çıktının seviyesinde de denenip ölçüldü
+    /// (ölçerin mutlak kapısı kısık seste bazı blokları saymaz).
+    /// </summary>
+    public bool KisikOlcum { get; init; }
+
+    /// <summary>
     /// Sınırlayıcının kıstığı ve (AAC çıktıda) kodlamanın düşürdüğü payı karşılamak için sese eklenen kazanç (dB;
     /// en çok <see cref="Esitleme.EnCokTelafi"/>; yalnızca AAC'de eksi olabilir).
     /// </summary>
@@ -106,6 +119,9 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, SesOlcum? Olcum, doubl
     /// <summary>Sonuç hedefe 0,5 LU'dan uzak mı (ör. çok tepeli seste telafi sınırına gelindi).</summary>
     public bool HedefeUlasilamadi => Uygulandi && SonucYukseklik is { } s && Math.Abs(s - Hedef) > Esitleme.Tolerans;
 
+    /// <summary>Kararın yüksekliği: sesin çıktıdaki hâli denendiyse o, değilse ölçülen.</summary>
+    private double KararDegeri => KararYukseklik ?? Olcum?.Yukseklik ?? 0;
+
     private static string Bir(double d) => Math.Round(d, 1).ToString("0.0", Tr);
 
     private static string Isaretli(double d) => (Math.Round(d, 1) >= 0 ? "+" : string.Empty) + Bir(d);
@@ -114,14 +130,14 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, SesOlcum? Olcum, doubl
 
     private string TavanMetni => Bicim.Sayi(Tavan);
 
-    private string TepeEki => TepeZorla ? $" (tepeler {TavanMetni} dB'de tutulur)" : string.Empty;
+    private string TepeEki => TepeZorla || SinirlayiciCalisti ? $" (tepeler {TavanMetni} dB'de tutulur)" : string.Empty;
 
     /// <summary>Kodlarken bilgi satırı: "-25,5 → -14 LUFS (bütün ses +11,5 dB)".</summary>
     public string BilgiMetni => Karar switch
     {
         EsitlemeKarari.Olculemedi => "ses ölçülemedi, eşitlenmiyor",
-        EsitlemeKarari.Hedefte => $"{Bir(Olcum!.Yukseklik)} LUFS · zaten hedefte, dokunulmuyor" + TepeEki,
-        EsitlemeKarari.ZatenYuksek => $"{Bir(Olcum!.Yukseklik)} LUFS · zaten yüksek, dokunulmuyor" + TepeEki,
+        EsitlemeKarari.Hedefte => $"{Bir(KararDegeri)} LUFS · zaten hedefte, dokunulmuyor" + TepeEki,
+        EsitlemeKarari.ZatenYuksek => $"{Bir(KararDegeri)} LUFS · zaten yüksek, dokunulmuyor" + TepeEki,
         EsitlemeKarari.Kapali => $"tepeler {TavanMetni} dB'de tutulur",
         _ => $"{Bir(Olcum!.Yukseklik)} → {HedefMetni} LUFS (bütün ses {Isaretli(Kazanc)} dB"
              + (Sinirli ? $", tepeler {TavanMetni} dB'de tutulur" : string.Empty) + ")",
@@ -134,9 +150,9 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, SesOlcum? Olcum, doubl
     public string? SatirMetni => Karar switch
     {
         EsitlemeKarari.Olculemedi => "ses ölçülemedi, eşitlenmedi",
-        EsitlemeKarari.Hedefte or EsitlemeKarari.ZatenYuksek => TepeZorla
-            ? $"{Bir(SonucYukseklik ?? Olcum!.Yukseklik)} LUFS (yalnızca tepeler sınırlandı)"
-            : $"{Bir(Olcum!.Yukseklik)} LUFS (dokunulmadı)",
+        EsitlemeKarari.Hedefte or EsitlemeKarari.ZatenYuksek => TepeZorla || SinirlayiciCalisti
+            ? $"{Bir(SonucYukseklik ?? KararDegeri)} LUFS (yalnızca tepeler sınırlandı)"
+            : $"{Bir(SonucYukseklik ?? KararDegeri)} LUFS (dokunulmadı)",
         EsitlemeKarari.Kapali => $"tepeler {TavanMetni} dB'de tutuldu",
         _ when SonucYukseklik is { } s => $"{Bir(s)} LUFS" + (HedefeUlasilamadi ? " (hedefe ulaşılamadı)" : string.Empty),
         _ => null,
@@ -165,16 +181,14 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, SesOlcum? Olcum, doubl
             else
             {
                 satirlar.Add($"LUFS eşitleme (hedef {HedefMetni} LUFS, tepe en çok {TavanMetni} dB)");
-                if (KaynakYukseklik is { } ky && Math.Abs(ky - o.Yukseklik) >= 0.05)
+                var kaynak = KaynakYukseklik ?? o.Yukseklik;
+                satirlar.Add($"Ölçülen: {Bir(kaynak)} LUFS · tepe {Bir(o.Tepe)} dBTP · ses aralığı {Bir(o.Aralik)} LU");
+                if (KararYukseklik is { } ky && Math.Abs(ky - kaynak) >= 0.05)
                 {
                     // Karar çıktıdaki hâlin ölçümüyle (ör. AAC'nin DRC'si sesi kısıyor, sınırlayıcı yüksek sesi eziyor).
-                    satirlar.Add($"Ölçülen: {Bir(ky)} LUFS · tepe {Bir(o.Tepe)} dBTP · ses aralığı {Bir(o.Aralik)} LU");
-                    satirlar.Add($"Çıktıdaki hâli {Bir(o.Yukseklik)} LUFS (ses kodlamadaki zinciriyle denenip ölçüldü): karar bununla verildi.");
+                    satirlar.Add($"Çıktıdaki hâli {Bir(ky)} LUFS (ses kodlamadaki zinciriyle denenip ölçüldü): karar bununla verildi.");
                 }
-                else
-                {
-                    satirlar.Add($"Ölçülen: {Bir(o.Yukseklik)} LUFS · tepe {Bir(o.Tepe)} dBTP · ses aralığı {Bir(o.Aralik)} LU");
-                }
+
                 var dokunma = TepeZorla ? "sesin yüksekliğine dokunulmadı" : "sese dokunulmadı";
                 satirlar.Add(Karar switch
                 {
@@ -191,6 +205,11 @@ public sealed record EsitlemeRaporu(EsitlemeKarari Karar, SesOlcum? Olcum, doubl
                                  + (Telafi > 0 ? $"; kıstığı pay için ses {Isaretli(Telafi)} dB daha yükseltildi" : string.Empty)
                                  + (Kayipli && Telafi != 0 ? " (AAC kodlamasının düşürdüğü pay da)" : string.Empty)
                                  + (TelafiSiniri ? $" (telafi en çok {Bicim.Sayi(Esitleme.EnCokTelafi)} dB)" : string.Empty) + ".");
+                }
+                else if (Uygulandi && KisikOlcum && Telafi != 0)
+                {
+                    satirlar.Add($"Ses çok kısık olduğu için (ölçer -70 LUFS'un altındaki bölümleri saymaz) yükseklik çıktının seviyesinde"
+                                 + $" yeniden ölçüldü: kazanç {Isaretli(Telafi)} dB düzeltildi.");
                 }
                 else if (Uygulandi && Kayipli && Telafi > 0)
                 {
@@ -267,23 +286,36 @@ public static class Esitleme
     /// </summary>
     public const double TasmaEki = 0.1;
 
-    /// <summary>Sınırlayıcı tavandan en çok bu kadar (dB) aşağı çekilir.</summary>
-    public const double EnCokTasmaPayi = 6;
+    /// <summary>
+    /// Sınırlayıcı tavandan en çok bu kadar (dB) aşağı çekilir. AAC kodlaması ezilmiş seste tepeyi 6 dB'den fazla da
+    /// yükseltebiliyor (ölçüldü: 8 kHz 8 bit ses +30 dB, AAC-LD'de 6,1 dB): tepe yine de tavanın altında kalsın diye.
+    /// </summary>
+    public const double EnCokTasmaPayi = 12;
+
+    /// <summary>
+    /// Tepe denemesi kaynağın tepesi (kazançla) tavanın bu kadar (dB) altına kadar yapılır: kodlama tepeyi olağan seste
+    /// bundan fazla yükseltmez (kullanıcının videolarında AAC 128 kb/s 0,1–1 dB).
+    /// </summary>
+    public const double TepeDenemesiPayi = 6;
 
     /// <summary>Telafi ve tepe koruması için en çok bu kadar deneme yapılır (yalnızca ses).</summary>
     public const int EnCokDeneme = 6;
 
-    /// <summary>Deneme ölçümü hedefe bu kadar (LU) yakınsa telafi tamamdır.</summary>
-    public const double TelafiPayi = 0.2;
-
     /// <summary>
-    /// AAC çıktıda deneme ölçümü hedefe bu kadar (LU) yakınsa telafi tamamdır. AAC'nin kaybı küçüktür (kullanıcının
+    /// Deneme ölçümü hedefe bu kadar (LU) yakınsa telafi tamamdır (AAC ve WAV). AAC'nin kaybı küçüktür (kullanıcının
     /// OBS kaydında 128 kb/s'de 0,16 LU) ve kazançla doğrusal değişir: tek düzeltmede hedefe 0,01 içinde gelinir.
     /// </summary>
     public const double KayipliPayi = 0.02;
 
-    /// <summary>AAC çıktıda telafinin en küçük adımı (dB).</summary>
+    /// <summary>Telafinin en küçük adımı (dB).</summary>
     public const double KayipliAdim = 0.01;
+
+    /// <summary>
+    /// Ses ya da hedef bundan (LUFS) kısıksa yükseklik çıktının seviyesinde de denenip ölçülür: ölçer -70 LUFS'un altındaki
+    /// blokları saymaz (mutlak kapı), -68 LUFS'ta ölçülüp +28 dB yükseltilen ses -40 yerine -40,4 çıkıyordu (ölçüldü).
+    /// 20 LU daha yüksekte kapının etkisi 0,05 LU'nun altındadır.
+    /// </summary>
+    public const double KisikSinir = -45;
 
     /// <summary>
     /// Çıktının sesi kayıplı mı (FDK AAC): AAC tizleri (128 kb/s'de ~17 kHz üstünü) keser, ölçülen yükseklik biraz
@@ -309,18 +341,19 @@ public static class Esitleme
     /// <summary>
     /// Ölçümden sonra karar: hedefe 0,5 LU yakınsa dokunulmaz; yüksek ses "yalnızca kısık sesi yükselt" seçiliyse
     /// dokunulmaz; değilse bütün ses aynı miktarda (sabit kazanç) hedefe getirilir. Ses aralığı (LRA) karara girmez:
-    /// kısık ve yüksek yerler arasındaki fark olduğu gibi kalır.
+    /// kısık ve yüksek yerler arasındaki fark olduğu gibi kalır. <paramref name="o"/>: kazancın hesaplandığı ölçüm;
+    /// <paramref name="kararYukseklik"/>: sesin çıktıdaki hâlinin yüksekliği (kazançsız denendiyse; karar bununla).
     /// </summary>
-    public static EsitlemeRaporu KararVer(SesAyarlari s, SesOlcum? o)
+    public static EsitlemeRaporu KararVer(SesAyarlari s, SesOlcum? o, double? kararYukseklik = null)
     {
-        EsitlemeRaporu R(EsitlemeKarari k) => new(k, o, s.EsitlemeHedef, s.SinirlayiciTavan);
+        EsitlemeRaporu R(EsitlemeKarari k) => new(k, o, s.EsitlemeHedef, s.SinirlayiciTavan) { KararYukseklik = kararYukseklik };
 
         if (o is null)
         {
             return R(EsitlemeKarari.Olculemedi);
         }
 
-        var fark = s.EsitlemeHedef - o.Yukseklik;
+        var fark = s.EsitlemeHedef - (kararYukseklik ?? o.Yukseklik);
         if (Math.Abs(fark) <= Tolerans)
         {
             return R(EsitlemeKarari.Hedefte);
@@ -332,23 +365,37 @@ public static class Esitleme
     }
 
     /// <summary>
-    /// Deneme ölçümünden sonra yeni telafi (dB): ölçülen yükseklik hedefin altındaysa eksik kadar artar, üstündeyse azalır;
-    /// 0 ile <see cref="EnCokTelafi"/> arasında kalır. Değişmesi gerekmiyorsa (hedefte ya da sınırda) null.
-    /// <paramref name="kayipli"/> (AAC çıktı, deneme AAC'ye çevrilip ölçüldü): hedefe <see cref="KayipliPayi"/> içinde
-    /// gelinene kadar <see cref="KayipliAdim"/> adımla; AAC yüksekliği artırdıysa telafi eksi olabilir.
+    /// Deneme ölçümünden sonra yeni telafi (dB): ölçülen yükseklik hedefin altındaysa artar, üstündeyse azalır (eksi
+    /// olabilir: AAC yüksekliği artırabilir, çok kısık seste ölçerin mutlak kapısı sonucu kaydırır); hedefe
+    /// <see cref="KayipliPayi"/> içinde gelinene kadar, en küçük adım <see cref="KayipliAdim"/>, en çok ±
+    /// <see cref="EnCokTelafi"/>. Adım eksik kadar; aynı sınırlayıcı ayarıyla yapılmış önceki deneme
+    /// (<paramref name="onceki"/>) varsa iki denemenin eğimiyle (sekant): sınırlayıcı kazancın bir kısmını yer (1 dB
+    /// kazanç yüksekliği ~0,4 LU artırabilir), adım o kadar büyür (eğim 0,25–1,5 arasında sayılır). Değişmesi
+    /// gerekmiyorsa (hedefte ya da sınırda) null.
     /// </summary>
-    public static (double? Yeni, bool Sinir) TelafiAdimi(double telafi, double olculen, double hedef, bool kayipli = false)
+    public static (double? Yeni, bool Sinir) TelafiAdimi(
+        double telafi, double olculen, double hedef, (double Telafi, double Olculen)? onceki = null)
     {
         var eksik = hedef - olculen;
-        if (Math.Abs(eksik) <= (kayipli ? KayipliPayi : TelafiPayi))
+        if (Math.Abs(eksik) <= KayipliPayi)
         {
             return (null, false);
         }
 
-        var istenen = kayipli ? telafi + eksik : Math.Max(0, telafi + eksik);
+        var adim = eksik;
+        if (onceki is { } o && Math.Abs(telafi - o.Telafi) >= KayipliAdim)
+        {
+            var egim = (olculen - o.Olculen) / (telafi - o.Telafi);
+            if (double.IsFinite(egim) && egim > 0)
+            {
+                adim = eksik / Math.Clamp(egim, 0.25, 1.5);
+            }
+        }
+
+        var istenen = telafi + adim;
         var sinir = Math.Abs(istenen) > EnCokTelafi;
         var yeni = Math.Round(Math.Clamp(istenen, -EnCokTelafi, EnCokTelafi), 2);
-        return Math.Abs(yeni - telafi) < (kayipli ? KayipliAdim : 0.05) ? (null, sinir) : (yeni, sinir);
+        return Math.Abs(yeni - telafi) < KayipliAdim ? (null, sinir) : (yeni, sinir);
     }
 
     /// <summary>Ölçülen gerçek tepe tavanın altında mı (ölçerin yuvarlaması kadar pay bırakılarak).</summary>
@@ -370,16 +417,17 @@ public static class Esitleme
     /// üstüne aşım + ek kadar aşağı çekilir (pay hiç azalmaz; 0,01 dB'ye yukarı yuvarlanır, en çok
     /// <see cref="EnCokTasmaPayi"/>). Değişecek bir şey yoksa (ikisi de tamam ya da sınıra gelindi) Yeni null: bu
     /// denemenin ayarı son ayardır. <paramref name="tasma"/>: şimdiye kadar görülen en büyük taşma (dB).
+    /// <paramref name="onceki"/>: aynı sınırlayıcı ayarıyla yapılmış önceki denemenin telafisi ve ölçülen yüksekliği.
     /// </summary>
     public static (SesDuzeltme? Yeni, bool TelafiSiniri, double Tasma) DenemeAdimi(
-        SesDuzeltme d, double tasma, double? yukseklik, double hedef, bool kayipli,
-        double? tepe, bool hassas, double tavan, double? girisTepe)
+        SesDuzeltme d, double tasma, double? yukseklik, double hedef,
+        double? tepe, bool hassas, double tavan, double? girisTepe, (double Telafi, double Olculen)? onceki = null)
     {
         double? yeniTelafi = null;
         var sinir = false;
         if (yukseklik is { } y)
         {
-            (yeniTelafi, sinir) = TelafiAdimi(d.Telafi, y, hedef, kayipli);
+            (yeniTelafi, sinir) = TelafiAdimi(d.Telafi, y, hedef, onceki);
         }
 
         var yeni = yeniTelafi is { } t ? d with { Telafi = t } : d;

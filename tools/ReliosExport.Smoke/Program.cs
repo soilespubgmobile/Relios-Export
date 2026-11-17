@@ -165,7 +165,9 @@ try
             if (r.KaynakYukseklik is { } ky)
             {
                 Console.WriteLine("ESITLEME_KAYNAK=" + ky.ToString("0.00", CultureInfo.InvariantCulture)
-                                  + " ESITLEME_OLCUM=" + (r.Olcum?.Yukseklik.ToString("0.00", CultureInfo.InvariantCulture) ?? "-"));
+                                  + " ESITLEME_OLCUM=" + (r.Olcum?.Yukseklik.ToString("0.00", CultureInfo.InvariantCulture) ?? "-")
+                                  + " ESITLEME_KARAR_YUKSEKLIK=" + (r.KararYukseklik?.ToString("0.00", CultureInfo.InvariantCulture) ?? "-")
+                                  + (r.KisikOlcum ? " ESITLEME_KISIK=1" : string.Empty));
             }
         },
         // Programın ayarlarda yaptığı değişiklikler (doğrulama "NOT=" satırlarını okur).

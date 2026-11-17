@@ -693,6 +693,15 @@ def deneme_calistir(d, arg, manifest, kaynak_bilgi, ff):
     except subprocess.TimeoutExpired as e:
         gunluk = ((e.stdout or b'').decode('utf-8', 'replace') if isinstance(e.stdout, bytes) else (e.stdout or '')).splitlines()
         rc = 'zaman aşımı'
+    gunluk_yolu = next((x.split('Günlük: ', 1)[1].strip() for x in gunluk if 'Günlük: ' in x), None)
+    if rc != 0 and gunluk_yolu and os.path.isfile(gunluk_yolu):
+        # Programın hata günlüğünden nedeni gösteren satırlar (x264 / FFmpeg iletileri).
+        onemli = ('x264 [', 'libx264 @', 'Assertion', 'malloc', 'rror', 'failed', 'Invalid', 'not supported', 'must be')
+        gurultu = ('Task finished', 'Terminating thread', 'Nothing was written', 'Error sending frames', 'Conversion failed',
+                   'Could not open encoder before EOF', 'Error while opening encoder', 'using cpu capabilities', 'using SAR')
+        with open(gunluk_yolu, encoding='utf-8-sig', errors='replace') as gf:
+            gunluk += ['GÜNLÜK| ' + y.strip()[:300] for y in gf.read().splitlines()
+                       if any(o in y for o in onemli) and not any(g in y for g in gurultu)][:12]
     sonuc['gunluk'] = gunluk
     ayar = None
     for x in gunluk:
@@ -935,6 +944,13 @@ def dogrula(d, rc, gunluk, ayar, k, kaynak_bilgi, ff, arg):
         bw, bh = int(math.floor(dw * sar / 2)) * 2, dh // 2 * 2
     else:
         bw, bh = v['Genislik'] - v['Genislik'] % 2, v['Yukseklik'] - v['Yukseklik'] % 2
+    x_ = v['X264']
+    p_ = x_['Profil']
+    if p_ == 'kaynak':
+        sp_ = sv.get('profile') or ''
+        p_ = 'main' if sv.get('codec_name') != 'h264' or not sp_ else 'baseline' if 'Baseline' in sp_ else 'high' if 'High' in sp_ else 'main'
+    if v['Kodlayici'] == 'X264' and x_.get('Gecmeli') and p_ != 'baseline' and p_ not in ('high422', 'high444'):
+        bh -= bh % 4  # x264: geçmeli 4:2:0'da yükseklik 4'ün katı
     if (int(o['width']), int(o['height'])) != (bw, bh):
         farklar.append(f'boyut {o["width"]}x{o["height"]} (beklenen {bw}x{bh})')
     if (o.get('sample_aspect_ratio') or '1:1') not in ('1:1', '0:1', 'N/A'):
@@ -1056,6 +1072,11 @@ def x264_dogrula(sec, x, kare, fps, profil, gunluk):
         f.append(f'Main profilde x264 8x8dct={sec.get("8x8dct")}')
     if x.get('Gecmeli') and profil != 'baseline' and not ek and sec.get('interlaced') in ('0', None):
         f.append('geçmeli seçili ama x264 interlaced=0')
+    if x.get('Gecmeli') and profil != 'baseline' and not ek:
+        if x.get('KisitliIntra') and sec.get('constrained_intra') not in ('0', None):
+            f.append('geçmelide kısıtlı intra açık kalmış (x264 çözülemeyen kare üretebiliyor)')
+        if x.get('IsParcacigi') != 1 and sec.get('me_range') and int(sec['me_range']) < 16:
+            f.append(f'geçmelide arama aralığı {sec["me_range"]} (en az 16 olmalı)')
     return f
 
 
@@ -1157,7 +1178,9 @@ def ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v,
                 bek = int(m.group(1)) * 1000
                 gercek = int(a.get('bit_rate') or 0)
                 sure = akis_suresi(a, bilgi)
-                if sure >= 2 and gercek and abs(gercek - bek) > max(0.12 * bek, 4000):
+                en_az = any(y.startswith('NOT=') and 'en az' in y and 'kb/s kodlar' in y for y in gunluk)
+                pay = max(0.12 * bek, 4000) if not en_az else max(0.25 * bek, 8000)
+                if sure >= 2 and gercek and abs(gercek - bek) > pay:
                     f.append(f'AAC bit hızı {gercek} (komutta {bek})')
     else:
         bek_codec = {'Bit16': 'pcm_s16le', 'Bit24': 'pcm_s24le', 'Bit32': 'pcm_s32le', 'Float32': 'pcm_f32le'}[s['WavBit']]
@@ -1187,8 +1210,10 @@ def ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v,
         hedef = s['EsitlemeHedef']
         ana = karar.split('/')[0]
         ulasilamadi = 'ulaşılamadı' in satir
+        telafi = next((float(y[len('ESITLEME_TELAFI='):]) for y in gunluk if y.startswith('ESITLEME_TELAFI=')), 0.0)
+        sinirda = abs(abs(telafi) - 6) < 0.005  # telafi en çok ± 6 dB: hedefe 0,5 LU (programın payı) içinde kalabilir
         if ana == 'Dogrusal' and not ulasilamadi:
-            pay = 0.3 if '/Sinirli' in karar else 0.1
+            pay = 0.5 if sinirda else 0.3 if '/Sinirli' in karar else 0.1
             if abs(i - hedef) > pay:
                 f.append(f'yükseklik {i:.2f} LUFS (hedef {hedef}, karar {karar})')
         else:
@@ -1198,7 +1223,7 @@ def ses_dogrula(d, gunluk, ayar, k, src, kaynak_bilgi, bilgi, dosya, ff, sure_v,
                 f.append(f'yükseklik {i:.2f} LUFS, karar Hedefte (hedef {hedef})')
             elif ana == 'ZatenYuksek' and i < hedef - pay:
                 f.append(f'yükseklik {i:.2f} LUFS, karar ZatenYuksek (hedef {hedef})')
-        if ulasilamadi and i > hedef + 0.1:
+        if ulasilamadi and i > hedef + 0.1 and not (sinirda and telafi < 0):
             f.append(f'"hedefe ulaşılamadı" ama yükseklik {i:.2f} > hedef {hedef}')
     yukseltildi = s['Esitleme'] and karar is not None and karar.startswith('Dogrusal')
     if (s['Sinirlayici'] or yukseltildi) and tepe is not None and tepe > tavan + 0.001:
@@ -1296,7 +1321,7 @@ def ozet(arg):
     eksik_deneme = [d['ad'] for d in durumlar if d['ad'] not in yapilan]
     sorunlu = [s for s in sonuclar if not s['tamam']]
     tablo = ['| Grup | Deneme | Sorunlu |', '|---|---|---|']
-    for g in ('video', 'ses', 'capraz', 'varsayilan', 'kenar', 'nvenc'):
+    for g in ('video', 'ses', 'capraz', 'varsayilan', 'kenar', 'nvenc', 'derin'):
         n = sum(1 for s in sonuclar if s['grup'] == g)
         h = sum(1 for s in sorunlu if s['grup'] == g)
         tablo.append(f'| {g} | {n} | {h} |')
