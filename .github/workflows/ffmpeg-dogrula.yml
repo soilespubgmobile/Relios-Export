@@ -554,6 +554,47 @@ jobs:
           "`nTahmini boyut gercek dosyayla uyumlu."
           exit 0
 
+      - name: Onerilen ayarlar (38m ve 1717504691091 videolari gibi; olculen kodlamalariyla karsilastirilir)
+        if: always()
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          # Gercekci (parazitli) goruntu: 2 gecisli ortalama bit hizi tutturulabilsin.
+          $k38 = Join-Path $PWD 'onerilen_38m_kaynak.mp4'
+          ffmpeg -hide_banner -loglevel error -f lavfi -i "testsrc2=size=1080x1920:rate=30,noise=alls=14:allf=t+u" -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 12 -pix_fmt yuv420p -c:v libx264 -preset ultrafast -qp 0 -c:a aac -ac 2 -y $k38
+          $k17 = Join-Path $PWD 'onerilen_17_kaynak.mp4'
+          ffmpeg -hide_banner -loglevel error -f lavfi -i "testsrc2=size=1920x1920:rate=60,noise=alls=14:allf=t+u" -f lavfi -i "sine=frequency=330:sample_rate=48000" -t 6 -pix_fmt yuv420p -c:v libx264 -preset ultrafast -qp 0 -c:a aac -ac 2 -y $k17
+          $durumlar = @(
+            @{ ad = '38m'; kaynak = $k38; fps = 30 },
+            @{ ad = '1717504691091'; kaynak = $k17; fps = 60 }
+          )
+          $hatali = 0; $satirlar = @()
+          foreach ($d in $durumlar) {
+            $dir = Join-Path $PWD "onerilen/$($d.ad)"
+            Write-Host "::group::$($d.ad) videosu gibi"
+            $log = & ./smoke/ReliosExport.Smoke.exe $d.kaynak $dir --profil "onerilen-$($d.ad)" 2>&1 | ForEach-Object { "$_" }
+            $rc = $LASTEXITCODE
+            $log | ForEach-Object { Write-Host $_ }
+            $out = (Get-ChildItem -LiteralPath $dir -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.mp4', '.mov' } | Select-Object -First 1)
+            $sonuc = 'OK'; $ozet = ''
+            if ($rc -ne 0 -or -not $out) { $sonuc = "HATA (kod $rc)" }
+            else {
+              $c = & python -X utf8 -I tools/onerilen_kontrol.py $out.FullName $d.ad $d.fps 2>&1 | ForEach-Object { "$_" }
+              $c | ForEach-Object { Write-Host $_ }
+              if ($LASTEXITCODE -ne 0) { $sonuc = 'FARK' }
+              $ozet = ($c | Where-Object { $_ -like '*nerilen ayar (*' }) -join ' '
+            }
+            Write-Host "::endgroup::"
+            if ($sonuc -ne 'OK') { $hatali++ }
+            $satirlar += "| $($d.ad) videosu gibi | $ozet | $sonuc |"
+          }
+          $tablo = @("", "| Onerilen ayar | Kontroller | Sonuc |", "|---|---|---|") + $satirlar
+          "`n===== ONERILEN AYARLAR ====="
+          $tablo | ForEach-Object { $_ }
+          $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          if ($hatali) { "`n$hatali onerilen ayarda sorun var."; exit 1 }
+          "`nOnerilen ayarlar olculen kodlamalarla ayni."
+          exit 0
+
       - name: x264 seviye denemesi (programin sectigi seviyede x264 uyarmamali, bir alt seviyede uyarmali)
         if: always()
         run: |

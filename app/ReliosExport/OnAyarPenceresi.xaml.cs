@@ -6,8 +6,9 @@ using ReliosExport.Core.Ayarlar;
 namespace ReliosExport;
 
 /// <summary>
-/// Adıyla kaydedilen ayarlar: şu anki ayarları kaydet, kayıtlı olanı yükle ya da sil.
-/// Yüklenen ön ayar, hangi profilde kaydedildiğine bakılmadan şu anki profile uygulanır.
+/// Önerilen ayarlar (programla gelir, yalnızca yüklenir; bkz. <see cref="Varsayilanlar.Onerilenler"/>) ve adıyla kaydedilen
+/// ayarlar: şu anki ayarları kaydet, kayıtlı olanı yükle ya da sil. Yüklenen ayar, hangi profilde kaydedildiğine
+/// bakılmadan şu anki profile uygulanır.
 /// </summary>
 public partial class OnAyarPenceresi : Window
 {
@@ -21,8 +22,10 @@ public partial class OnAyarPenceresi : Window
         _settings = settings;
         _profil = profil;
         _simdiki = simdiki;
-        Aciklama.Text = $"Yüklenen ön ayar şu anki profile ({profil.DisplayName}) uygulanır. "
-                        + "Listede yalnızca buradan kaydedilen ön ayarlar durur.";
+        Aciklama.Text = $"Yüklenen ayar şu anki profile ({profil.DisplayName}) uygulanır. Önerilen ayarlar programla gelir; "
+                        + "kayıtlı ayarlar listesinde yalnızca buradan kaydedilenler durur.";
+        // Programın kendi listesi: ayar dosyasına yazılmaz, kullanıcının ön ayarlarına karışmaz.
+        OnerilenListe.ItemsSource = Varsayilanlar.Onerilenler();
         Yenile();
         Loaded += (_, _) => AdKutusu.Focus();
     }
@@ -92,6 +95,15 @@ public partial class OnAyarPenceresi : Window
     private void OnYukle(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is KayitliOnAyar o)
+        {
+            Yuklenen = o.Ayarlar.Kopya();
+            DialogResult = true;
+        }
+    }
+
+    private void OnOneriliYukle(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is OnerilenAyar o)
         {
             Yuklenen = o.Ayarlar.Kopya();
             DialogResult = true;

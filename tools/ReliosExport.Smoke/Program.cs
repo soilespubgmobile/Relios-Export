@@ -3,7 +3,7 @@ using ReliosExport.Core;
 using ReliosExport.Core.Ayarlar;
 
 // Relios Export'un kodlama kodunu (app/ReliosExport/Core) arayüz olmadan çalıştıran deneme aracı.
-// Kullanım: ReliosExport.Smoke.exe <kaynak video> <çıktı klasörü> [--profil tiktok|tiktok-nvenc|tiktok-916|youtube] [--ayar ayar.json]
+// Kullanım: ReliosExport.Smoke.exe <kaynak video> <çıktı klasörü> [--profil tiktok|tiktok-nvenc|tiktok-916|youtube|onerilen-38m|onerilen-1717504691091] [--ayar ayar.json]
 //           [--ayarla Yol=Deger ...] [--sadece-komut]
 //           ReliosExport.Smoke.exe --birim-kontrol   (video gerektirmeyen kontroller)
 //   --ayar          profil ayarlarını JSON dosyasından alır (yoksa profilin fabrika ayarları)
@@ -59,6 +59,13 @@ for (var i = 2; i < args.Length; i++)
             {
                 // 0.10.0'a kadar TikTok varsayılanı: NVENC CBR 34375 kb/s, 30 karede bir anahtar kare, WAV 16 bit 48 kHz.
                 ayarlar = Varsayilanlar.TikTokNvenc();
+            }
+            else if (ad.StartsWith("onerilen-", StringComparison.Ordinal))
+            {
+                // Ön ayar penceresindeki önerilen ayarlar: onerilen-38m, onerilen-1717504691091.
+                var anahtar = ad["onerilen-".Length..];
+                ayarlar = Varsayilanlar.Onerilenler().FirstOrDefault(o => o.Ad.StartsWith(anahtar + " ", StringComparison.Ordinal))?.Ayarlar
+                          ?? throw new InvalidOperationException("Önerilen ayar yok: " + anahtar);
             }
             break;
         case "--ayar" when i + 1 < args.Length:

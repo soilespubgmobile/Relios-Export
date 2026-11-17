@@ -1140,6 +1140,51 @@ internal static class ArayuzTaramasi
             await Task.Delay(300);
             Durumlu("Sil: ayar dosyasından da silindi",
                 !File.ReadAllText(Path.Combine(AppPaths.VeriKlasoru, "ayarlar.json")).Contains(OnAyarAdi, StringComparison.OrdinalIgnoreCase), "yok", "var");
+
+            // Önerilen ayarlar: programla gelir, yalnızca yüklenir (Sil yok); kullanıcının listesine ve ayar dosyasının ön
+            // ayarlarına yazılmaz. Her biri yüklenince ayarlar onunkiyle aynı olur, komutu çalışır.
+            Bolum("Önerilen ayarlar: listede, yalnızca Yükle; yüklenince ayarlar aynı, kullanıcının ön ayarlarına yazılmaz, kodlama çalışır");
+            var onerilenler = Varsayilanlar.Onerilenler();
+            for (var i = 0; i < onerilenler.Count; i++)
+            {
+                p = await DiyalogAc<OnAyarPenceresi>(w, w.BtnOnAyarlar);
+                if (p is null)
+                {
+                    Durumlu("Ön ayar penceresi açıldı (önerilen)", false, "açıldı", "açılmadı");
+                    return;
+                }
+
+                var dugmeler = Gorsel(p.OnerilenListe).OfType<Button>().ToList();
+                if (i == 0)
+                {
+                    Esit2("Önerilen ayarlar: her birinin Yükle düğmesi", onerilenler.Count, dugmeler.Count(b => b.Content as string == "Yükle"));
+                    Esit2("Önerilen ayarlar: Sil düğmesi yok", 0, dugmeler.Count(b => b.Content as string == "Sil"));
+                    Esit2("Önerilen ayarlar: adları", string.Join(" | ", onerilenler.Select(o => o.Ad)),
+                        string.Join(" | ", Gorsel(p.OnerilenListe).OfType<TextBlock>().Select(t => t.Text).Where(t => onerilenler.Any(o => o.Ad == t))));
+                    Esit2("Önerilen ayarlar: kullanıcının listesi boş kaldı", Visibility.Visible, p.BosListe.Visibility);
+                }
+
+                var oyukle = dugmeler.Where(b => b.Content as string == "Yükle").ElementAtOrDefault(i);
+                if (oyukle is null)
+                {
+                    Durumlu($"{onerilenler[i].Ad}: Yükle düğmesi var", false, "var", "yok");
+                    continue;
+                }
+
+                w.KontrolAyarlari.Ses.Gecikme = 777;
+                await Bosta(w);
+                Bas(oyukle);
+                await Kapandi(w, p);
+                Esit2($"{onerilenler[i].Ad}: yüklendi, ayarlar önerilenle aynı", Json(onerilenler[i].Ayarlar), Json(w.KontrolAyarlari));
+                Esit2($"{onerilenler[i].Ad}: kullanıcının ön ayarlarına eklenmedi", 0, dosya.OnAyarlar.Count);
+                var hata = await Kodla(w.KontrolAyarlari);
+                Kontrol($"{onerilenler[i].Ad}: FFmpeg'de çalışıyor", "çalıştı", hata ?? "çalıştı", hata is null);
+            }
+
+            await Task.Delay(300);
+            var json = File.ReadAllText(Path.Combine(AppPaths.VeriKlasoru, "ayarlar.json"));
+            Durumlu("Önerilen ayarlar ayar dosyasının ön ayarlarına yazılmadı",
+                onerilenler.All(o => !json.Contains("\"" + o.Ad + "\"", StringComparison.Ordinal)), "yazılmadı", "yazıldı");
         }
     }
 

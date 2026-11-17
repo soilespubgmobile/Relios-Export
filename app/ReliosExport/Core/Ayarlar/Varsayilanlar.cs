@@ -275,7 +275,117 @@ public static class Varsayilanlar
     }
 
     public static ProfilAyarlari For(ExportProfileId id) => id == ExportProfileId.TikTok ? TikTok() : YouTube();
+
+    /// <summary>
+    /// Ön ayar penceresindeki "Önerilen ayarlar" (0.13.0, kullanıcının isteği: iki örnek videonun kodlaması). Programın
+    /// kendi listesidir: ayar dosyasına yazılmaz, kullanıcının kaydettiği ön ayarlara karışmaz; "Yükle" ile şu anki
+    /// profile uygulanır. Görüntü kaynakla aynı boyut ve kare hızında, ses yüksekliği TikTok varsayılanındaki gibi
+    /// (-14 LUFS, yalnızca kısık ses yükseltilir; tepe sınırlayıcı -1 dB).
+    /// </summary>
+    public static IReadOnlyList<OnerilenAyar> Onerilenler() =>
+    [
+        new("38m videosu gibi",
+            "x264 · 12 Mb/s ortalama (2 geçiş), en çok 16 Mb/s · High · 2 referans kare · 1 B-kare (IPBPB, sabit) · ağırlıklı tahmin "
+            + "yok · 8x8 DCT · CABAC · her saniye anahtar kare (sahne değişiminde ek anahtar kare yok) · MOV · FDK AAC-LC 128 kb/s "
+            + "44,1 kHz stereo",
+            Onerilen38m()),
+        new("1717504691091 videosu gibi",
+            "x264 · 52 Mb/s ortalama (2 geçiş), en çok 62 Mb/s · Main · 3 referans kare · B-kare yok · ağırlıklı tahmin yok · "
+            + "CABAC · 30 karede bir anahtar kare (sahne değişiminde ek anahtar kare yok) · MP4 · FDK AAC-LC 512 kb/s 48 kHz stereo",
+            Onerilen1717504691091()),
+    ];
+
+    /// <summary>
+    /// "38m" örnek videosunun kodlaması (TikTok'un düzenleyicisiyle telefonda kodlanmış 1080x1920 30 fps; ölçüldü): H.264
+    /// High, en çok 2 referans kare, IPBPB (her P'den sonra bir referans olmayan B-kare), ağırlıklı tahmin yok (P ve B), 8x8
+    /// DCT, CABAC; anahtar kare her saniye, sahne değişiminde ek anahtar kare yok (kapalı GOP); değişken bit hızı ortalama
+    /// 12,2 Mb/s, en yüksek 1 saniyesi 15,9 Mb/s; BT.709 sınırlı aralık; ses AAC-LC 44,1 kHz stereo (~138 kb/s). x264'te:
+    /// veryslow, 2 geçiş 12000 kb/s (ortalamayı en iyi kaliteyle tutturur), VBV 16000 / 16000, ref 2, B-kare 1 (uyarlamalı
+    /// B-kare ve piramit kapalı: hep IPBPB), weightp 0, weightb 0, anahtar kare 1 sn, sahne eşiği 0. Seviye kaynakla aynı
+    /// (yetmezse yükselir). Ses TikTok varsayılanınınki (FDK AAC-LC 128 kb/s 44,1 kHz).
+    /// </summary>
+    public static ProfilAyarlari Onerilen38m()
+    {
+        var a = TikTok();
+        a.Video.X264 = new X264Ayarlari
+        {
+            OnAyar = "veryslow",
+            Ayar = string.Empty,
+            Profil = "high",
+            Seviye = "kaynak",
+            Mod = X264Modu.IkiGecis,
+            BitHizi = 12000,
+            HizliIlkGecis = true,
+            IsParcacigi = 8,
+            Ref = 2,
+            BKare = 1,
+            BUyarlamali = 0,
+            BPiramit = "none",
+            AgirlikliP = 0,
+            AgirlikliB = false,
+            Dct8x8 = true,
+            Cabac = true,
+            VbvMaks = 16000,
+            VbvTampon = 16000,
+        };
+
+        var k = a.AnahtarKare;
+        k.Birim = AralikBirimi.Saniye;
+        k.EnBuyuk = 1;
+        k.EnKucuk = null;
+        k.SahneDegisimi = 0;
+        k.AcikGop = false;
+        k.IntraYenileme = false;
+        return a;
+    }
+
+    /// <summary>
+    /// "1717504691091" örnek videosunun kodlaması (bilgisayarda kodlanmış 1920x1920 60 fps; ölçüldü): H.264 Main, 3
+    /// referans kare, B-kare yok, ağırlıklı tahmin yok, CABAC; tam 30 karede bir anahtar kare (sahne değişiminde ek anahtar
+    /// kare yok); değişken bit hızı ortalama 52,3 Mb/s, saniyeler 41,8–61,5 Mb/s; ses AAC-LC 48 kHz stereo ~509 kb/s;
+    /// MP4. x264'te: veryslow, Main, 2 geçiş 52000 kb/s, VBV 62000 / 62000, ref 3, B-kare 0, weightp 0, anahtar kare 30
+    /// kare, sahne eşiği 0. Seviye kaynakla aynı (yetmezse yükselir: 62 Mb/s Main 4.2'nin sınırını aşar, 5.0 / 5.1 olur).
+    /// Ses FDK AAC-LC 512 kb/s 48 kHz.
+    /// </summary>
+    public static ProfilAyarlari Onerilen1717504691091()
+    {
+        var a = TikTok();
+        a.Video.Kap = KapBicimi.Mp4;
+        a.Video.X264 = new X264Ayarlari
+        {
+            OnAyar = "veryslow",
+            Ayar = string.Empty,
+            Profil = "main",
+            Seviye = "kaynak",
+            Mod = X264Modu.IkiGecis,
+            BitHizi = 52000,
+            HizliIlkGecis = true,
+            IsParcacigi = 8,
+            Ref = 3,
+            BKare = 0,
+            AgirlikliP = 0,
+            Dct8x8 = false,
+            Cabac = true,
+            VbvMaks = 62000,
+            VbvTampon = 62000,
+        };
+
+        var k = a.AnahtarKare;
+        k.Birim = AralikBirimi.Kare;
+        k.EnBuyuk = 30;
+        k.EnKucuk = null;
+        k.SahneDegisimi = 0;
+        k.AcikGop = false;
+        k.IntraYenileme = false;
+
+        FdkAac128(a.Ses, 48000);
+        a.Ses.Fdk.BitHizi = 512;
+        return a;
+    }
 }
+
+/// <summary>Ön ayar penceresindeki önerilen ayar: adı, ne olduğu (kısa) ve ayarları.</summary>
+public sealed record OnerilenAyar(string Ad, string Aciklama, ProfilAyarlari Ayarlar);
 
 /// <summary>Ayarların JSON biçimi (ayarlar.json ve kayıtlı ön ayarlar).</summary>
 public static class AyarDosyasi

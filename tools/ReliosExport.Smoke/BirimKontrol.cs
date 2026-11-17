@@ -33,6 +33,7 @@ internal static class BirimKontrol
         SesGecikmesi();
         Calinabilirlik();
         Sinirlar013();
+        OnerilenAyarlar();
         Console.WriteLine();
         Console.WriteLine($"Birim kontrol: {_ok + _fark} kontrol, {_fark} fark.");
         return _fark == 0 ? 0 : 1;
@@ -1939,6 +1940,75 @@ internal static class BirimKontrol
         var deneme = " " + string.Join(' ', ArgsBuilder.DenemeKodlamaKomutu(tt.Ses, "KAYNAK.mov", ArgsBuilder.SesSec(tt.Ses, M(), "KAYNAK.mov"), 6,
             new SesOlcum(-30, -12, 4), 0, "DENEME.m4a")) + " ";
         Iceriyor("-60 sn (ses tamamen dışarıda): AAC denemesi de dosyanın süresiyle", deneme, ",apad,atrim=end=6 -c:a libfdk_aac ");
+    }
+
+    /// <summary>Önerilen iki ayarın komutu (örnek videoların ölçülen kodlaması; gerçek kodlama ffmpeg-dogrula'da).</summary>
+    private static void OnerilenAyarlar()
+    {
+        Console.WriteLine();
+        Console.WriteLine("--- Önerilen ayarlar (38m ve 1717504691091 videoları gibi)");
+        var liste = Varsayilanlar.Onerilenler();
+        Kontrol("Önerilen ayar sayısı", "2", liste.Count.ToString());
+        Kontrol("Adları", "38m videosu gibi | 1717504691091 videosu gibi", string.Join(" | ", liste.Select(o => o.Ad)));
+        Kontrol("Başka program adı geçmiyor", "yok",
+            liste.Any(o => (o.Ad + o.Aciklama).Contains("ssstik", StringComparison.OrdinalIgnoreCase)
+                           || (o.Ad + o.Aciklama).Contains("MainConcept", StringComparison.OrdinalIgnoreCase)
+                           || (o.Ad + o.Aciklama).Contains("XviD", StringComparison.OrdinalIgnoreCase)) ? "var" : "yok");
+        Kontrol("Her çağrıda yeni kopya (yüklenen değiştirilince liste değişmez)", "True",
+            (!ReferenceEquals(Varsayilanlar.Onerilenler()[0].Ayarlar, Varsayilanlar.Onerilenler()[0].Ayarlar)).ToString());
+
+        static MediaInfo Kaynak(int w, int h, double fps, string profil, int seviye) => new(w, h, 1, 1, 0, 10, true, fps, "bt709", "bt709", "tv")
+        {
+            VideoCodec = "h264",
+            VideoProfil = profil,
+            VideoSeviye = seviye,
+            VideoSuresi = 10,
+            SesAkislari = [new SesAkisi(1, "aac", 48000, 2, null, null) { Duzen = "stereo" }],
+        };
+
+        static (string Ilk, string Son) Komut(ProfilAyarlari a, MediaInfo m)
+        {
+            var ses = ArgsBuilder.SesSec(a.Ses, m, "KAYNAK.mp4");
+            var plan = ArgsBuilder.Olustur(a, m, "KAYNAK.mp4", ses, "CIKTI" + a.Uzanti, "GECIS");
+            return (" " + string.Join(' ', plan.Gecisler[0]) + " ", " " + string.Join(' ', plan.Gecisler[^1]) + " ");
+        }
+
+        var (ilk, son) = Komut(liste[0].Ayarlar, Kaynak(1080, 1920, 30, "High", 41));
+        Iceriyor("38m: x264 veryslow High, seviye kaynağın (4.1)", son, " -c:v libx264 -preset veryslow -profile:v high -level:v 4.1 -b:v 12000k -pass 2 ");
+        Iceriyor("38m: 1. geçiş hızlı", ilk, " -pass 1 -passlogfile GECIS -fastfirstpass 1 ");
+        Iceriyor("38m: referans 2", son, "-x264-params threads=8:ref=2:");
+        Iceriyor("38m: 8x8 DCT", son, ":8x8dct=1:");
+        Iceriyor("38m: 1 B-kare, ağırlıklı P yok, anahtar kare 30 (1 sn), sahne eşiği 0", son, ":bframes=1:weightp=0:keyint=30:scenecut=0:");
+        Iceriyor("38m: VBV 16000 / 16000", son, ":vbv-maxrate=16000:vbv-bufsize=16000:");
+        Iceriyor("38m: uyarlamalı B-kare ve piramit kapalı, ağırlıklı B yok", son, ":b-adapt=0:b-pyramid=none:weightb=0");
+        Icermiyor("38m: açık GOP yok", son, "open-gop");
+        Iceriyor("38m: ses FDK AAC-LC 128 kb/s 44,1 kHz stereo", son, " -c:a libfdk_aac -profile:a aac_low -b:a 128k -ar 44100 -ac 2 ");
+        Kontrol("38m: kap MOV", ".mov", liste[0].Ayarlar.Uzanti);
+        Kontrol("38m: kaynak 1080p60 High@4.2: anahtar kare 60 kare (1 sn)", "60",
+            Regex(Komut(liste[0].Ayarlar, Kaynak(1080, 1920, 60, "High", 42)).Son, @":keyint=(\d+):"));
+
+        (ilk, son) = Komut(liste[1].Ayarlar, Kaynak(1920, 1920, 60, "Main", 51));
+        Iceriyor("1717504691091: x264 veryslow Main, seviye kaynağın (5.1)", son, " -c:v libx264 -preset veryslow -profile:v main -level:v 5.1 -b:v 52000k -pass 2 ");
+        Iceriyor("1717504691091: referans 3", son, "-x264-params threads=8:ref=3:");
+        Iceriyor("1717504691091: 8x8 DCT kapalı", son, ":8x8dct=0:");
+        Iceriyor("1717504691091: B-kare yok, ağırlıklı P yok, anahtar kare 30, sahne eşiği 0", son, ":bframes=0:weightp=0:keyint=30:scenecut=0:");
+        Iceriyor("1717504691091: VBV 62000 / 62000", son, ":vbv-maxrate=62000:vbv-bufsize=62000:");
+        Iceriyor("1717504691091: ses FDK AAC-LC 512 kb/s 48 kHz stereo", son, " -c:a libfdk_aac -profile:a aac_low -b:a 512k -ar 48000 -ac 2 ");
+        Kontrol("1717504691091: kap MP4", ".mp4", liste[1].Ayarlar.Uzanti);
+        Iceriyor("1717504691091: kaynak 1080x1920 60 fps Main@4.2: 62 Mb/s 4.2'yi aşar, seviye 5.0",
+            Komut(liste[1].Ayarlar, Kaynak(1080, 1920, 60, "Main", 42)).Son, " -level:v 5.0 ");
+        Kontrol("1717504691091: kaynak 30 fps'te de 30 kare", "30",
+            Regex(Komut(liste[1].Ayarlar, Kaynak(1080, 1920, 30, "Main", 42)).Son, @":keyint=(\d+):"));
+        foreach (var o in liste)
+        {
+            Kontrol($"{o.Ad}: eşitleme açık -14 LUFS, yalnızca kısık ses yükseltilir, sınırlayıcı -1 dB", "True -14 YalnizcaYukselt True -1",
+                $"{o.Ayarlar.Ses.Esitleme} {o.Ayarlar.Ses.EsitlemeHedef} {o.Ayarlar.Ses.EsitlemeYonu} {o.Ayarlar.Ses.Sinirlayici} {o.Ayarlar.Ses.SinirlayiciTavan}");
+            Kontrol($"{o.Ad}: boyut ve kare hızı kaynakla aynı", "Kaynak Kaynak", $"{o.Ayarlar.Video.Cozunurluk} {o.Ayarlar.Video.KareHiziModu}");
+            Kontrol($"{o.Ad}: ayar dosyası biçiminin sürümü güncel", ProfilAyarlari.GuncelSurum.ToString(), o.Ayarlar.Surum.ToString());
+        }
+
+        static string Regex(string metin, string desen) =>
+            System.Text.RegularExpressions.Regex.Match(metin, desen) is { Success: true } m ? m.Groups[1].Value : "yok";
     }
 
     /// <summary>Satırda görünen hata yazıları Türkçe ve anlaşılır (okunamayan video, kayıt yeri, disk).</summary>
