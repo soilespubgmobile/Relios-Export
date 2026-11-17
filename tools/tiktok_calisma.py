@@ -12,7 +12,7 @@ Sonuç satırları: 'SONUC|{json}' (varyant) ve 'KAYNAK|{json}' (kaynağın kend
 
 Kullanım:
   tiktok_calisma.py kaynak --kaynak ref.mkv --ad klip
-  tiktok_calisma.py olc --kaynak ref.mkv --ad klip --grup A [--crf 22,24,26,28,30] [--varyant B0,AQ3]
+  tiktok_calisma.py olc --kaynak ref.mkv --ad klip --grup A [--crf 22,24,26,28,30] [--varyant "B0;AQ3@vbv-maxrate=6000"]
   tiktok_calisma.py varyantlar
 """
 
@@ -208,10 +208,14 @@ def olc_benzetimler(yukleme: Path, kaynak: Path, kb: dict, ad: str, gecici: Path
 
 
 def x264_komutu(kaynak: Path, cikti: Path, varyant: str, crf: float, keyint: int) -> list[str]:
-    _, hiz, tune, ek, _ = VARYANTLAR[varyant]
+    # "AD@a=1:b=2": AD varyantına ek x264 parametreleri (ör. B0@vbv-maxrate=6000:vbv-bufsize=12000)
+    ad, _, ek2 = varyant.partition("@")
+    _, hiz, tune, ek, _ = VARYANTLAR[ad]
     p = TEMEL_PARAMS.format(keyint=keyint) + f":crf={crf:g}"
     if ek:
         p += ":" + ek
+    if ek2:
+        p += ":" + ek2
     args = [FF, "-hide_banner", "-nostdin", "-v", "error", "-y", "-i", str(kaynak), "-an", "-c:v", "libx264",
             "-preset", hiz or "veryslow"]
     if tune:
@@ -247,7 +251,7 @@ def cmd_olc(a: argparse.Namespace) -> None:
     keyint = round(10 * kb["fps"]) if kb["fps"] else 600
     crfler = [float(x) for x in a.crf.split(",")]
     if a.varyant:
-        varyantlar = a.varyant.split(",")
+        varyantlar = [v for v in a.varyant.split(";") if v]
     else:
         varyantlar = [v for v, t in VARYANTLAR.items() if t[0] in a.grup.split(",")]
     sure = kb["kare"] / kb["fps"]

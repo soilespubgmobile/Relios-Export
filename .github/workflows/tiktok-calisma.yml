@@ -19,7 +19,7 @@ on:
         required: false
         default: "480"
       gruplar:
-        description: "Ayar gruplari (tools/tiktok_calisma.py varyantlar)"
+        description: "Isler '|' ile: grup harfi (A) ya da varyantlar ';' ile, istege bagli '#CRF,CRF' (B0;AQ3#18,20)"
         required: false
         default: "A,B,C,D,E"
       crfler:
@@ -71,7 +71,9 @@ jobs:
           for parca in [p.strip() for p in os.environ.get("KLIPLER", "").split(",") if p.strip()]:
               ad, url = parca.split("=", 1)
               k.append({"ad": re.sub(r"[^A-Za-z0-9_-]", "_", ad.strip()), "url": url.strip()})
-          g = [x.strip() for x in os.environ.get("GRUPLAR", "").split(",") if x.strip()]
+          ham = os.environ.get("GRUPLAR", "")
+          parcalar = ham.split("|") if "|" in ham or "#" in ham or ";" in ham or "@" in ham else ham.split(",")
+          g = [{"ad": f"g{i + 1}", "spec": x.strip()} for i, x in enumerate(parcalar) if x.strip()]
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write("klipler=" + json.dumps(k) + "\n")
               f.write("gruplar=" + json.dumps(g) + "\n")
@@ -174,16 +176,21 @@ jobs:
       - name: Olc
         env:
           CRFLER: ${{ inputs.crfler }}
+          SPEC: ${{ matrix.grup.spec }}
         run: |
           set -o pipefail
+          crf="$CRFLER"; is="$SPEC"
+          case "$SPEC" in *"#"*) crf="${SPEC#*#}"; is="${SPEC%%#*}";; esac
+          if [[ "$is" =~ ^[A-Z]$ ]]; then sec=(--grup "$is"); else sec=(--varyant "$is"); fi
+          echo "is: $is  crf: $crf"
           FFMPEG=ff/bin/ffmpeg FFPROBE=ff/bin/ffprobe ISP=4 python3 -X utf8 -I tools/tiktok_calisma.py olc \
-            --kaynak "ref/${{ matrix.klip.ad }}.mkv" --ad "${{ matrix.klip.ad }}" --grup "${{ matrix.grup }}" \
-            --crf "$CRFLER" | tee "sonuc-${{ matrix.klip.ad }}-${{ matrix.grup }}.txt"
+            --kaynak "ref/${{ matrix.klip.ad }}.mkv" --ad "${{ matrix.klip.ad }}" "${sec[@]}" \
+            --crf "$crf" | tee "sonuc-${{ matrix.klip.ad }}-${{ matrix.grup.ad }}.txt"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: sonuc-${{ matrix.klip.ad }}-${{ matrix.grup }}
-          path: sonuc-${{ matrix.klip.ad }}-${{ matrix.grup }}.txt
+          name: sonuc-${{ matrix.klip.ad }}-${{ matrix.grup.ad }}
+          path: sonuc-${{ matrix.klip.ad }}-${{ matrix.grup.ad }}.txt
           retention-days: 7
 
   ozet:
