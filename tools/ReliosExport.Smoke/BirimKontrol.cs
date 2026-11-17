@@ -1706,7 +1706,7 @@ internal static class BirimKontrol
         Iceriyor("TikTok, 800 kb/s: komutta FDK'nin gerçek bit hızı (44,1 kHz stereo: 529)", Komut(ust, Kaynak(48000, 2, "stereo")), " -b:a 529k ");
         Kontrol("Tahmini boyutta da gerçek bit hızı (529 kb/s)", "529",
             BoyutTahmini.SesBitHizi(ust.Ses, ArgsBuilder.SesSec(ust.Ses, Kaynak(48000, 2, "stereo"), "KAYNAK.mov")).ToString("0"));
-        var notlu = FfmpegRunner.Describe(Kaynak(48000, 2, "stereo"), ust, ArgsBuilder.SesSec(ust.Ses, Kaynak(48000, 2, "stereo"), "KAYNAK.mov"));
+        var notlu = Exporter.Describe(Kaynak(48000, 2, "stereo"), ust, ArgsBuilder.SesSec(ust.Ses, Kaynak(48000, 2, "stereo"), "KAYNAK.mov"));
         Iceriyor("Satırdaki bilgi: bit hızı sınırı", " " + notlu + " ", " · FDK AAC LC 44,1 kHz stereo sesi en çok 529 kb/s kodlar ");
         Kontrol("MediaProbe: kanal düzeni okunur", "5.1(side)",
             MediaProbe.Parse("{\"streams\": [{\"codec_type\": \"video\", \"width\": 64, \"height\": 64}, {\"codec_type\": \"audio\", \"index\": 1, "
@@ -1775,7 +1775,7 @@ internal static class BirimKontrol
         a.Video.X264.Profil = "main";
         a.Video.X264.Mod = X264Modu.SabitQp;
         a.Video.X264.Qp = 0;
-        Iceriyor("Satırdaki bilgi: kayıpsız yok", " " + FfmpegRunner.Describe(M(), a, SesSecimi.Yok) + " ", " · Main profilde kayıpsız yok: QP 1 ");
+        Iceriyor("Satırdaki bilgi: kayıpsız yok", " " + Exporter.Describe(M(), a, SesSecimi.Yok) + " ", " · Main profilde kayıpsız yok: QP 1 ");
         // CIF 7,5 fps High@1.1: seviye en çok 2 referans kare taşır. 2 referans + 2 B-kare (piramit: 4 kare) 1.2 ister;
         // Baseline'da B-kare olmadığı için 1.1 yeter.
         var cif = new MediaInfo(352, 288, 1, 1, 0, 2, false, 7.5, "bt709", "bt709", "tv")
