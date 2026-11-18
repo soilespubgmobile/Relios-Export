@@ -26,6 +26,7 @@ internal static class BirimKontrol
         Kaplar();
         AyarGecisi();
         Klasorler();
+        IkiKopya();
         HataYazilari();
         FdkSinirlari();
         FdkUyumuKontrol();
@@ -755,20 +756,20 @@ internal static class BirimKontrol
         var arti = Varsayilanlar.YouTube();
         arti.Ses.Seviye = 6;
         Iceriyor("+6 dB: seviye, 192 kHz, sınırlayıcı (-1 dB = 0,891251), 48 kHz'e dönüş", Komut(arti),
-            " -af volume=6dB,aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.891251:level=0:latency=1,"
+            " -af volume=6dB,aresample=192000:resampler=soxr:precision=33,apad=pad_len=959,alimiter=limit=0.891251:attack=5:level=0,atrim=start_sample=959,asetpts=PTS-959,"
             + "aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac ");
         var artiKaynak = Varsayilanlar.YouTube();
         artiKaynak.Ses.Seviye = 6;
         artiKaynak.Ses.OrnekHizi = null;
         Iceriyor("+6 dB, örnekleme 'kaynakla aynı': 192 kHz'ten kaynağın hızına (44,1 kHz)", Komut(artiKaynak),
-            ",alimiter=limit=0.891251:level=0:latency=1,aresample=44100:resampler=soxr");
+            ",apad=pad_len=959,alimiter=limit=0.891251:attack=5:level=0,atrim=start_sample=959,asetpts=PTS-959,aresample=44100:resampler=soxr");
         Iceriyor("+6 dB, örnekleme 'kaynakla aynı'", Komut(artiKaynak), " -ar 44100 ");
         var artiYuksek = Varsayilanlar.YouTube();
         artiYuksek.Ses.Seviye = 6;
         artiYuksek.Ses.Kalite = DonusumKalitesi.Yuksek;
         artiYuksek.Ses.Titresim = Titresim.Yok;
         Iceriyor("+6 dB, dönüşüm kalitesi Yüksek: iki dönüşüm de soxr varsayılanıyla", Komut(artiYuksek),
-            " -af volume=6dB,aresample=192000:resampler=soxr,alimiter=limit=0.891251:level=0:latency=1,aresample=48000:resampler=soxr -c:a ");
+            " -af volume=6dB,aresample=192000:resampler=soxr,apad=pad_len=959,alimiter=limit=0.891251:attack=5:level=0,atrim=start_sample=959,asetpts=PTS-959,aresample=48000:resampler=soxr -c:a ");
         arti.Ses.Sinirlayici = false;
         Icermiyor("+6 dB, sınırlayıcı kapalı", Komut(arti), "alimiter");
         var eksi = Varsayilanlar.YouTube();
@@ -782,7 +783,7 @@ internal static class BirimKontrol
         // Eşitleme: bütün ses aynı miktarda (sabit kazanç, -14 - (-21,37) = +7,37 dB). Tepe -3,2 + 7,37 = +4,17 > -1:
         // sınırlayıcı 192 kHz'te tepeleri tutar.
         Iceriyor("Eşitleme: sabit kazanç +7,37 dB, tepe aşıyor: 192 kHz sınırlayıcı", Komut(esit, olcum),
-            " -af volume=7.37dB,aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.891251:level=0:latency=1,"
+            " -af volume=7.37dB,aresample=192000:resampler=soxr:precision=33,apad=pad_len=959,alimiter=limit=0.891251:attack=5:level=0,atrim=start_sample=959,asetpts=PTS-959,"
             + "aresample=48000:resampler=soxr:precision=33:dither_method=triangular -c:a pcm_s16le ");
         Icermiyor("Eşitleme: ikinci geçişte loudnorm yok (yalnızca sabit kazanç)", Komut(esit, olcum), "loudnorm");
         Icermiyor("Eşitleme açık ama ölçüm yok (sessiz ses)", Komut(esit), "volume=");
@@ -799,7 +800,7 @@ internal static class BirimKontrol
             " -af volume=9.87dB,aresample=192000:");
         Iceriyor("Telafi ölçümü: kodlamadaki ses zinciri + ölçüm", " " + string.Join(' ', ArgsBuilder.DenemeOlcumKomutu(esit.Ses, "KAYNAK.mp4",
             ArgsBuilder.SesSec(esit.Ses, Kaynak48(), "KAYNAK.mp4"), 10, olcum, 2.5)) + " ",
-            " -map 0:a:0 -vn -sn -dn -t 10 -af volume=9.87dB,aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.891251:level=0:latency=1,"
+            " -map 0:a:0 -vn -sn -dn -t 10 -af volume=9.87dB,aresample=192000:resampler=soxr:precision=33,apad=pad_len=959,alimiter=limit=0.891251:attack=5:level=0,atrim=start_sample=959,asetpts=PTS-959,"
             + "aresample=48000:resampler=soxr:precision=33:dither_method=triangular,ebur128=peak=true:metadata=1,ametadata=mode=print:key=lavfi.r128.I,ametadata=mode=print:key=lavfi.r128.true_peak -f null - ");
         esit.Ses.OrnekHizi = null;
         Iceriyor("Eşitleme + örnekleme 'kaynakla aynı': 192 kHz'ten kaynağın hızına", Komut(esit, olcum), ",aresample=44100:resampler=soxr");
@@ -811,7 +812,7 @@ internal static class BirimKontrol
         Iceriyor("TikTok varsayılanı + eşitleme: sabit kazanç, 44,1 kHz, FDK AAC", Komut(esitTt, olcumAlcak),
             " -af volume=7.37dB,aresample=44100:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac -profile:a aac_low -b:a 128k -ar 44100 -ac 2 ");
         Iceriyor("TikTok varsayılanı + eşitleme, tepe aşıyor: 192 kHz sınırlayıcı, sonra 44,1 kHz", Komut(esitTt, olcum),
-            " -af volume=7.37dB,aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.891251:level=0:latency=1,"
+            " -af volume=7.37dB,aresample=192000:resampler=soxr:precision=33,apad=pad_len=959,alimiter=limit=0.891251:attack=5:level=0,atrim=start_sample=959,asetpts=PTS-959,"
             + "aresample=44100:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac ");
 
         // Mono çıktı: kanal indirme ölçümden ve eşitlemeden önce (stereo ölçülüp mono'ya inilince sonuç 3–6 dB düşük kalırdı).
@@ -1071,20 +1072,30 @@ internal static class BirimKontrol
         // Komutlar: tepe koruması sınırlayıcıyı tavanın altına çeker ya da dokunulmayan sese koyar.
         var tt = Varsayilanlar.TikTok();
         Iceriyor("TikTok, dokunulmayan yüksek ses, sınırlayıcı zorla, pay 0,91: 192 kHz sınırlayıcı -1,91 dB, kazanç yok", Komut(tt, null, 0, 0.91, true),
-            " -af aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.802602:level=0:latency=1,"
+            " -af aresample=192000:resampler=soxr:precision=33,apad=pad_len=959,alimiter=limit=0.802602:attack=5:level=0,atrim=start_sample=959,asetpts=PTS-959,"
             + "aresample=44100:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac ");
         Icermiyor("TikTok, dokunulmayan ses + sınırlayıcı: yükseklik değişmez (volume yok)", Komut(tt, null, 0, 0.91, true), "volume=");
         Iceriyor("TikTok, düzeltme yok: ses zinciri değişmedi (sınırlayıcı yok)", Komut(tt),
             " -af aresample=44100:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac ");
         var tepeli = new SesOlcum(-21.37, -3.2, 6.4);
         Iceriyor("TikTok + eşitleme, telafi 0,16, pay 0,18: kazanç 7,53 dB, sınırlayıcı -1,18 dB", Komut(tt, tepeli, 0.16, 0.18),
-            " -af volume=7.53dB,aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.872971:level=0:latency=1,aresample=44100:");
+            " -af volume=7.53dB,aresample=192000:resampler=soxr:precision=33,apad=pad_len=959,alimiter=limit=0.872971:attack=5:level=0,atrim=start_sample=959,asetpts=PTS-959,aresample=44100:");
         var sinirda = new SesOlcum(-21.37, -8.5, 6);
         Icermiyor("Eşitleme: tepe -8,5 + 7,37 = -1,13 (tavanın altında): sınırlayıcı yok", Komut(tt, sinirda), "alimiter");
-        Iceriyor("Eşitleme: aynı ses, pay 0,3 (tavan -1,3): sınırlayıcı girer", Komut(tt, sinirda, 0, 0.3), ",alimiter=limit=0.860994:level=0:latency=1,");
+        Iceriyor("Eşitleme: aynı ses, pay 0,3 (tavan -1,3): sınırlayıcı girer", Komut(tt, sinirda, 0, 0.3), ",apad=pad_len=959,alimiter=limit=0.860994:attack=5:level=0,atrim=start_sample=959,asetpts=PTS-959,");
         var elle = Varsayilanlar.YouTube();
         elle.Ses.Seviye = 6;
-        Iceriyor("Elle +6 dB, pay 0,18: sınırlayıcı -1,18 dB", Komut(elle, null, 0, 0.18), " -af volume=6dB,aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.872971:");
+        Iceriyor("Elle +6 dB, pay 0,18: sınırlayıcı -1,18 dB", Komut(elle, null, 0, 0.18), " -af volume=6dB,aresample=192000:resampler=soxr:precision=33,apad=pad_len=959,alimiter=limit=0.872971:attack=5:level=0,atrim=start_sample=959,asetpts=PTS-959,");
+
+        // 0.16.1: sınırlayıcının gecikmesi (192 kHz × 5 ms − 1 = 959 örnek) zincirde giderilir: sona sessizlik, baştan
+        // kırpma, zaman damgası geri. alimiter'ın "latency" seçeneği kullanılmaz: sesin zaman damgasında tek örneklik
+        // düzensizlikte telafiyi bırakıyor, çıktının ses izinde 5 ms'lik boşluk kalıyordu (0.16.0'a kadar).
+        Kontrol("Sınırlayıcının gecikmesi (örnek, 192 kHz'te)", "959", ArgsBuilder.SinirlayiciGecikmesi.ToString());
+        Kontrol("Sınırlayıcının öne bakma süresi (ms)", "5", ArgsBuilder.SinirlayiciAtakMs.ToString());
+        Icermiyor("Sınırlayıcı: alimiter'ın latency seçeneği kullanılmıyor", Komut(elle, null, 0, 0.18), "latency");
+        Iceriyor("Sınırlayıcı: sona sessizlik, sınırlayıcı, baştan kırpma, zaman damgası (bu sırayla), sonra hedef hız",
+            Komut(elle, null, 0, 0.18),
+            ",apad=pad_len=959,alimiter=limit=0.872971:attack=5:level=0,atrim=start_sample=959,asetpts=PTS-959,aresample=48000:");
 
         // Zincirde sınırlayıcı var mı (kodlama, denemeler ve rapor aynı kuralla).
         var s = Varsayilanlar.TikTok().Ses;
@@ -1106,7 +1117,7 @@ internal static class BirimKontrol
         var ic = ArgsBuilder.SesSec(tts, Kaynak(), "KAYNAK.mp4");
         var aac = " " + string.Join(' ', ArgsBuilder.DenemeKodlamaKomutu(tts, "KAYNAK.mp4", ic, 10, null, 0, "DENEME.m4a", 0.91, true)) + " ";
         Iceriyor("AAC denemesi, dokunulmayan ses + sınırlayıcı: kodlamadaki zincir", aac,
-            " -t 10 -af aresample=192000:resampler=soxr:precision=33,alimiter=limit=0.802602:level=0:latency=1,"
+            " -t 10 -af aresample=192000:resampler=soxr:precision=33,apad=pad_len=959,alimiter=limit=0.802602:attack=5:level=0,atrim=start_sample=959,asetpts=PTS-959,"
             + "aresample=44100:resampler=soxr:precision=33:dither_method=triangular -c:a libfdk_aac -profile:a aac_low -b:a 128k -ar 44100 -ac 2 ");
         var aacDuz = " " + string.Join(' ', ArgsBuilder.DenemeKodlamaKomutu(tts, "KAYNAK.mp4", ic, 10, null, 0, "DENEME.m4a")) + " ";
         Iceriyor("AAC denemesi, dokunulmayan ses: kodlamadaki zincirle aynı (yalnızca dönüşüm)", aacDuz,
@@ -1929,7 +1940,7 @@ internal static class BirimKontrol
         yt.Ses.Seviye = 6;
         c = Komut(yt, k192);
         Iceriyor("192 kHz kaynak + sınırlayıcı (+6 dB): sınırlayıcıdan sonra 96 kHz (eskiden -ar 192000: FDK açılmazdı)", c,
-            ",alimiter=limit=0.891251:level=0:latency=1,aresample=96000:resampler=soxr:precision=33:dither_method=triangular ");
+            ",apad=pad_len=959,alimiter=limit=0.891251:attack=5:level=0,atrim=start_sample=959,asetpts=PTS-959,aresample=96000:resampler=soxr:precision=33:dither_method=triangular ");
         Icermiyor("192 kHz kaynak + sınırlayıcı: -ar 192000 yok", c, "-ar 192000");
         var wav = Varsayilanlar.YouTube();
         wav.Ses.OrnekHizi = null;
@@ -2332,6 +2343,102 @@ internal static class BirimKontrol
         Kontrol("Normal klasör", "False", AppPaths.GeciciKlasordeMi(Path.Combine(kok, "Programlar", "Relios Export")).ToString());
         Kontrol("Bu aracın klasörü (geçici değil)", "False", AppPaths.GeciciKlasorden.ToString());
         Kontrol("Veri klasörü exe'nin yanı", AppPaths.AppFolder, AppPaths.VeriKlasoru);
+    }
+
+    /// <summary>
+    /// 0.16.1: programın iki kopyası aynı anda çalışırsa. Aynı exe ikinci kez açılmaz (tek kopya; adı exe'nin yolundan ve
+    /// derlemesinden); başka klasördeki / sürümdeki kopyalar aynı adlı videoyu aynı klasöre aktarsa da çıktılar çakışmaz:
+    /// yarım dosyanın adı kopyaya özeldir, biten dosya ad bu sırada alındıysa sıradaki boş ada taşınır.
+    /// </summary>
+    private static void IkiKopya()
+    {
+        Console.WriteLine();
+        Console.WriteLine("--- İki kopya (0.16.1): tek kopya adı, yarım dosyanın adı, biten dosyanın yerleştirilmesi");
+        var kok = Path.GetPathRoot(Path.GetFullPath(Path.GetTempPath())) ?? "C:\\";
+        var exe = Path.Combine(kok, "Programlar", "Relios Export", "Relios Export.exe");
+        var ad = AppPaths.TekKopyaAdi(exe, "0.16.1+abc");
+        Kontrol("Tek kopya adı: yalnızca harf, rakam, tire", "True",
+            (ad.StartsWith("ReliosExport-", StringComparison.Ordinal) && ad.Length == 29
+             && ad.All(c => c == '-' || (c < 128 && char.IsLetterOrDigit(c)))).ToString());
+        Kontrol("Tek kopya adı: aynı exe, aynı derleme → aynı ad", ad, AppPaths.TekKopyaAdi(exe, "0.16.1+abc"));
+        Kontrol("Tek kopya adı: yolun büyük / küçük harfi fark etmez", ad,
+            AppPaths.TekKopyaAdi(exe.ToUpperInvariant(), "0.16.1+abc"));
+        Kontrol("Tek kopya adı: başka klasördeki kopya ayrı", "True",
+            (ad != AppPaths.TekKopyaAdi(Path.Combine(kok, "Yedek", "Relios Export.exe"), "0.16.1+abc")).ToString());
+        Kontrol("Tek kopya adı: aynı klasörde başka adlı exe ayrı", "True",
+            (ad != AppPaths.TekKopyaAdi(Path.Combine(kok, "Programlar", "Relios Export", "Relios Export (1).exe"), "0.16.1+abc")).ToString());
+        Kontrol("Tek kopya adı: başka sürüm ayrı (yeni sürüm, eskisi açıkken de açılır)", "True",
+            (ad != AppPaths.TekKopyaAdi(exe, "0.16.2+abc")).ToString());
+        if (OperatingSystem.IsWindows())
+        {
+            // Hesap sabit (FNV-1a 64 bit, UTF-16): programın her açılışında aynı ad çıkmalı.
+            Kontrol("Tek kopya adı: sabit hesap", "ReliosExport-391972c5d4f6ca8c",
+                AppPaths.TekKopyaAdi("C:\\Programlar\\Relios Export\\Relios Export.exe", "0.16.1+abc"));
+        }
+
+        var klasor = Path.Combine(Path.GetTempPath(), "Relios Export birim " + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(klasor);
+        try
+        {
+            var kaynak = Path.Combine(klasor, "video.mp4");
+            string Sonraki() => Exporter.OutputPathFor(kaynak, klasor, Profiles.TikTok, ".mov");
+            var cikti = Sonraki();
+            Kontrol("Çıktının adı (klasör boş)", "video_TikTok.mov", Path.GetFileName(cikti));
+            var yarim = Exporter.YarimDosyaAdi(cikti, ".mov");
+            Kontrol("Yarım dosyanın adı: çıktı + işlem numarası + .part + uzantı",
+                $"video_TikTok.mov.{Environment.ProcessId:x}.part.mov", Path.GetFileName(yarim));
+            Kontrol("Yarım dosya çıktıyla aynı klasörde", klasor, Path.GetDirectoryName(yarim) ?? string.Empty);
+            Kontrol("Yarım dosyanın adı .part + uzantıyla biter (ffmpeg kabı uzantıdan seçer)", "True",
+                yarim.EndsWith(".part.mov", StringComparison.Ordinal).ToString());
+
+            // Ad boş: yarım dosya çıktının adına taşınır.
+            File.WriteAllText(yarim, "birinci");
+            var y1 = Exporter.Yerlestir(yarim, cikti, Sonraki);
+            Kontrol("Yerleştir (ad boş): çıktının adı", "video_TikTok.mov", Path.GetFileName(y1));
+            Kontrol("Yerleştir (ad boş): içerik", "birinci", File.ReadAllText(y1));
+            Kontrol("Yerleştir (ad boş): yarım dosya kalmadı", "False", File.Exists(yarim).ToString());
+
+            // Ad kodlama sürerken alınmış (başka kopya önce bitirdi): üzerine yazılmaz, sıradaki boş ada taşınır.
+            File.WriteAllText(yarim, "ikinci");
+            var y2 = Exporter.Yerlestir(yarim, cikti, Sonraki);
+            Kontrol("Yerleştir (ad alınmış): sıradaki boş ad", "video_TikTok_2.mov", Path.GetFileName(y2));
+            Kontrol("Yerleştir (ad alınmış): önceki dosyaya dokunulmadı", "birinci", File.ReadAllText(cikti));
+            Kontrol("Yerleştir (ad alınmış): içerik", "ikinci", File.ReadAllText(y2));
+            Kontrol("Yerleştir (ad alınmış): yarım dosya kalmadı", "False", File.Exists(yarim).ToString());
+
+            // İki ad da alınmış: üçüncüye.
+            File.WriteAllText(yarim, "üçüncü");
+            var y3 = Exporter.Yerlestir(yarim, cikti, Sonraki);
+            Kontrol("Yerleştir (iki ad da alınmış): üçüncü ad", "video_TikTok_3.mov", Path.GetFileName(y3));
+            Kontrol("Klasörde üç çıktı, yarım dosya yok", "video_TikTok.mov, video_TikTok_2.mov, video_TikTok_3.mov",
+                string.Join(", ", Directory.GetFiles(klasor).Select(f => Path.GetFileName(f)).OrderBy(a => a, StringComparer.Ordinal)));
+
+            // Yarım dosya yoksa (başka bir hata): hata olduğu gibi çıkar, sonsuz döngü yok.
+            string sonuc;
+            try
+            {
+                Exporter.Yerlestir(yarim, Path.Combine(klasor, "yeni.mov"), Sonraki);
+                sonuc = "hata yok";
+            }
+            catch (FileNotFoundException)
+            {
+                sonuc = "dosya yok hatası";
+            }
+
+            Kontrol("Yerleştir (yarım dosya yok): hata olduğu gibi", "dosya yok hatası", sonuc);
+            Kontrol("Yerleştir (yarım dosya yok): yeni dosya oluşmadı", "False", File.Exists(Path.Combine(klasor, "yeni.mov")).ToString());
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(klasor, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Geçici klasör sonra silinir.
+            }
+        }
     }
 
     /// <summary>

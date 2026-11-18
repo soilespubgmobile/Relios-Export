@@ -62,4 +62,22 @@ public static class AppPaths
 
     private static string Normal(string yol) =>
         Path.TrimEndingDirectorySeparator(Path.GetFullPath(yol)) + Path.DirectorySeparatorChar;
+
+    /// <summary>
+    /// Tek kopya denetiminin (App) Windows nesnelerine verilen ad. Aynı exe dosyası (tam yol; büyük / küçük harf ayrımı
+    /// yok) ve aynı derleme için hep aynıdır; başka klasördeki ya da başka sürümdeki exe için farklıdır: yeni indirilen
+    /// sürüm, eskisi açıkken de açılır (eski pencere öne gelip yenisi "açılmıyor" gibi görünmez). Yalnızca harf, rakam
+    /// ve tire içerir.
+    /// </summary>
+    public static string TekKopyaAdi(string exeYolu, string surum)
+    {
+        // FNV-1a (64 bit): yalnızca kısa ve sabit bir ad üretmek için (güvenlikle ilgisi yok).
+        var h = 14695981039346656037UL;
+        foreach (var c in Path.GetFullPath(exeYolu).ToUpperInvariant() + "|" + surum)
+        {
+            h = unchecked((h ^ c) * 1099511628211UL);
+        }
+
+        return "ReliosExport-" + h.ToString("x16", System.Globalization.CultureInfo.InvariantCulture);
+    }
 }

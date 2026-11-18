@@ -1,0 +1,87 @@
+name: Onayli FFmpeg'i sakla (ayni arsiv, 90 gun)
+
+# Elle calistirilir. GitHub derleme ciktilarini (artifact) en cok 90 gun saklar; onayli FFmpeg derlemesi silinirse
+# program GitHub'da yeniden derlenemez (FFmpeg'i bastan derlemek butun bilesenleri o gunun surumlerine ceker: hepsi
+# yeniden dogrulanmali). Bu is akisi onayli derlemenin arsivini indirir, icindeki ffmpeg.exe / ffprobe.exe'nin
+# SHA-256'sini depodaki kayitla (ffmpeg-build/ONAYLI_SHA256) karsilastirir ve AYNI arsivi, ayni adla, 90 gun
+# saklanacak yeni bir cikti olarak yukler. Hicbir sey derlenmez, dosyalar degismez.
+# Sonra: ffmpeg-build/ONAYLI_DERLEME dosyasina bu calismanin numarasi yazilir (program o numaradan indirir);
+# dogrulama is akislarina (ffmpeg-dogrula, kombinasyon) run_id olarak ayni numara verilir.
+# Sure dolmadan (90 gun) yeniden calistirilir. Ayrinti: GELISTIRME.md.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Saklanacak FFmpeg derlemesinin run numarasi (bos: ffmpeg-build/ONAYLI_DERLEME'deki)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  sakla:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Onayli derlemeyi indir ve dogrula
+        id: indir
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          id="${RUN_ID:-}"
+          [ -n "$id" ] || id="$(tr -d '[:space:]' < ffmpeg-build/ONAYLI_DERLEME)"
+          echo "Kaynak derleme: run $id"
+          gh run download "$id" -R "$GITHUB_REPOSITORY" -D ffart
+          find ffart -type f -printf '%P  %s bayt\n'
+          n="$(find ffart -type f -name '*.zip' | wc -l)"
+          [ "$n" = 1 ] || { echo "HATA: derlemede tek bir arsiv bekleniyordu, bulunan: $n"; exit 1; }
+          zip="$(find ffart -type f -name '*.zip')"
+          # Ciktinin (artifact) adi: arsivin bulundugu klasor.
+          ad="$(basename "$(dirname "$zip")")"
+          [ "$ad" != "ffart" ] || ad="$(basename "$zip" .zip)"
+          mkdir -p ac sakla
+          unzip -q "$zip" -d ac
+          hata=0
+          tamam=0
+          while read -r beklenen dosya; do
+            yol="$(find ac -type f -name "$dosya" -print -quit)"
+            if [ -z "$yol" ]; then echo "HATA: arsivde $dosya yok"; hata=1; continue; fi
+            gercek="$(sha256sum "$yol" | cut -d' ' -f1)"
+            if [ "$gercek" = "$beklenen" ]; then
+              echo "OK      $dosya  $gercek"
+              tamam=$((tamam + 1))
+            else
+              echo "FARKLI  $dosya  $gercek (beklenen $beklenen)"
+              hata=1
+            fi
+          done < <(grep -E '^[0-9a-f]{64}[[:space:]]+[^[:space:]]+$' ffmpeg-build/ONAYLI_SHA256 || true)
+          if [ "$hata" != 0 ] || [ "$tamam" -lt 2 ]; then echo "HATA: arsiv onayli derleme degil (dogrulanan dosya: $tamam); saklanmadi."; exit 1; fi
+          cp "$zip" sakla/
+          echo "Arsiv: $(basename "$zip")  $(stat -c %s "$zip") bayt  sha256 $(sha256sum "$zip" | cut -d' ' -f1)"
+          echo "Cikti adi: $ad"
+          echo "ad=$ad" >> "$GITHUB_OUTPUT"
+
+      - name: Ayni arsivi yukle (90 gun)
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.indir.outputs.ad }}
+          path: sakla/*.zip
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: Ozet
+        run: |
+          {
+            echo "### Onayli FFmpeg saklandi"
+            echo ""
+            echo "- Bu calismanin numarasi: \`$GITHUB_RUN_ID\`"
+            echo "- \`ffmpeg-build/ONAYLI_DERLEME\` dosyasina bu numara yazilir; dogrulama is akislarina \`run_id\` olarak bu numara verilir."
+            echo "- GitHub bu ciktiyi 90 gun saklar: sure dolmadan bu is akisi yeniden calistirilir (GELISTIRME.md)."
+          } | tee -a "$GITHUB_STEP_SUMMARY"

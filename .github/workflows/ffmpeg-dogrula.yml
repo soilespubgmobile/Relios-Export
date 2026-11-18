@@ -98,6 +98,13 @@ jobs:
           Expand-Archive $zip.FullName -DestinationPath ff
           $bin = (Get-ChildItem -Recurse ff -Filter ffmpeg.exe | Select-Object -First 1).DirectoryName
           Get-ChildItem $bin | ForEach-Object { "{0,-14} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+          # Denenen dosyalarin SHA-256'si (bilgi): programin icine gomulen onayli dosyalarla ayni mi (ffmpeg-build/ONAYLI_SHA256).
+          $onayli = @{}
+          foreach ($satir in Get-Content ffmpeg-build/ONAYLI_SHA256) { if ($satir -match '^([0-9a-f]{64})\s+(\S+)$') { $onayli[$Matches[2]] = $Matches[1] } }
+          foreach ($ad in 'ffmpeg.exe', 'ffprobe.exe') {
+            $h = (Get-FileHash -LiteralPath (Join-Path $bin $ad) -Algorithm SHA256).Hash.ToLowerInvariant()
+            "sha256 $h  $ad  " + $(if ($onayli[$ad] -eq $h) { '(onayli kayitla ayni)' } else { '(ONAYLI KAYITTAN FARKLI: yeni bir derleme deneniyor)' })
+          }
           "FFBIN=$bin" >> $env:GITHUB_ENV
           "$bin" >> $env:GITHUB_PATH
 
@@ -513,6 +520,183 @@ jobs:
           $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
           if ($hatali) { "`n$hatali ses yuksekligi denemesinde sorun var."; exit 1 }
           "`nCiktinin gercek tepesi (orneklerin arasi dahil; AAC'de cozulen sesin) -1 dB'yi asmadi; esitleme butun sese yalnizca sabit kazanc uyguladi, tepeyi asan seste sinirlayici + telafiyle -14'e ulasti, yuksek sesin yuksekligine dokunmadi (kutu kapaliyken bit bit ayni)."
+          exit 0
+
+      - name: Ses zaman cizgisi denemesi (sinirlayicinin gecikme telafisi; zaman damgasi duzensiz kaynakta ses izinde bosluk kalmamali)
+        if: always()
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          # 0.16.1. Tepe sinirlayici sesi 5 ms (192 kHz'te 959 ornek) geciktirir. 0.16.0'a kadar gecikmeyi FFmpeg'in kendi
+          # secenegi (alimiter latency=1) gideriyordu; o secenek sesin zaman damgasinda tek orneklik bir duzensizlik gorunce
+          # (CapCut'in disa aktardigi MP4 / MOV dosyalarinda var: bir ses karesi 1024 yerine 1025 ornek surer) telafiyi
+          # birakiyor: ciktinin ses izinde 5 ms'lik bosluk kaliyor, sonrasi 5 ms gec etiketleniyordu. Artik gecikme zincirde
+          # giderilir (apad + alimiter + atrim + asetpts). Burada denenir:
+          #  - zincir: programin zinciri, zaman damgasi duzenli seste 0.16.0'in zinciriyle bit bit ayni sesi verir; karsi
+          #    deneme: duzensiz kaynakta eski zincir boslugu birakir (hata bu FFmpeg'de goruluyor), yenisi birakmaz;
+          #  - kodla: programin kendisi duzensiz kaynagi kodlar (TikTok / YouTube varsayilani: esitleme + sinirlayici,
+          #    FDK AAC); ciktinin ses paketleri arasinda bosluk yok, toplam bosluk ve sure kaynaginkiyle ayni.
+          # Kaynak: 8 sn, kisik ve inip cikan ton + 2 sn'de bir 10 ms'lik yuksek vurus (esitleme tepeyi asirir: sinirlayici).
+          $deg = '(0.03+0.015*sin(2*PI*0.1*t))'
+          $ses = "$deg*sin(2*PI*440*t)+if(lt(mod(t\,2)\,0.01)\,0.8*sin(2*PI*1000*t)\,0)|$deg*sin(2*PI*550*t)"
+          $z = Join-Path $PWD 'zaman'
+          New-Item -ItemType Directory $z -Force | Out-Null
+          foreach ($hz in 44100, 48000) {
+            $k = if ($hz -eq 44100) { '44k' } else { '48k' }
+            ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i "aevalsrc=${ses}:s=${hz}:d=8" -t 8 -pix_fmt yuv420p -c:v libx264 -preset veryfast -c:a aac -b:a 192k -y "$z/duzenli_$k.mp4"
+          }
+          ffmpeg -hide_banner -loglevel error -f lavfi -i "aevalsrc=${ses}:s=48000:d=8" -c:a pcm_s24le -y "$z/duzenli.wav"
+          # Duzensizlik: ses izinin zaman cizelgesinde (stts) verilen karelerin suresi 1 ornek degisir (ses verisi ayni).
+          python -X utf8 -I tools/ses_zaman_kontrol.py duzensiz "$z/duzenli_44k.mp4" "$z/duzensiz_44k.mp4" '100:+1' '250:+1'
+          if ($LASTEXITCODE -ne 0) { "HATA: duzensiz kaynak uretilemedi (44,1 kHz)"; exit 1 }
+          python -X utf8 -I tools/ses_zaman_kontrol.py duzensiz "$z/duzenli_48k.mp4" "$z/duzensiz_48k.mp4" '120:+1' '200:-1' '280:+1'
+          if ($LASTEXITCODE -ne 0) { "HATA: duzensiz kaynak uretilemedi (48 kHz)"; exit 1 }
+          Get-ChildItem $z | ForEach-Object { "{0,-22} {1,10:N0} bayt" -f $_.Name, $_.Length }
+
+          # Programin sinirlayici zinciri, kendi komutundan okunur (ses elle +12 dB: olcum gerekmez, zincir komutta).
+          function Zincir($ek) {
+            $log = & ./smoke/ReliosExport.Smoke.exe "$z/duzenli_48k.mp4" (Join-Path $z 'komut') @ek --sadece-komut 2>&1 | ForEach-Object { "$_" }
+            $satir = $log | Where-Object { $_ -like 'Komut *' } | Select-Object -Last 1
+            if ("$satir" -match ' -af (\S+) ') { return $Matches[1] }
+            return ''
+          }
+          $z48 = Zincir @('--profil', 'youtube', '--ayarla', 'Ses.Seviye=12')
+          $z44 = Zincir @('--ayarla', 'Ses.Seviye=12')
+          "YouTube zinciri: $z48"
+          "TikTok zinciri:  $z44"
+
+          $tt = @(); $yt = @('--profil', 'youtube')
+          $durumlar = @(
+            @{ ad = 'Zincir, YouTube sesi (48 kHz): 0.16.0 zinciriyle bit bit ayni; karsi deneme 48 kHz duzensiz kaynak'; tur = 'zincir'; zincir = $z48; src = "$z/duzensiz_48k.mp4" },
+            @{ ad = 'Zincir, TikTok sesi (44,1 kHz): 0.16.0 zinciriyle bit bit ayni; karsi deneme 44,1 kHz duzensiz kaynak'; tur = 'zincir'; zincir = $z44; src = "$z/duzensiz_44k.mp4" },
+            @{ ad = 'TikTok varsayilani, duzensiz 44,1 kHz kaynak (CapCut dosyalarindaki gibi)'; tur = 'kodla'; src = "$z/duzensiz_44k.mp4"; arg = $tt; karar = 'Dogrusal/Sinirli'; duzensiz = $true },
+            @{ ad = 'TikTok varsayilani, duzensiz 48 kHz kaynak (+1, -1, +1)'; tur = 'kodla'; src = "$z/duzensiz_48k.mp4"; arg = $tt; karar = 'Dogrusal/Sinirli'; duzensiz = $true },
+            @{ ad = 'YouTube varsayilani, duzensiz 44,1 kHz kaynak'; tur = 'kodla'; src = "$z/duzensiz_44k.mp4"; arg = $yt; karar = 'Dogrusal/Sinirli'; duzensiz = $true },
+            @{ ad = 'YouTube varsayilani, duzensiz 48 kHz kaynak'; tur = 'kodla'; src = "$z/duzensiz_48k.mp4"; arg = $yt; karar = 'Dogrusal/Sinirli'; duzensiz = $true },
+            @{ ad = 'YouTube, ses elle +12 dB (esitleme kapali; sinirlayici zincirde), duzensiz 48 kHz kaynak'; tur = 'kodla'; src = "$z/duzensiz_48k.mp4"; arg = $yt + @('--ayarla', 'Ses.Esitleme=false', '--ayarla', 'Ses.Seviye=12'); karar = $null; sinirlayici = $true; duzensiz = $true },
+            @{ ad = 'TikTok varsayilani, duzenli kaynak (karsilastirma: degisen bir sey yok)'; tur = 'kodla'; src = "$z/duzenli_44k.mp4"; arg = $tt; karar = 'Dogrusal/Sinirli'; duzensiz = $false },
+            @{ ad = 'TikTok, esitleme ve tepe korumasi kapali (sinirlayici yok), duzensiz kaynak (karsilastirma: ayni zaman cizgisi)'; tur = 'kodla'; src = "$z/duzensiz_44k.mp4"; arg = @('--ayarla', 'Ses.Esitleme=false', '--ayarla', 'Ses.Sinirlayici=false'); karar = $null; duzensiz = $true }
+          )
+          $satirlar = @(); $hatali = 0; $i = 0
+          foreach ($d in $durumlar) {
+            $i++
+            Write-Host "::group::$i. $($d.ad)"
+            $sonuc = 'OK'; $ozet = ''
+            if ($d.tur -eq 'zincir') {
+              if (-not $d.zincir) { $sonuc = 'FARK'; $ozet = 'programin komutunda -af zinciri bulunamadi' }
+              else {
+                $c = & python -X utf8 -I tools/ses_zaman_kontrol.py zincir "$z/duzenli.wav" --zincir $d.zincir --duzensiz-kaynak $d.src 2>&1 | ForEach-Object { "$_" }
+                $crc = $LASTEXITCODE
+                $c | ForEach-Object { Write-Host $_ }
+                $ozet = (($c | Where-Object { $_ -match '^\d+ kontrol' }) -join '') + ' · ' + ((($c | Where-Object { $_ -match '^(OK|FARK) +Karşı deneme: (eski|yeni) zincir (bu|boşluk)' }) -replace '^\S+ +Karşı deneme: (eski|yeni) zincir.*çıktı: ([^ ]+ örnek).*$', '$1 zincir $2') -join ' · ')
+                if ($crc -ne 0) { $sonuc = 'FARK' }
+              }
+            } else {
+              $dir = Join-Path $z "cikti/$i"
+              $log = & ./smoke/ReliosExport.Smoke.exe $d.src $dir @($d.arg) 2>&1 | ForEach-Object { "$_" }
+              $rc = $LASTEXITCODE
+              $log | ForEach-Object { Write-Host $_ }
+              if ($rc -ne 0) { $sonuc = "HATA (kod $rc)" }
+              else {
+                $karar = (($log | Where-Object { $_ -like 'ESITLEME_KARAR=*' }) -replace '^ESITLEME_KARAR=', '') -join ''
+                if ($d.karar -and $karar -ne $d.karar) { $sonuc = 'FARK'; $ozet += "karar: beklenen $($d.karar), cikti $karar · " }
+                elseif ($d.karar) { $ozet += "karar: $karar · " }
+                if ($d.sinirlayici) {
+                  # Elle yukseltmede sinirlayici komutta bastan vardir (olcum gerekmez).
+                  $var = @($log | Where-Object { $_ -like 'Komut *' -and $_ -like '*,apad=pad_len=959,alimiter=limit=*' }).Count -gt 0
+                  if (-not $var) { $sonuc = 'FARK'; $ozet += 'komutta sinirlayici yok · ' } else { $ozet += 'sinirlayici komutta · ' }
+                }
+                $out = (Get-ChildItem -LiteralPath $dir | Where-Object { $_.Extension -in '.mp4', '.mov' } | Select-Object -First 1).FullName
+                $ek = @('--kaynak', $d.src)
+                if ($d.duzensiz) { $ek += '--duzensiz' }
+                $c = & python -X utf8 -I tools/ses_zaman_kontrol.py denetle $out @ek 2>&1 | ForEach-Object { "$_" }
+                $crc = $LASTEXITCODE
+                $c | ForEach-Object { Write-Host $_ }
+                $ozet += ((($c | Where-Object { $_ -match '^(OK|FARK) +(Ses paketleri arasında|Toplam boşluk|Ses süresi)' }) -replace '^\S+ +(.*?) +hedef: .*çıktı: (.*)$', '$1: $2') -join ' · ')
+                if ($crc -ne 0) { $sonuc = 'FARK' }
+              }
+            }
+            if ($sonuc -ne 'OK') { $hatali++ }
+            Write-Host "::endgroup::"
+            $satirlar += "| $i | $($d.ad) | $ozet | $sonuc |"
+          }
+          $tablo = @("", "| # | Ses zaman cizgisi | Kontroller | Sonuc |", "|---|---|---|---|") + $satirlar
+          "`n===== SES ZAMAN CIZGISI ====="
+          $tablo | ForEach-Object { $_ }
+          $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          if ($hatali) { "`n$hatali ses zaman cizgisi denemesinde sorun var."; exit 1 }
+          "`nSinirlayicinin zinciri duzenli seste 0.16.0'inkiyle bit bit ayni sesi verdi; zaman damgasi duzensiz kaynakta eski zincir 5 ms'lik boslugu birakti, yenisi birakmadi; programin ciktilarinda ses izinde bosluk yok, zaman cizgisi kaynaginkiyle ayni."
+          exit 0
+
+      - name: Iki kopya denemesi (ayni video ayni klasore ayni anda iki kez; ciktilar cakismamali)
+        if: always()
+        run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          # 0.16.1. Programin iki kopyasi ayni adli videoyu ayni klasore ayni anda aktarirsa 0.16.0'a kadar ikisi de ayni
+          # yarim dosyaya ("<cikti>.part<uzanti>") yaziyordu: cikti bozulabiliyor ya da biri hata veriyordu. Artik yarim
+          # dosyanin adi kopyaya ozel (islem numarasi), biten dosya ad alinmissa siradaki bos ada tasinir.
+          # Burada programin kodlama kodu (ayni Exporter) iki ayri islem olarak ayni anda calistirilir: iki saglam cikti
+          # (ad ve ad_2), goruntuleri bit bit ayni, yarim dosya yok.
+          $kaynak = Join-Path $PWD 'zaman/duzenli_48k.mp4'
+          if (-not (Test-Path $kaynak)) {
+            ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=640x360:rate=30 -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 8 -pix_fmt yuv420p -c:v libx264 -preset veryfast -c:a aac -y (Join-Path $PWD 'iki_kopya_kaynak.mp4')
+            $kaynak = Join-Path $PWD 'iki_kopya_kaynak.mp4'
+          }
+          $smoke = (Resolve-Path ./smoke/ReliosExport.Smoke.exe).Path
+          $hatali = 0; $satirlar = @()
+          foreach ($tur in 1..3) {
+            $dir = Join-Path $PWD "iki-kopya/$tur"
+            New-Item -ItemType Directory $dir -Force | Out-Null
+            $islemler = @()
+            foreach ($n in 1, 2) {
+              $islemler += Start-Process -FilePath $smoke -ArgumentList @("`"$kaynak`"", "`"$dir`"") -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $PWD "iki-kopya/$tur-$n.log") -RedirectStandardError (Join-Path $PWD "iki-kopya/$tur-$n.err")
+            }
+            foreach ($p in $islemler) { $null = $p.Handle }
+            $bitti = $true
+            foreach ($p in $islemler) { if (-not $p.WaitForExit(600000)) { $p.Kill(); $bitti = $false } }
+            Write-Host "::group::$tur. tur"
+            foreach ($n in 1, 2) {
+              Write-Host "--- kopya $n (islem $($islemler[$n - 1].Id), kod $($islemler[$n - 1].ExitCode))"
+              Get-Content (Join-Path $PWD "iki-kopya/$tur-$n.log") -Encoding utf8 | Where-Object { $_ -notmatch '^\s+%' } | ForEach-Object { Write-Host $_ }
+              Get-Content (Join-Path $PWD "iki-kopya/$tur-$n.err") -Encoding utf8 | ForEach-Object { Write-Host "ERR: $_" }
+            }
+            $dosyalar = @(Get-ChildItem -LiteralPath $dir)
+            # Adlar bayt sirasiyla (kulture gore siralama "_2"yi one alabilir).
+            $adDizisi = [string[]]@($dosyalar | ForEach-Object { $_.Name })
+            [Array]::Sort($adDizisi, [StringComparer]::Ordinal)
+            $adlar = $adDizisi -join ', '
+            $taban = [IO.Path]::GetFileNameWithoutExtension($kaynak) + '_TikTok'
+            $beklenen = "$taban.mov, ${taban}_2.mov"
+            Write-Host "Klasor: $adlar (beklenen: $beklenen)"
+            $sorun = @()
+            if (-not $bitti) { $sorun += '10 dakikada bitmedi' }
+            foreach ($p in $islemler) { if ($p.ExitCode -ne 0) { $sorun += "kopya hata verdi (kod $($p.ExitCode))" } }
+            if ($adlar -ne $beklenen) { $sorun += "beklenen iki cikti ($beklenen), klasorde: $adlar" }
+            $ozetler = @()
+            foreach ($f in $dosyalar | Where-Object { $_.Extension -eq '.mov' }) {
+              $hata = ffmpeg -v error -nostdin -i $f.FullName -f null - 2>&1 | ForEach-Object { "$_" }
+              if ($hata) { $sorun += "$($f.Name) cozulurken hata: $(@($hata)[0])" }
+              $v = (ffmpeg -v error -nostdin -i $f.FullName -map 0:v:0 -c copy -f md5 - 2>&1 | ForEach-Object { "$_" }) -join ''
+              $a = (ffmpeg -v error -nostdin -i $f.FullName -map 0:a:0 -c copy -f md5 - 2>&1 | ForEach-Object { "$_" }) -join ''
+              $kare = (ffprobe -v error -select_streams v:0 -count_packets -show_entries stream=nb_read_packets -of csv=p=0 $f.FullName) -join ''
+              Write-Host "$($f.Name): $($f.Length) bayt, $kare kare, goruntu $v, ses $a"
+              $ozetler += [pscustomobject]@{ Ad = $f.Name; V = $v; A = $a; Kare = $kare }
+            }
+            if ($ozetler.Count -eq 2) {
+              if ($ozetler[0].V -ne $ozetler[1].V -or $ozetler[0].V -notmatch '^MD5=[0-9a-f]{32}$') { $sorun += 'iki ciktinin goruntusu ayni degil' }
+              if ($ozetler[0].A -ne $ozetler[1].A -or $ozetler[0].A -notmatch '^MD5=[0-9a-f]{32}$') { $sorun += 'iki ciktinin sesi ayni degil' }
+              if ($ozetler[0].Kare -ne '240' -or $ozetler[1].Kare -ne '240') { $sorun += "kare sayisi 240 degil ($($ozetler[0].Kare), $($ozetler[1].Kare))" }
+            }
+            Write-Host "::endgroup::"
+            if ($sorun) { $hatali++; $durum = 'FARK'; $ozet = $sorun -join ' · ' }
+            else { $durum = 'OK'; $ozet = "iki cikti: $adlar · goruntu ve ses paketleri bit bit ayni · 240 kare · yarim dosya yok" }
+            $satirlar += "| $tur | Ayni video, ayni klasor, ayni anda iki kopya | $ozet | $durum |"
+          }
+          $tablo = @("", "| # | Iki kopya | Kontroller | Sonuc |", "|---|---|---|---|") + $satirlar
+          "`n===== IKI KOPYA ====="
+          $tablo | ForEach-Object { $_ }
+          $tablo | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+          if ($hatali) { "`n$hatali iki kopya denemesinde sorun var."; exit 1 }
+          "`nAyni anda calisan iki kopya ayni adli videoyu ayni klasore aktardi: iki saglam cikti (ad ve ad_2), bit bit ayni; yarim dosya kalmadi."
           exit 0
 
       - name: Tahmini boyut denemesi (programin yazdigi tahmin gercek dosyayla karsilastirilir)

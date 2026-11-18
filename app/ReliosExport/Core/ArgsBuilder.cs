@@ -1727,6 +1727,16 @@ public static class ArgsBuilder
 
     private static string Db(double d) => d.ToString("0.0#", Inv);
 
+    /// <summary>Tepe sınırlayıcının öne bakma süresi (ms): FFmpeg alimiter'ın "attack" değeri (varsayılanı da 5).</summary>
+    public const int SinirlayiciAtakMs = 5;
+
+    /// <summary>
+    /// Sınırlayıcının sesi geciktirdiği örnek sayısı (çalıştığı 192 kHz'te): öne bakma tamponu 192000 × 5 ms = 960 örnek,
+    /// gecikme bunun bir eksiği (FFmpeg af_alimiter.c; tek darbeyle ölçüldü: 959). Zincirde bu kadar örnek baştan atılır,
+    /// sona bu kadar sessizlik eklenir, zaman damgaları bu kadar geri alınır (<see cref="SesFiltreleri"/>).
+    /// </summary>
+    public const int SinirlayiciGecikmesi = (192000 * SinirlayiciAtakMs / 1000) - 1;
+
     /// <summary>soxr ve seçilen dönüşüm kalitesi: Yüksek soxr'un varsayılanı (20 bit), Çok yüksek 28, En yüksek 33 bit.</summary>
     private static string SoxrAyari(SesAyarlari s) => s.Kalite switch
     {
@@ -1890,10 +1900,20 @@ public static class ArgsBuilder
         {
             af.Add("aresample=192000:" + SoxrAyari(s));
 
-            // Tavan doğrusal değere çevrilir (-1 dB = 0,891); otomatik seviye kapalı (sesi kendisi yükseltmez),
-            // gecikmesi telafi edilir (senkron kaymaz).
+            // Tavan doğrusal değere çevrilir (-1 dB = 0,891); otomatik seviye kapalı (sesi kendisi yükseltmez).
+            // Sınırlayıcı sesi öne bakma süresi kadar (5 ms; 192 kHz'te 959 örnek) geciktirir. Gecikme burada giderilir
+            // (senkron kaymaz): sona 959 örnek sessizlik eklenir (sınırlayıcının içinde kalan son ses de çıksın), baştaki
+            // 959 örnek atılır, zaman damgaları 959 örnek geri alınır. Sınırlayıcının kendi "latency" seçeneği aynı işi
+            // yapar, ama sesin zaman damgasında tek örneklik bir düzensizlik bile olsa (CapCut'ın dışa aktardığı
+            // dosyalarda var) telafiyi o andan sonra bırakır: 0.16.0'a kadar çıktının ses izinde 5 ms'lik boşluk kalıyor,
+            // sonrası 5 ms geç etiketleniyordu. Ses örnekleri eskisiyle bit bit aynıdır; kaynağın zaman çizgisi
+            // (düzensizlikleriyle birlikte) sınırlayıcısız yoldaki gibi aynen korunur.
             var tavan = Math.Pow(10, (s.SinirlayiciTavan - tasmaPayi) / 20);
-            af.Add(string.Create(Inv, $"alimiter=limit={tavan:0.######}:level=0:latency=1"));
+            var gecikme = SinirlayiciGecikmesi.ToString(Inv);
+            af.Add("apad=pad_len=" + gecikme);
+            af.Add(string.Create(Inv, $"alimiter=limit={tavan:0.######}:attack={SinirlayiciAtakMs}:level=0"));
+            af.Add("atrim=start_sample=" + gecikme);
+            af.Add("asetpts=PTS-" + gecikme);
         }
 
         // 192 kHz'ten dönüş: örnekleme hızı "kaynakla aynı" ise kaynağın hızına. FDK AAC yalnızca 12 hızı kodlar: başka

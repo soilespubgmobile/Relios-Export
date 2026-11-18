@@ -114,20 +114,41 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
     dokunulmaz (WAV'da bit bit aynı). Kutu kapalıysa dokunulmayan ses olduğu gibi kalır (LUFS eşitleme sesi
     yükseltiyorsa tepe yine tutulur). Platform (TikTok, YouTube) sesi yeniden kodlar: onun kodlayıcısına giren ses
     bizim çözülen sesimizdir, standart (AES TD1008) kodlayıcı girişinde en çok -1 dBTP ister.
+  - Sınırlayıcının gecikmesi (0.16.1): sınırlayıcı sesi 5 ms (192 kHz'te 959 örnek) geciktirir; gecikme zincirde
+    giderilir (sona 959 örnek sessizlik, baştan 959 örnek kırpma, zaman damgası 959 örnek geri). 0.16.0'a kadar bunu
+    FFmpeg'in kendi seçeneği (`alimiter latency=1`) yapıyordu; o seçenek sesin zaman damgasında tek örneklik bir
+    düzensizlik görünce (CapCut'ın dışa aktardığı MP4 / MOV dosyalarında var) telafiyi bırakıyor: çıktının ses izinde
+    5 ms'lik bir boşluk kalıyor, sonrası 5 ms geç etiketleniyordu (ses örnekleri tam ve yerindeydi; MKV / WebM
+    kaynaklarda ve sınırlayıcının girmediği seste sorun yoktu). Yeni zincir düzenli seste eskisiyle bit bit aynı sesi
+    verir; kaynağın zaman çizgisi sınırlayıcısız yoldaki gibi aynen korunur (`tools/ses_zaman_kontrol.py`).
   - LUFS eşitleme (0.13.0): sonuç hedefe 0,02 LU içine getirilir; 0,1 LU'dan uzak kalırsa satırda "hedefe ulaşılamadı"
     ve ipucunda nedeni yazar (6 dB'lik telafi yetmedi, sınırlayıcı doydu, çok düşük bit hızında AAC yüksekliği
     sıçrayarak değiştiriyor). Denemeler sınırlayıcının ölçekten bağımsızlığıyla ve hedefin iki yanı daraltılarak yapılır
     (en çok 10). Seviye (elle kazanç) ölçüme girmez, ölçülene eklenir: FFmpeg'in ölçeri +10 LUFS'un üstünü ölçemez
     (çok yüksek seste ölçüm ses kısılarak yinelenir), -70'in altını sessiz sayar.
+  - Tek kopya (0.16.1): aynı exe ikinci kez açılırsa yeni pencere açılmaz, açık olan öne gelir (simge durumundaysa
+    geri açılır). İki pencere aynı `ayarlar.json`'ı birbirinin üstüne yazmaz, aynı video iki kez işlenmez. Yalnızca
+    Windows'un oturuma özel adlandırılmış nesneleri kullanılır (ağ, dosya, kayıt defteri yok); açık kopya 5 saniyede
+    yanıt vermezse ya da denetim yapılamazsa program her zamanki gibi açılır. Başka klasördeki kopya ya da başka sürüm
+    ayrıca açılabilir; o durumda da çıktılar çakışmaz: kodlama sürerken yazılan yarım dosyanın adı kopyaya özeldir
+    (`<çıktı>.<işlem numarası>.part<uzantı>`; 0.16.0'a kadar `<çıktı>.part<uzantı>` idi, iki kopya aynı adlı videoyu
+    aynı klasöre aktarırsa aynı dosyaya yazıp çıktıyı bozabiliyordu), biten dosya ad bu sırada alındıysa sıradaki boş
+    ada (`_2`, `_3` …) taşınır.
   - Ayarlar program klasöründeki `ayarlar.json` dosyasında, hata günlükleri `Günlük` klasöründe durur
     (kurulum yok). Program bir arşivin içinden (WinRAR, 7-Zip, zip) açılırsa arşiv programı exe'yi geçici bir
     klasöre açar ve kapanınca siler; o durumda ayarlar ve günlükler `%LOCALAPPDATA%\Relios Export` klasörüne yazılır.
 - `ffmpeg-build/` : FFmpeg'in (libfdk_aac dahil, ağ desteği kapalı) Windows 64-bit derlemesi.
-  GitHub Actions'ta en son kararlı sürümlerle derlenir.
+  GitHub Actions'ta en son kararlı sürümlerle derlenir. Programın içine gömülen onaylı derleme `ONAYLI_DERLEME`'de
+  (çalışma numarası), dosyalarının SHA-256'sı `ONAYLI_SHA256`'da kayıtlıdır: `app-build.yml` indirdiği dosyaları
+  bununla karşılaştırır (farklıysa derleme durur). GitHub derleme çıktılarını en çok 90 gün saklar; onaylı arşiv
+  `ffmpeg-sakla.yml` ile (aynı dosyalar, yeniden derlemeden) yeniden yüklenir.
 - `tools/` : GitHub'daki doğrulama araçları (deneme videoları, çıktı kontrolleri, 0.3.0 komut karşılaştırması,
   kombinasyon denemesi: her ayarın her değeri ve değer çiftleri 73 kaynakla gerçek kodlamayla, 4747 deneme; önerilen
   ayarların (beşi) beklenen kodlamalarla karşılaştırılması; ekran kartıyla kodlanmış önerilen ayar çıktılarını kullanıcının
-  bilgisayarında denetleyen `onerilen_nvenc_kontrol.py` ve H.264 başlık özetçisi `h264_basliklar.py`).
+  bilgisayarında denetleyen `onerilen_nvenc_kontrol.py` ve H.264 başlık özetçisi `h264_basliklar.py`; çıktının ses
+  izinin zaman çizgisini denetleyen `ses_zaman_kontrol.py`).
+- `GELISTIRME.md` : programı ileride geliştirmek için gerekenler (derleme, doğrulama, saklanması gereken dosyalar,
+  süresi dolan şeyler).
 
 Not: libfdk_aac içeren FFmpeg derlemesi "nonfree"dir; yalnızca kişisel kullanım içindir,
 yeniden dağıtılamaz.

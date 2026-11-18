@@ -213,6 +213,37 @@ public static class Exporter
     }
 
     /// <summary>
+    /// Kodlama sürerken yazılan yarım dosyanın adı: "&lt;çıktı&gt;.&lt;işlem numarası&gt;.part&lt;uzantı&gt;". Ad, programın
+    /// çalışan kopyasına özeldir (işlem numarası çalışan işlemler arasında tektir; bir kopya aynı anda tek video işler):
+    /// başka bir kopya aynı anda aynı adlı videoyu aynı klasöre aktarsa da iki FFmpeg aynı dosyaya yazamaz. 0.16.0'a
+    /// kadar ad "&lt;çıktı&gt;.part&lt;uzantı&gt;" idi: iki kopya aynı yarım dosyaya yazıp çıktıyı bozabiliyordu.
+    /// </summary>
+    public static string YarimDosyaAdi(string output, string uzanti) =>
+        string.Create(CultureInfo.InvariantCulture, $"{output}.{Environment.ProcessId:x}.part{uzanti}");
+
+    /// <summary>
+    /// Biten yarım dosyayı çıktının adına taşır ve taşındığı adı döndürür. Çıktının adı dışa aktarmanın başında seçilir;
+    /// kodlama sürerken o adla bir dosya oluştuysa (ör. programın başka bir kopyası aynı adlı videoyu önce bitirdi)
+    /// üzerine yazılmaz, emek de boşa gitmez: sıradaki boş ad (<paramref name="sonrakiAd"/>: "_2", "_3" …) denenir.
+    /// Dosya başka bir nedenle taşınamıyorsa hata olduğu gibi çıkar.
+    /// </summary>
+    public static string Yerlestir(string temp, string output, Func<string> sonrakiAd)
+    {
+        for (var deneme = 0; ; deneme++)
+        {
+            try
+            {
+                File.Move(temp, output, overwrite: false);
+                return output;
+            }
+            catch (IOException) when (deneme < 100 && File.Exists(output) && File.Exists(temp))
+            {
+                output = sonrakiAd();
+            }
+        }
+    }
+
+    /// <summary>
     /// Tanı için (programın kendisi kullanmaz; deneme aracı yazar): sesin her denemesinin ayarı ve ölçümü, ölçümün
     /// yinelenmesi.
     /// </summary>
@@ -606,8 +637,9 @@ public static class Exporter
         }
 
         Directory.CreateDirectory(outputFolder);
-        var output = OutputPathFor(input, outputFolder, profile, ArgsBuilder.Uzanti(a));
-        var temp = output + ".part" + ArgsBuilder.Uzanti(a);
+        var uzanti = ArgsBuilder.Uzanti(a);
+        var output = OutputPathFor(input, outputFolder, profile, uzanti);
+        var temp = YarimDosyaAdi(output, uzanti);
         var gecisKlasoru = Path.Combine(Path.GetTempPath(), "Relios Export", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(gecisKlasoru);
         KomutPlani Plan() => ArgsBuilder.Olustur(a, media, input, ses, temp, Path.Combine(gecisKlasoru, "gecis"), olcum,
@@ -644,7 +676,7 @@ public static class Exporter
                 }
             }
 
-            File.Move(temp, output, overwrite: false);
+            output = Yerlestir(temp, output, () => OutputPathFor(input, outputFolder, profile, uzanti));
             progress?.Report(1);
         }
         catch (FfmpegHatasi ex)

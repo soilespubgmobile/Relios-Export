@@ -47,6 +47,18 @@ jobs:
           $v = & app/ReliosExport/ffmpeg/ffmpeg.exe -hide_banner -version
           $v | Select-Object -First 1
           Get-ChildItem app/ReliosExport/ffmpeg | ForEach-Object { "{0,-14} {1,8:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+          # Programin icine yalnizca onayli dosyalar gomulur: SHA-256'lari depodaki kayitla (ffmpeg-build/ONAYLI_SHA256)
+          # ayni olmali (indirilen derleme hangi calismadan gelirse gelsin).
+          $dogrulanan = 0
+          foreach ($satir in Get-Content ffmpeg-build/ONAYLI_SHA256) {
+            if ($satir -notmatch '^([0-9a-f]{64})\s+(\S+)$') { continue }
+            $beklenen = $Matches[1]; $ad = $Matches[2]
+            $gercek = (Get-FileHash -LiteralPath "app/ReliosExport/ffmpeg/$ad" -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($gercek -ne $beklenen) { "HATA: $ad onayli derlemedeki dosya degil: sha256 $gercek (beklenen $beklenen)"; exit 1 }
+            "sha256 $gercek  $ad  (onayli kayitla ayni)"
+            $dogrulanan++
+          }
+          if ($dogrulanan -ne 2) { "HATA: ffmpeg-build/ONAYLI_SHA256 icinde iki dosya bekleniyordu (dogrulanan: $dogrulanan)"; exit 1 }
 
       # WPF'in DirectWriteForwarder.dll'i C++/CLI: paketin icinden yuklenemez, diske acilmasi gerekir.
       # IncludeAllContentForSelfExtract ffmpeg.exe ve ffprobe.exe'yi de ilk acilista ayni yere acar.
@@ -92,6 +104,116 @@ jobs:
           $rc = Kontrol '--pencere-kontrol' (Join-Path $PWD "pencere-kontrol.txt") @('--ekran', (Join-Path $PWD 'ekran'))
           if ($rc -ne 0) { "HATA: pencereler acilamadi (kod $rc)"; exit 1 }
           "Tek exe calisiyor: FFmpeg icinde, ana pencere ve ayar pencereleri hatasiz aciliyor."
+
+      # 0.16.1: ayni exe ikinci kez acilinca yeni pencere acilmaz; acik olan one gelir (simge durumundaysa geri acilir),
+      # ikinci kopya pencere acmadan kapanir. Program kapaninca (ve kapatilip hemen acilinca) yeniden acilir. Derleme
+      # denetimleri (--ffmpeg-kontrol ...) program acikken de calisir.
+      - name: Tek kopya denemesi (ayni exe ikinci kez acilmaz, acik olan one gelir)
+        run: |
+          Add-Type -Namespace Win -Name U32 -MemberDefinition '[DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow); [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd); [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();'
+          $exe = (Resolve-Path "out/Relios Export.exe").Path
+          Remove-Item "out/ayarlar.json" -ErrorAction SilentlyContinue
+          Remove-Item "out/Relios Export hata.txt" -ErrorAction SilentlyContinue
+          $sorun = @()
+          function Pencere($p, $sn) {
+            for ($i = 0; $i -lt $sn * 4; $i++) {
+              try {
+                if ($p.HasExited) { return $false }
+                $p.Refresh()
+                if ($p.MainWindowHandle -ne [IntPtr]::Zero) { return $true }
+              } catch { return $false }
+              Start-Sleep -Milliseconds 250
+            }
+            return $false
+          }
+          function Kopyalar { return @(Get-Process -Name 'Relios Export' -ErrorAction SilentlyContinue).Count }
+          function Ac($ek = @()) {
+            $p = if ($ek.Count) { Start-Process -FilePath $exe -ArgumentList $ek -PassThru } else { Start-Process -FilePath $exe -PassThru }
+            $null = $p.Handle  # cikis kodunun okunabilmesi icin
+            return $p
+          }
+          function Oldur { Get-Process -Name 'Relios Export' -ErrorAction SilentlyContinue | ForEach-Object { try { $_.Kill() } catch { } } }
+
+          if ((Kopyalar) -ne 0) { "HATA: deneme baslamadan acik kopya var ($(Kopyalar))"; Oldur; exit 1 }
+
+          # 1) Ilk kopya acilir.
+          $p1 = Ac
+          if (-not (Pencere $p1 90)) { "HATA: ilk kopyanin penceresi 90 saniyede acilmadi"; Oldur; exit 1 }
+          $h1 = $p1.MainWindowHandle
+          "1. kopya acildi: islem $($p1.Id), pencere $h1"
+          Start-Sleep -Seconds 2
+
+          # 2) Ikinci acilis: pencere acmadan kapanir (kod 0); ilk kopya acik kalir, baska kopya yok.
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          $p2 = Ac
+          if (-not $p2.WaitForExit(30000)) { $sorun += 'ikinci acilis 30 saniyede kapanmadi (yeni pencere acildi)' }
+          else {
+            "2. acilis $($sw.ElapsedMilliseconds) ms'de kapandi (kod $($p2.ExitCode))"
+            if ($p2.ExitCode -ne 0) { $sorun += "ikinci acilisin cikis kodu $($p2.ExitCode)" }
+          }
+          $p1.Refresh()
+          if ($p1.HasExited) { $sorun += 'ikinci acilistan sonra ilk kopya kapandi' }
+          if ((Kopyalar) -ne 1) { $sorun += "ikinci acilistan sonra acik kopya sayisi $(Kopyalar) (1 olmali)" }
+
+          # 3) Pes pese uc acilis: hicbiri pencere acmaz.
+          $uc = @(1..3 | ForEach-Object { Ac })
+          foreach ($p in $uc) { if (-not $p.WaitForExit(30000)) { $sorun += 'pes pese acilislardan biri kapanmadi (yeni pencere acildi)' } elseif ($p.ExitCode -ne 0) { $sorun += "pes pese acilisin cikis kodu $($p.ExitCode)" } }
+          if ((Kopyalar) -ne 1) { $sorun += "pes pese acilislardan sonra acik kopya sayisi $(Kopyalar) (1 olmali)" } else { 'Pes pese uc acilis: hicbiri pencere acmadi.' }
+
+          # 4) Pencere simge durumundayken acilis: pencere geri acilir.
+          if (-not $p1.HasExited) {
+            $null = [Win.U32]::ShowWindowAsync($h1, 6)  # SW_MINIMIZE
+            Start-Sleep -Seconds 2
+            $kucuk = [Win.U32]::IsIconic($h1)
+            $p3 = Ac
+            if (-not $p3.WaitForExit(30000)) { $sorun += 'simge durumundayken acilis kapanmadi (yeni pencere acildi)' }
+            Start-Sleep -Seconds 1
+            if (-not $kucuk) { 'NOT: pencere simge durumuna alinamadi (deneme ortami); geri acilma denenemedi.' }
+            elseif ([Win.U32]::IsIconic($h1)) { $sorun += 'simge durumundaki pencere geri acilmadi' }
+            else { 'Simge durumundaki pencere geri acildi.' }
+            "On plandaki pencere: $([Win.U32]::GetForegroundWindow()) (programin penceresi: $h1)"
+          }
+
+          # 5) Program acikken derleme denetimi (--ffmpeg-kontrol) yine calisir (tek kopya denetimine girmez).
+          $f = Join-Path $PWD 'tek-kopya-ffmpeg.txt'
+          Remove-Item $f -ErrorAction SilentlyContinue
+          $p4 = Ac @('--ffmpeg-kontrol', $f)
+          if (-not $p4.WaitForExit(120000)) { $sorun += 'program acikken --ffmpeg-kontrol kapanmadi' }
+          elseif ($p4.ExitCode -ne 0 -or -not (Test-Path $f)) { $sorun += "program acikken --ffmpeg-kontrol calismadi (kod $($p4.ExitCode))" }
+          else { 'Program acikken --ffmpeg-kontrol calisti.' }
+
+          # 6) Ilk kopya kapatilir (pencereyi kapat): kapanir, kod 0.
+          if (-not $p1.HasExited) {
+            $null = $p1.CloseMainWindow()
+            if (-not $p1.WaitForExit(30000)) { $sorun += 'ilk kopya kapatilinca 30 saniyede kapanmadi' }
+            else { "1. kopya kapandi (kod $($p1.ExitCode))"; if ($p1.ExitCode -ne 0) { $sorun += "ilk kopyanin cikis kodu $($p1.ExitCode)" } }
+          }
+
+          # 7) Kapandiktan sonra yeniden acilir; kapatilip hemen acilinca da acilir (kapanan kopya yanit vermez, yenisi
+          #    kilit bosalinca acilir).
+          Oldur
+          Start-Sleep -Seconds 1
+          $p5 = Ac
+          if (-not (Pencere $p5 90)) { $sorun += 'kapandiktan sonra program yeniden acilmadi' }
+          else {
+            'Kapandiktan sonra yeniden acildi.'
+            $null = $p5.CloseMainWindow()
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            $p6 = Ac
+            if (-not (Pencere $p6 90)) { $sorun += 'kapatilip hemen acilinca program acilmadi' }
+            else {
+              "Kapatilip hemen acilinca $($sw.ElapsedMilliseconds) ms'de acildi."
+              if (-not $p5.WaitForExit(30000)) { $sorun += 'kapatilan kopya 30 saniyede kapanmadi' }
+              if ((Kopyalar) -ne 1) { $sorun += "kapatilip acildiktan sonra acik kopya sayisi $(Kopyalar) (1 olmali)" }
+              $null = $p6.CloseMainWindow()
+              if (-not $p6.WaitForExit(30000)) { $sorun += 'son kopya kapatilinca 30 saniyede kapanmadi' }
+            }
+          }
+          Oldur
+          if (Test-Path "out/Relios Export hata.txt") { "--- hata kaydi"; Get-Content "out/Relios Export hata.txt"; $sorun += 'hata kaydi olustu' }
+          Remove-Item "out/ayarlar.json" -ErrorAction SilentlyContinue
+          if ($sorun) { "HATA: tek kopya denemesinde sorun var:"; $sorun | ForEach-Object { " - $_" }; exit 1 }
+          "Tek kopya: ikinci acilis pencere acmadi, acik kopya yanit verdi; kapaninca yeniden acildi."
 
       # Programi bir kullanici gibi kullanir: video ekler, Baslat, bitir, yalnizca hataliyi yeniden dener, cikarir,
       # Tekrar isle (LUFS esitleme acik), iptal, TikTok'a gecer (NVENC yok: anlasilir hata + gunluk), temizler.

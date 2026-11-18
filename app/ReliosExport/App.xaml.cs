@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Media;
@@ -81,9 +82,232 @@ public partial class App : Application
             return;
         }
 
+        // Tek kopya (0.16.1): aynı exe ikinci kez açılırsa yeni pencere açılmaz, açık olan öne gelir.
+        if (BaskaKopyaAcik())
+        {
+            Shutdown(0);
+            return;
+        }
+
         MainWindow = new MainWindow();
         MainWindow.Show();
     }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        TekKopyayiBirak();
+        base.OnExit(e);
+    }
+
+    // ------------------------------------------------------------------------------------------------------------
+    // Tek kopya (0.16.1). Aynı exe iki kez açık olursa iki pencere aynı ayarlar.json'ı birbirinin üstüne yazar (son
+    // kapanan kazanır) ve aynı videoyu iki kez işleyebilir. Bu yüzden aynı exe'nin ikinci açılışı yeni pencere açmaz:
+    // açık kopyaya "öne gel" işareti gönderir, yanıtını alınca kapanır. Yalnızca Windows'un adlandırılmış nesneleri
+    // kullanılır (oturuma özel "Local\" adları: kilit + iki işaret); ağ, dosya ya da kayıt defteri yok.
+    // Güvenli taraf hep "program açılsın": açık kopya 5 saniyede yanıt vermezse (takıldıysa) ya da bu denetimde
+    // beklenmeyen bir hata olursa program her zamanki gibi açılır. Ad exe'nin tam yolundan ve derlemesinden türetilir
+    // (AppPaths.TekKopyaAdi): başka klasördeki kopya ya da yeni indirilen başka sürüm, eskisi açıkken de açılır. O
+    // durumda da çıktılar çakışmaz (yarım dosyanın adı kopyaya özel, biten dosya boş ada taşınır: Exporter).
+    // Derleme denetimleri (--ffmpeg-kontrol, --pencere-kontrol, --uctan-uca, --arayuz-taramasi) bu denetime girmez.
+    // ------------------------------------------------------------------------------------------------------------
+    private static readonly TimeSpan TekKopyaYanitSuresi = TimeSpan.FromSeconds(5);
+    private Mutex? _tekKopyaKilidi;
+    private bool _tekKopyaKilidiBende;
+    private EventWaitHandle? _oneGelIstegi;
+    private EventWaitHandle? _oneGeldi;
+    private RegisteredWaitHandle? _oneGelBeklemesi;
+
+    /// <summary>
+    /// true: aynı exe'nin başka bir kopyası açık ve "öne gel" işaretine yanıt verdi (bu kopya pencere açmadan
+    /// kapanmalı). false: bu kopya açılmalı (tek kopya bu; öbürü bu sırada kapandı; öbürü yanıt vermiyor; ya da denetim
+    /// yapılamadı).
+    /// </summary>
+    private bool BaskaKopyaAcik()
+    {
+        try
+        {
+            var derleme = typeof(App).Assembly;
+            var surum = (Attribute.GetCustomAttribute(derleme, typeof(System.Reflection.AssemblyInformationalVersionAttribute))
+                            as System.Reflection.AssemblyInformationalVersionAttribute)?.InformationalVersion
+                        ?? derleme.GetName().Version?.ToString()
+                        ?? string.Empty;
+            var exe = Environment.ProcessPath is { Length: > 0 } yol ? yol : Path.Combine(AppPaths.AppFolder, "Relios Export.exe");
+            var ad = @"Local\" + AppPaths.TekKopyaAdi(exe, surum);
+            _tekKopyaKilidi = new Mutex(false, ad + "-kilit");
+            _oneGelIstegi = new EventWaitHandle(false, EventResetMode.AutoReset, ad + "-one-gel");
+            _oneGeldi = new EventWaitHandle(false, EventResetMode.ManualReset, ad + "-one-geldi");
+
+            _tekKopyaKilidiBende = TekKopyaKilidiniAl();
+            if (!_tekKopyaKilidiBende)
+            {
+                // Kilit başka bir kopyada. Öne gelebilsin diye izin verilir (Windows, kullanıcının başlatmadığı bir
+                // programın kendini öne almasına izin vermez; kullanıcının az önce başlattığı bu kopya izin verebilir).
+                try
+                {
+                    AllowSetForegroundWindow(AsfwAny);
+                }
+                catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+                {
+                    // İzin verilemedi: açık kopya yine yanıt verir, Windows görev çubuğunda yanıp söndürür.
+                }
+
+                _oneGeldi.Reset();
+                _oneGelIstegi.Set();
+                var bitis = Environment.TickCount64 + (long)TekKopyaYanitSuresi.TotalMilliseconds;
+                while (true)
+                {
+                    if (_oneGeldi.WaitOne(100))
+                    {
+                        return true;
+                    }
+
+                    // Açık kopya bu sırada kapandıysa (ör. kapatılıp hemen yeniden açıldı) kilit boşalır: tek kopya bu.
+                    // Gönderilen işareti alan olmadı: geri alınır (yoksa bu kopya kendi işaretine yanıt verirdi).
+                    if (TekKopyaKilidiniAl())
+                    {
+                        _tekKopyaKilidiBende = true;
+                        _oneGelIstegi.Reset();
+                        break;
+                    }
+
+                    if (Environment.TickCount64 >= bitis)
+                    {
+                        // Açık kopya yanıt vermiyor (takılmış olabilir): program yine de açılır.
+                        break;
+                    }
+                }
+            }
+
+            if (_tekKopyaKilidiBende)
+            {
+                // Sonraki açılışların "öne gel" işareti: iş parçacığı havuzunda beklenir, pencere işi arayüzün iş
+                // parçacığında yapılır (yanıt da oradan: yanıt veren kopyanın arayüzü gerçekten çalışıyordur).
+                _oneGelBeklemesi = ThreadPool.RegisterWaitForSingleObject(
+                    _oneGelIstegi,
+                    (_, _) =>
+                    {
+                        try
+                        {
+                            Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(OneGel));
+                        }
+                        catch (Exception)
+                        {
+                            // Program kapanıyor: yanıt verilmez, yeni kopya kilit boşalınca kendisi açılır.
+                        }
+                    },
+                    null,
+                    Timeout.Infinite,
+                    executeOnlyOnce: false);
+            }
+
+            return false;
+        }
+        catch (Exception)
+        {
+            // Denetim yapılamadı (ör. nesneler başka yetkiyle oluşturulmuş): program her zamanki gibi açılır.
+            return false;
+        }
+    }
+
+    private bool TekKopyaKilidiniAl()
+    {
+        try
+        {
+            return _tekKopyaKilidi is { } kilit && kilit.WaitOne(0);
+        }
+        catch (AbandonedMutexException)
+        {
+            // Kilidin sahibi bırakmadan kapandı (çöktü ya da sonlandırıldı): kilit artık bu kopyanın.
+            return true;
+        }
+    }
+
+    /// <summary>Açık kopyada: pencereyi öne getirir (simge durumundaysa geri açar) ve ikinci kopyaya yanıt verir.</summary>
+    private void OneGel()
+    {
+        if (MainWindow is not { } w)
+        {
+            // Ana pencere kapandı, program kapanıyor: yanıt verilmez (verilseydi yeni kopya kapanır, sonra bu da
+            // kapanır, ortada açık program kalmazdı). Yeni kopya kilit boşalınca kendisi açılır.
+            return;
+        }
+
+        try
+        {
+            var h = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+            if (h != IntPtr.Zero)
+            {
+                if (IsIconic(h))
+                {
+                    ShowWindow(h, SwRestore);
+                }
+
+                // Açık bir ayar penceresi, onay ya da dosya seçme penceresi varsa o öne gelir (ana pencere o sırada
+                // tıklanamaz); yoksa ana pencerenin kendisi.
+                var hedef = GetLastActivePopup(h);
+                SetForegroundWindow(hedef != IntPtr.Zero ? hedef : h);
+            }
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or InvalidOperationException)
+        {
+            // Pencere öne alınamadı: yanıt yine verilir (program açık ve çalışıyor).
+        }
+        finally
+        {
+            try
+            {
+                _oneGeldi?.Set();
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or IOException or UnauthorizedAccessException)
+            {
+                // Program kapanıyor.
+            }
+        }
+    }
+
+    private void TekKopyayiBirak()
+    {
+        try
+        {
+            _oneGelBeklemesi?.Unregister(null);
+            _oneGelBeklemesi = null;
+            if (_tekKopyaKilidiBende)
+            {
+                _tekKopyaKilidiBende = false;
+                _tekKopyaKilidi?.ReleaseMutex();
+            }
+
+            _tekKopyaKilidi?.Dispose();
+            _oneGelIstegi?.Dispose();
+            _oneGeldi?.Dispose();
+        }
+        catch (Exception)
+        {
+            // Program zaten kapanıyor: Windows nesneleri işlem bitince kendiliğinden bırakılır.
+        }
+    }
+
+    private const int SwRestore = 9;
+    private const int AsfwAny = -1;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AllowSetForegroundWindow(int dwProcessId);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetLastActivePopup(IntPtr hWnd);
 
     private void RunCheck(string path, bool window, string? ekran)
     {
