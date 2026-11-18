@@ -1,7 +1,9 @@
 """Önerilen ayarla kodlanmış dosya, örnek videonun ölçülen kodlamasıyla aynı mı (H.264 başlıkları, kare türleri,
 anahtar kare aralığı, bit hızı, ses).
 
-Kullanım: python -X utf8 -I tools/onerilen_kontrol.py <dosya> <38m|1717504691091> <kaynak kare hızı>
+Kullanım: python -X utf8 -I tools/onerilen_kontrol.py <dosya> <anahtar> <kaynak kare hızı>
+Anahtar: mobil (= 38m), after-effects (= 1717504691091), capcut, her-platform-yuksek, her-platform-dengeli.
+Kodlayıcı x264'e çevrilmiş önerilen ayarın çıktısı denetlenir (GitHub'da ekran kartı yok).
 """
 import json
 import re
@@ -25,12 +27,23 @@ def calistir(args):
     return subprocess.run(args, capture_output=True, text=True, encoding='utf-8', errors='replace', stdin=subprocess.DEVNULL)
 
 
-BEK = {
-    '38m': dict(profil=100, refs=2, cabac=1, dct=1, wp=0, wb=0, b=True, gop=round(fps), bit=12000, vbv=16000,
-                kap='qt', ses=('LC', 44100, 2, 128000)),
-    '1717504691091': dict(profil=77, refs=3, cabac=1, dct=0, wp=0, wb=0, b=False, gop=30, bit=52000, vbv=62000,
+# b: True = IPBPB (her P'den sonra tek B), 2 = en çok 2 ardışık B, False = yalnızca I / P. bit: 2 geçişin ortalaması
+# (CRF'de None). Her 1 saniyede en çok: en yüksek bit hızı + tampon.
+BEKLENEN = {
+    'mobil': dict(profil=100, refs=2, cabac=1, dct=1, wp=0, wb=0, b=True, gop=round(fps), bit=12000, vbv=16000, tampon=16000,
+                  kap='qt', ses=('LC', 44100, 2, 128000)),
+    'after-effects': dict(profil=77, refs=3, cabac=1, dct=0, wp=0, wb=0, b=False, gop=30, bit=52000, vbv=62000, tampon=62000,
                           kap='isom', ses=('LC', 48000, 2, 512000)),
-}[ad]
+    'capcut': dict(profil=77, refs=3, cabac=1, dct=0, wp=0, wb=0, b=False, gop=30, bit=34375, vbv=34375, tampon=62500,
+                   kap='qt', ses=('LC', 44100, 2, 192000)),
+    'her-platform-yuksek': dict(profil=100, refs=4, cabac=1, dct=1, wp=1, wb=2, b=2, gop=round(2 * fps), bit=None, vbv=25000,
+                                tampon=50000, kap='isom', ses=('LC', 48000, 2, 320000)),
+    'her-platform-dengeli': dict(profil=100, refs=4, cabac=1, dct=1, wp=1, wb=2, b=2, gop=round(2 * fps), bit=None, vbv=12000,
+                                 tampon=24000, kap='isom', ses=('LC', 48000, 2, 192000)),
+}
+BEKLENEN['38m'] = BEKLENEN['mobil']
+BEKLENEN['1717504691091'] = BEKLENEN['after-effects']
+BEK = BEKLENEN[ad]
 
 # ---- H.264 başlıkları ve kare türleri (trace_headers)
 r = calistir(['ffmpeg', '-hide_banner', '-loglevel', 'trace', '-i', dosya, '-map', '0:v:0', '-c', 'copy',
@@ -73,9 +86,13 @@ dct = pps.get('transform_8x8_mode_flag', 0)
 chk('8x8 DCT', BEK['dct'], dct, dct == BEK['dct'])
 chk('Ağırlıklı tahmin (P)', BEK['wp'], pps.get('weighted_pred_flag'), pps.get('weighted_pred_flag') == BEK['wp'])
 chk('Ağırlıklı tahmin (B)', BEK['wb'], pps.get('weighted_bipred_idc'), pps.get('weighted_bipred_idc') == BEK['wb'])
-chk('Kare yapısı', 'IPBPB...' if BEK['b'] else 'yalnızca I / P', kareler[:24] + '...',
-    ('BB' not in kareler and 'PP' not in kareler.replace('IP', 'I').replace('PI', 'I') and kareler.count('B') > 0)
-    if BEK['b'] else ('B' not in kareler and len(kareler) > 0))
+if BEK['b'] == 2:
+    chk('Kare yapısı (en çok 2 ardışık B-kare)', 'B var, BBB yok', kareler[:24] + '...',
+        'BBB' not in kareler and kareler.count('B') > 0)
+else:
+    chk('Kare yapısı', 'IPBPB...' if BEK['b'] else 'yalnızca I / P', kareler[:24] + '...',
+        ('BB' not in kareler and 'PP' not in kareler.replace('IP', 'I').replace('PI', 'I') and kareler.count('B') > 0)
+        if BEK['b'] else ('B' not in kareler and len(kareler) > 0))
 araliklar = [b - a for a, b in zip(idr, idr[1:])]
 chk('Anahtar kare aralığı (kare)', BEK['gop'], sorted(set(araliklar)), bool(araliklar) and set(araliklar) == {BEK['gop']})
 chk('Anahtar kareler IDR (kapalı GOP), arada I yok', len(idr), kareler.count('I'), kareler.count('I') == len(idr))
@@ -85,15 +102,20 @@ pk = calistir(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entrie
 paketler = [(float(p['pts_time']), int(p['size'])) for p in json.loads(pk.stdout)['packets'] if p.get('pts_time') not in (None, 'N/A')]
 sure = len(paketler) / fps
 ort = sum(s for _, s in paketler) * 8 / sure / 1000
-chk('Ortalama görüntü bit hızı (kb/s, ±5%)', BEK['bit'], round(ort), abs(ort - BEK['bit']) <= 0.05 * BEK['bit'])
+if BEK['bit'] is not None:
+    chk('Ortalama görüntü bit hızı (kb/s, ±5%)', BEK['bit'], round(ort), abs(ort - BEK['bit']) <= 0.05 * BEK['bit'])
+else:
+    chk('Ortalama görüntü bit hızı (kb/s; sabit kalite, en yüksek bit hızını aşmaz)', f"<= {BEK['vbv']}", round(ort),
+        ort <= BEK['vbv'] * 1.02 + BEK['tampon'] / sure)
 paketler.sort()
 pencere = max(1, round(fps))
 en = 0
 boyutlar = [s for _, s in paketler]
 for i in range(0, max(1, len(boyutlar) - pencere + 1)):
     en = max(en, sum(boyutlar[i:i + pencere]) * 8 / 1000)
-# VBV'nin söylediği: her 1 saniyede en çok (en yüksek bit hızı × 1 sn + tampon); tampon = en yüksek bit hızı (1 sn).
-chk('En yüksek 1 saniye (kb/s; VBV: bit hızı + tampon)', f"<= {2 * BEK['vbv']}", round(en), en <= 2 * BEK['vbv'] * 1.02)
+# VBV'nin söylediği: her 1 saniyede en çok (en yüksek bit hızı × 1 sn + tampon).
+sinir = BEK['vbv'] + BEK['tampon']
+chk('En yüksek 1 saniye (kb/s; VBV: bit hızı + tampon)', f"<= {sinir}", round(en), en <= sinir * 1.02)
 
 # ---- kap ve ses
 pr = json.loads(calistir(['ffprobe', '-v', 'error', '-show_format', '-show_streams', '-of', 'json', dosya]).stdout)

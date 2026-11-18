@@ -561,32 +561,37 @@ jobs:
           "`nTahmini boyut gercek dosyayla uyumlu."
           exit 0
 
-      - name: Onerilen ayarlar (38m ve 1717504691091 videolari gibi; olculen kodlamalariyla karsilastirilir)
+      - name: Onerilen ayarlar (her platform x2; ornek dosyalardan CapCut, After Effects, Mobil; olculen kodlamalarla karsilastirilir)
         if: always()
         run: |
           [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
           # 0.13.1'den beri ekran kartiyla (NVENC). Burada ekran karti yok: NVENC komutu denetlenir (birim kontrolde de),
           # kodlama x264'e cevrilerek (ayni yapi, ayni ses ve kap) gercekten yapilir. NVENC kodlamasi kullanicinin kartinda.
-          # Gercekci (parazitli) goruntu: 2 gecisli ortalama bit hizi tutturulabilsin.
+          # Gercekci (parazitli) goruntu: 2 gecisli ortalama bit hizi tutturulabilsin, sabit kalitede ust sinir sinansin.
           $k38 = Join-Path $PWD 'onerilen_38m_kaynak.mp4'
           ffmpeg -hide_banner -loglevel error -f lavfi -i "testsrc2=size=1080x1920:rate=30,noise=alls=14:allf=t+u" -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 12 -pix_fmt yuv420p -c:v libx264 -preset ultrafast -qp 0 -c:a aac -ac 2 -y $k38
           $k17 = Join-Path $PWD 'onerilen_17_kaynak.mp4'
           ffmpeg -hide_banner -loglevel error -f lavfi -i "testsrc2=size=1920x1920:rate=60,noise=alls=14:allf=t+u" -f lavfi -i "sine=frequency=330:sample_rate=48000" -t 6 -pix_fmt yuv420p -c:v libx264 -preset ultrafast -qp 0 -c:a aac -ac 2 -y $k17
+          $kcc = Join-Path $PWD 'onerilen_capcut_kaynak.mp4'
+          ffmpeg -hide_banner -loglevel error -f lavfi -i "testsrc2=size=1080x1080:rate=60,noise=alls=14:allf=t+u" -f lavfi -i "sine=frequency=550:sample_rate=48000" -t 6 -pix_fmt yuv420p -c:v libx264 -preset ultrafast -qp 0 -c:a aac -ac 2 -y $kcc
+          $khp = Join-Path $PWD 'onerilen_herplatform_kaynak.mp4'
+          ffmpeg -hide_banner -loglevel error -f lavfi -i "testsrc2=size=1080x1920:rate=60,noise=alls=14:allf=t+u" -f lavfi -i "sine=frequency=660:sample_rate=48000" -t 8 -pix_fmt yuv420p -c:v libx264 -preset ultrafast -qp 0 -c:a aac -ac 2 -y $khp
           $durumlar = @(
-            @{ ad = '38m'; kaynak = $k38; fps = 30 },
-            @{ ad = '1717504691091'; kaynak = $k17; fps = 60 }
+            @{ ad = 'mobil'; kaynak = $k38; fps = 30; nv = @('-c:v h264_nvenc', '-profile:v high', '-rc vbr -b:v 12000k -maxrate 16000k -bufsize 16000k', '-bf 1 -b_ref_mode disabled -b_adapt 0 -refs 1 -dpb_size 2', '-g 30 -no-scenecut 1', '-b:a 128k -ar 44100') },
+            @{ ad = 'after-effects'; kaynak = $k17; fps = 60; nv = @('-c:v h264_nvenc', '-profile:v main', '-rc vbr -b:v 52000k -maxrate 62000k -bufsize 62000k', '-spatial-aq 0 -temporal-aq 0 -bf 0 -refs 3 -dpb_size 3', '-g 30 -no-scenecut 1', '-b:a 512k -ar 48000') },
+            @{ ad = 'capcut'; kaynak = $kcc; fps = 60; nv = @('-c:v h264_nvenc', '-profile:v main -level:v 4.2', '-rc cbr -b:v 34375k -bufsize 62500k', '-spatial-aq 0 -temporal-aq 0 -bf 0 -refs 3 -dpb_size 3', '-g 30 -no-scenecut 1', '-b:a 192k -ar 44100') },
+            @{ ad = 'her-platform-yuksek'; kaynak = $khp; fps = 60; nv = @('-c:v h264_nvenc', '-profile:v high', '-rc vbr -cq 19 -b:v 0 -maxrate 25000k', '-spatial-aq 1 -aq-strength 8 -temporal-aq 0 -bf 2 -b_ref_mode disabled -refs 3 -dpb_size 3', '-g 120', '-b:a 320k -ar 48000', '+faststart') },
+            @{ ad = 'her-platform-dengeli'; kaynak = $khp; fps = 60; nv = @('-c:v h264_nvenc', '-profile:v high', '-rc vbr -cq 23 -b:v 0 -maxrate 12000k', '-spatial-aq 1 -aq-strength 8 -temporal-aq 0 -bf 2 -b_ref_mode disabled -refs 3 -dpb_size 3', '-g 120', '-b:a 192k -ar 48000', '+faststart') }
           )
           $hatali = 0; $satirlar = @()
           foreach ($d in $durumlar) {
             $dir = Join-Path $PWD "onerilen/$($d.ad)"
-            Write-Host "::group::$($d.ad) videosu gibi"
+            Write-Host "::group::$($d.ad)"
             $nv = & ./smoke/ReliosExport.Smoke.exe $d.kaynak $dir --profil "onerilen-$($d.ad)" --sadece-komut 2>&1 | ForEach-Object { "$_" }
             $nvrc = $LASTEXITCODE
             $nvKomut = ($nv | Where-Object { $_ -like '*h264_nvenc*' } | Select-Object -First 1)
             Write-Host "NVENC komutu: $nvKomut"
-            $nvBek = if ($d.ad -eq '38m') { @('-c:v h264_nvenc', '-profile:v high', '-rc vbr -b:v 12000k -maxrate 16000k -bufsize 16000k', '-bf 1 -b_ref_mode disabled -b_adapt 0 -refs 1 -dpb_size 2', '-g 30 -no-scenecut 1') }
-                     else { @('-c:v h264_nvenc', '-profile:v main', '-rc vbr -b:v 52000k -maxrate 62000k -bufsize 62000k', '-spatial-aq 0 -temporal-aq 0 -bf 0 -refs 3 -dpb_size 3', '-g 30 -no-scenecut 1') }
-            $nvEksik = @($nvBek | Where-Object { -not $nvKomut -or -not $nvKomut.Contains($_) })
+            $nvEksik = @($d.nv | Where-Object { -not $nvKomut -or -not $nvKomut.Contains($_) })
             if ($nvrc -ne 0 -or $nvEksik.Count) { Write-Host "NVENC komutunda eksik: $($nvEksik -join ' | ') (kod $nvrc)" }
             $log = & ./smoke/ReliosExport.Smoke.exe $d.kaynak $dir --profil "onerilen-$($d.ad)" --ayarla Video.Kodlayici=X264 2>&1 | ForEach-Object { "$_" }
             $rc = $LASTEXITCODE
@@ -603,7 +608,7 @@ jobs:
             }
             Write-Host "::endgroup::"
             if ($sonuc -ne 'OK') { $hatali++ }
-            $satirlar += "| $($d.ad) videosu gibi | $ozet | $sonuc |"
+            $satirlar += "| $($d.ad) | $ozet | $sonuc |"
           }
           $tablo = @("", "| Onerilen ayar | Kontroller | Sonuc |", "|---|---|---|") + $satirlar
           "`n===== ONERILEN AYARLAR ====="

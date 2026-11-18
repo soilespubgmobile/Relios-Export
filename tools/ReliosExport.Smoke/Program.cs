@@ -3,7 +3,7 @@ using ReliosExport.Core;
 using ReliosExport.Core.Ayarlar;
 
 // Relios Export'un kodlama kodunu (app/ReliosExport/Core) arayüz olmadan çalıştıran deneme aracı.
-// Kullanım: ReliosExport.Smoke.exe <kaynak video> <çıktı klasörü> [--profil tiktok|tiktok-nvenc|tiktok-916|youtube|onerilen-38m|onerilen-1717504691091] [--ayar ayar.json]
+// Kullanım: ReliosExport.Smoke.exe <kaynak video> <çıktı klasörü> [--profil tiktok|tiktok-nvenc|tiktok-916|youtube|onerilen-<anahtar>] [--ayar ayar.json]
 //           [--ayarla Yol=Deger ...] [--sadece-komut]
 //           ReliosExport.Smoke.exe --birim-kontrol   (video gerektirmeyen kontroller)
 //   --ayar          profil ayarlarını JSON dosyasından alır (yoksa profilin fabrika ayarları)
@@ -62,9 +62,15 @@ for (var i = 2; i < args.Length; i++)
             }
             else if (ad.StartsWith("onerilen-", StringComparison.Ordinal))
             {
-                // Ön ayar penceresindeki önerilen ayarlar: onerilen-38m, onerilen-1717504691091.
-                var anahtar = ad["onerilen-".Length..];
-                ayarlar = Varsayilanlar.Onerilenler().FirstOrDefault(o => o.Ad.StartsWith(anahtar + " ", StringComparison.Ordinal))?.Ayarlar
+                // Ön ayar penceresindeki önerilen ayarlar, anahtarıyla: onerilen-her-platform-yuksek, -her-platform-dengeli,
+                // -capcut, -after-effects, -mobil (eski adlar: onerilen-38m = mobil, onerilen-1717504691091 = after-effects).
+                var anahtar = ad["onerilen-".Length..] switch
+                {
+                    "38m" => "mobil",
+                    "1717504691091" => "after-effects",
+                    var x => x,
+                };
+                ayarlar = Varsayilanlar.Onerilenler().FirstOrDefault(o => o.Anahtar == anahtar)?.Ayarlar
                           ?? throw new InvalidOperationException("Önerilen ayar yok: " + anahtar);
             }
             break;

@@ -297,29 +297,198 @@ public static class Varsayilanlar
 
     public static ProfilAyarlari For(ExportProfileId id) => id == ExportProfileId.TikTok ? TikTok() : YouTube();
 
+    /// <summary>Her platforma uygun önerilen ayarların grubu (ön ayar penceresindeki başlık).</summary>
+    public const string GrupHerPlatform = "HER PLATFORM";
+
+    /// <summary>Örnek videoların kodlaması ölçülerek yapılan önerilen ayarların grubu.</summary>
+    public const string GrupOrnek = "ÖRNEK DOSYALARDAN";
+
     /// <summary>
-    /// Ön ayar penceresindeki "Önerilen ayarlar" (0.13.0, kullanıcının isteği: iki örnek videonun kodlaması; 0.13.1'den
-    /// beri ekran kartıyla, örnekler de donanımla kodlanmış). Programın kendi listesidir: ayar dosyasına yazılmaz,
-    /// kullanıcının kaydettiği ön ayarlara karışmaz; "Yükle" ile şu anki profile uygulanır. Görüntü kaynakla aynı boyut ve
-    /// kare hızında, ses yüksekliği TikTok varsayılanındaki gibi (-14 LUFS, yalnızca kısık ses yükseltilir; tepe sınırlayıcı
-    /// -1 dB). Kodlayıcı x264'e çevrilirse aynı yapı x264'le kodlanır (ekran kartı olmayan bilgisayar için).
+    /// Ön ayar penceresindeki önerilen ayarlar (0.13.0: iki örnek videonun kodlaması; 0.13.1'den beri ekran kartıyla;
+    /// 0.15.0: "Her platform" ×2, CapCut, After Effects ve Mobil adları). Programın kendi listesidir: ayar dosyasına
+    /// yazılmaz, kullanıcının kaydettiği ön ayarlara karışmaz; "Yükle" ile şu anki profile uygulanır. Görüntü kaynakla aynı
+    /// boyut ve kare hızında, ses yüksekliği TikTok varsayılanındaki gibi (-14 LUFS, yalnızca kısık ses yükseltilir; tepe
+    /// sınırlayıcı -1 dB). Hepsi ekran kartıyla (NVENC); kodlayıcı x264'e çevrilirse aynı yapı x264'le (ekran kartı olmayan
+    /// bilgisayar için). Adlarda CapCut ve After Effects kullanıcının isteğiyle geçer (18 Kasım; "başka program adı geçmez"
+    /// kuralının tek istisnası).
     /// </summary>
     public static IReadOnlyList<OnerilenAyar> Onerilenler() =>
     [
-        new("38m videosu gibi",
-            "Ekran kartı (NVENC) · 12 Mb/s ortalama, en çok 16 Mb/s (değişken) · High · P-kare tek referans · 1 B-kare (IPBPB, "
-            + "sabit; referans değil) · ağırlıklı tahmin yok · uzamsal AQ · 8x8 DCT · CABAC · her saniye anahtar kare (sahne "
-            + "değişiminde ek anahtar kare yok) · MOV · FDK AAC-LC 128 kb/s 44,1 kHz stereo",
-            Onerilen38m()),
-        new("1717504691091 videosu gibi",
-            "Ekran kartı (NVENC) · 52 Mb/s ortalama, en çok 62 Mb/s (değişken) · Main · 3 referans kare · B-kare yok · ağırlıklı "
-            + "tahmin yok · AQ yok · CABAC · 30 karede bir anahtar kare (sahne değişiminde ek anahtar kare yok) · MP4 · FDK "
-            + "AAC-LC 512 kb/s 48 kHz stereo",
-            Onerilen1717504691091()),
+        new("her-platform-yuksek", "Her platform · Yüksek kalite", GrupHerPlatform,
+            "Ekran kartı (NVENC) · sabit kalite 19, en çok 25 Mb/s · High · 2 B-kare · 2 saniyede bir anahtar kare (kapalı GOP) · "
+            + "uzamsal AQ · CABAC · MP4 · FDK AAC-LC 320 kb/s 48 kHz stereo · -14 LUFS. YouTube, Instagram, Facebook, X ve "
+            + "TikTok'un yükleme kurallarına uyar.",
+            ["Ekran kartı", "MP4", "en çok 25 Mb/s", "AAC 320"], OnerilenHerPlatform(yuksek: true)),
+        new("her-platform-dengeli", "Her platform · Dengeli", GrupHerPlatform,
+            "Ekran kartı (NVENC) · sabit kalite 23, en çok 12 Mb/s (YouTube'un 1080p60 önerisi) · High · 2 B-kare · 2 saniyede "
+            + "bir anahtar kare (kapalı GOP) · uzamsal AQ · CABAC · MP4 · FDK AAC-LC 192 kb/s 48 kHz stereo · -14 LUFS. Daha "
+            + "küçük dosya, hızlı yükleme.",
+            ["Ekran kartı", "MP4", "en çok 12 Mb/s", "AAC 192"], OnerilenHerPlatform(yuksek: false)),
+        new("capcut", "CapCut", GrupOrnek,
+            "CapCut'ın dışa aktarması gibi (1017 (2) videosu ölçüldü) · Ekran kartı (NVENC) · sabit 34,4 Mb/s (CBR) · Main · 3 "
+            + "referans kare · B-kare yok · AQ yok · CABAC · 30 karede bir anahtar kare (sahne değişiminde ek anahtar kare yok) · "
+            + "MOV · FDK AAC-LC 192 kb/s 44,1 kHz stereo",
+            ["Ekran kartı", "MOV", "34,4 Mb/s sabit", "AAC 192"], OnerilenCapCut()),
+        new("after-effects", "After Effects", GrupOrnek,
+            "After Effects'in dışa aktarması gibi (1717504691091 videosu ölçüldü) · Ekran kartı (NVENC) · 52 Mb/s ortalama, en "
+            + "çok 62 Mb/s (değişken) · Main · 3 referans kare · B-kare yok · AQ yok · CABAC · 30 karede bir anahtar kare (sahne "
+            + "değişiminde ek anahtar kare yok) · MP4 · FDK AAC-LC 512 kb/s 48 kHz stereo",
+            ["Ekran kartı", "MP4", "52 Mb/s", "AAC 512"], OnerilenAfterEffects()),
+        new("mobil", "Mobil", GrupOrnek,
+            "Telefonda kodlanmış video gibi (38m videosu ölçüldü) · Ekran kartı (NVENC) · 12 Mb/s ortalama, en çok 16 Mb/s "
+            + "(değişken) · High · P-kare tek referans · 1 B-kare (IPBPB, sabit; referans değil) · ağırlıklı tahmin yok · uzamsal "
+            + "AQ · CABAC · her saniye anahtar kare (sahne değişiminde ek anahtar kare yok) · MOV · FDK AAC-LC 128 kb/s 44,1 kHz "
+            + "stereo",
+            ["Ekran kartı", "MOV", "12 Mb/s", "AAC 128"], OnerilenMobil()),
     ];
 
     /// <summary>
-    /// "38m" örnek videosunun kodlaması (TikTok'un düzenleyicisiyle telefonda donanımla kodlanmış 1080x1920 30 fps; ölçüldü):
+    /// Her platforma uygun, ekran kartıyla (0.15.0; kullanıcının isteği: "her platforma uygun şekilde ve kaliteli",
+    /// "sağlam profesyonel"). Platformların yükleme kuralları (18 Kasım'da bakıldı): YouTube — MP4, hızlı başlatma,
+    /// H.264 High, ilerleyen tarama, 2 ardışık B-kare, kapalı GOP, CABAC, değişken bit hızı, 4:2:0, BT.709, AAC-LC
+    /// 48 kHz (1080p60 için 12 Mb/s önerir); Instagram — H.264, kapalı GOP, 4:2:0, 23–60 fps, en çok 25 Mb/s, AAC
+    /// 48 kHz; Facebook — kapalı GOP 2–5 sn, sabit kare hızı, en çok 25 Mb/s, AAC-LC 48 kHz stereo; X — H.264 High,
+    /// AAC-LC (HE-AAC değil), en çok 25 Mb/s, kapalı GOP, 4:2:0. Sabit kalite (CQ) + en yüksek bit hızı: kolay sahnede
+    /// gerektiği kadar, zor sahnede en çok 25 Mb/s (dengeli: CQ 23, en çok 12 Mb/s). NVENC p7 hq, High, seviye kaynakla
+    /// aynı (yetmezse yükselir), çok geçiş fullres, önden bakış ön ayarın, 2 B-kare (referans değil: her çözücüde
+    /// sorunsuz), uyarlamalı B-kare, 3 referans kare, uzamsal AQ 8, zamansal AQ yok, ağırlıklı tahmin yok, CABAC, NVDEC;
+    /// anahtar kare en çok 2 saniyede bir (sahne değişiminde ek anahtar kare olabilir; NVENC'te GOP hep kapalı); boyut ve
+    /// kare hızı kaynakla aynı; MP4; ses FDK AAC-LC 48 kHz stereo (320 / 192 kb/s), LUFS -14. Kodlayıcı x264'e
+    /// çevrilirse: veryslow, CRF 19 / 23 + aynı üst sınır (tampon 2 sn), High, 4 referans kare, 2 B-kare.
+    /// </summary>
+    public static ProfilAyarlari OnerilenHerPlatform(bool yuksek)
+    {
+        var a = TikTok();
+        var enCok = yuksek ? 25000 : 12000;
+        a.Video.Kap = KapBicimi.Mp4;
+        a.Video.Kodlayici = VideoKodlayici.Nvenc;
+        a.Video.Nvenc = new NvencAyarlari
+        {
+            OnAyar = "p7",
+            Ayar = "hq",
+            Profil = "high",
+            Seviye = "kaynak",
+            Mod = NvencModu.SabitKalite,
+            Cq = yuksek ? 19 : 23,
+            MaksBitHizi = enCok,
+            CokGecis = "fullres",
+            IleriBakis = null,
+            UzamsalAq = true,
+            AqGucu = 8,
+            ZamansalAq = false,
+            BKare = 2,
+            BRefModu = "disabled",
+            UyarlamaliB = true,
+            Ref = 3,
+            AgirlikliTahmin = false,
+            Kodlama = "cabac",
+            GpuCozme = true,
+        };
+
+        a.Video.X264 = new X264Ayarlari
+        {
+            OnAyar = "veryslow",
+            Ayar = string.Empty,
+            Profil = "high",
+            Seviye = "kaynak",
+            Mod = X264Modu.Crf,
+            Crf = yuksek ? 19 : 23,
+            IsParcacigi = 8,
+            Ref = 4,
+            BKare = 2,
+            VbvMaks = enCok,
+            VbvTampon = enCok * 2,
+        };
+
+        var k = a.AnahtarKare;
+        k.Birim = AralikBirimi.Saniye;
+        k.EnBuyuk = 2;
+        k.EnKucuk = null;
+        k.SahneDegisimi = null;
+        k.AcikGop = false;
+        k.IntraYenileme = false;
+
+        FdkAac128(a.Ses, 48000);
+        a.Ses.Fdk.BitHizi = yuksek ? 320 : 192;
+        return a;
+    }
+
+    /// <summary>
+    /// "1017 (2)" örnek videosunun kodlaması (kullanıcının CapCut'tan aldığı 1080x1080 60 fps, 19,6 sn; 18 Kasım'da
+    /// ölçüldü): NVENC'le kodlanmış (SPS'i kartın çıktısıyla aynı: constraint_set1, POC türü 2, kare numarası alanı 8 bit,
+    /// 3 referans kare; P-karelerin referans sayısı IDR'den sonra 1, 2, sonra 3), H.264 Main@4.2, B-kare yok, ağırlıklı
+    /// tahmin yok, CABAC, kare başına tek dilim; makroblok QP'si kare içinde yalnızca satır satır değişiyor (AQ yok), QP
+    /// 11–17; tam 30 karede bir anahtar kare (IDR; 60 fps'te yarım saniye), sahne değişiminde ek anahtar kare yok; HRD:
+    /// sabit bit hızı (cbr_flag 1) 34 375 kb/s, tampon 68 750 kb (2 sn); saniyeler 29,8–43,7 Mb/s, ortalama 34,96 Mb/s;
+    /// BT.709 sınırlı aralık; MOV (kapta Hw=1, bitrate=34375000); ses AAC-LC 44,1 kHz stereo ~209 kb/s değişken (aynı
+    /// sesle FFmpeg'in AAC kodlayıcısı 192 kb/s hedefte 202, 224'te 236 kb/s verdi: hedef 192).
+    /// Ekran kartında: p7 hq, CBR 34375 kb/s, tampon 62500 kb (Main 4.1 / 4.2'nin en büyük tamponu; örneğin 68750'si
+    /// 4.2'nin sınırını aşıyor, kart açık seviyede bunu reddeder), çok geçiş fullres, B-kare 0, referans 3 (DPB 3), AQ yok,
+    /// ağırlıklı tahmin yok, CABAC, NVDEC; 30 karede bir anahtar kare, sahne eşiği 0; boyut, kare hızı ve seviye kaynakla
+    /// aynı (yetmezse yükselir); MOV; ses FDK AAC-LC 192 kb/s 44,1 kHz stereo, LUFS -14. Kodlayıcı x264'e çevrilirse:
+    /// veryslow, Main, 2 geçiş 34375 kb/s, VBV 34375 / 62500, ref 3, B-kare 0, weightp 0, 8x8 DCT kapalı.
+    /// </summary>
+    public static ProfilAyarlari OnerilenCapCut()
+    {
+        var a = TikTok();
+        a.Video.Kodlayici = VideoKodlayici.Nvenc;
+        a.Video.Nvenc = new NvencAyarlari
+        {
+            OnAyar = "p7",
+            Ayar = "hq",
+            Profil = "main",
+            Seviye = "kaynak",
+            Mod = NvencModu.Cbr,
+            BitHizi = 34375,
+            Tampon = 62500,
+            CokGecis = "fullres",
+            IleriBakis = null,
+            UzamsalAq = false,
+            AqGucu = 8,
+            ZamansalAq = false,
+            BKare = 0,
+            BRefModu = "disabled",
+            UyarlamaliB = true,
+            Ref = 3,
+            AgirlikliTahmin = false,
+            Kodlama = "cabac",
+            GpuCozme = true,
+        };
+
+        a.Video.X264 = new X264Ayarlari
+        {
+            OnAyar = "veryslow",
+            Ayar = string.Empty,
+            Profil = "main",
+            Seviye = "kaynak",
+            Mod = X264Modu.IkiGecis,
+            BitHizi = 34375,
+            HizliIlkGecis = true,
+            IsParcacigi = 8,
+            Ref = 3,
+            BKare = 0,
+            AgirlikliP = 0,
+            Dct8x8 = false,
+            Cabac = true,
+            VbvMaks = 34375,
+            VbvTampon = 62500,
+        };
+
+        var k = a.AnahtarKare;
+        k.Birim = AralikBirimi.Kare;
+        k.EnBuyuk = 30;
+        k.EnKucuk = null;
+        k.SahneDegisimi = 0;
+        k.AcikGop = false;
+        k.IntraYenileme = false;
+
+        FdkAac128(a.Ses, 44100);
+        a.Ses.Fdk.BitHizi = 192;
+        return a;
+    }
+
+    /// <summary>
+    /// "Mobil": "38m" örnek videosunun kodlaması (TikTok'un düzenleyicisiyle telefonda donanımla kodlanmış 1080x1920 30 fps; ölçüldü):
     /// H.264 High, DPB 2 kare, P-kareler tek referansa bakar, IPBPB (her P'den sonra bir referans olmayan B-kare, hep
     /// aynı dizilir), B-karede uzamsal doğrudan tahmin, ağırlıklı tahmin yok (P ve B), 8x8 DCT, CABAC, kare başına tek
     /// dilim; makroblok QP'si kare içinde değişir (uyarlamalı niceleme, I-karede 15–30); anahtar kare her saniye (IDR),
@@ -333,7 +502,7 @@ public static class Varsayilanlar
     /// ve piramit kapalı), weightp 0, weightb 0. Anahtar kare 1 sn, sahne eşiği 0. Seviye kaynakla aynı (yetmezse
     /// yükselir). Ses TikTok varsayılanınınki (FDK AAC-LC 128 kb/s 44,1 kHz).
     /// </summary>
-    public static ProfilAyarlari Onerilen38m()
+    public static ProfilAyarlari OnerilenMobil()
     {
         var a = TikTok();
         a.Video.Kodlayici = VideoKodlayici.Nvenc;
@@ -394,7 +563,7 @@ public static class Varsayilanlar
     }
 
     /// <summary>
-    /// "1717504691091" örnek videosunun kodlaması (bilgisayarda ekran kartıyla kodlanmış 1920x1920 60 fps; ölçüldü): H.264
+    /// "After Effects": "1717504691091" örnek videosunun kodlaması (kullanıcıya göre After Effects'ten) (bilgisayarda ekran kartıyla kodlanmış 1920x1920 60 fps; ölçüldü): H.264
     /// Main, 3 referans kare, B-kare yok, ağırlıklı tahmin yok, CABAC, kare başına tek dilim; kare içinde makroblok QP'si
     /// değişmiyor (uyarlamalı niceleme yok); tam 30 karede bir anahtar kare (IDR), sahne değişiminde ek anahtar kare yok;
     /// değişken bit hızı ortalama 52,3 Mb/s, saniyeler 41,8–61,5 Mb/s; ses AAC-LC 48 kHz stereo ~509 kb/s; MP4.
@@ -406,7 +575,7 @@ public static class Varsayilanlar
     /// Anahtar kare 30 kare, sahne eşiği 0. Seviye kaynakla aynı (yetmezse yükselir: 62 Mb/s Main 4.2'nin sınırını aşar,
     /// 5.0 / 5.1 olur). Ses FDK AAC-LC 512 kb/s 48 kHz.
     /// </summary>
-    public static ProfilAyarlari Onerilen1717504691091()
+    public static ProfilAyarlari OnerilenAfterEffects()
     {
         var a = TikTok();
         a.Video.Kap = KapBicimi.Mp4;
@@ -468,8 +637,11 @@ public static class Varsayilanlar
     }
 }
 
-/// <summary>Ön ayar penceresindeki önerilen ayar: adı, ne olduğu (kısa) ve ayarları.</summary>
-public sealed record OnerilenAyar(string Ad, string Aciklama, ProfilAyarlari Ayarlar);
+/// <summary>
+/// Ön ayar penceresindeki önerilen ayar: anahtarı (Smoke / doğrulama: --profil onerilen-ANAHTAR), adı, grubu, ne olduğu
+/// (kısa), penceredeki kısa etiketleri ve ayarları.
+/// </summary>
+public sealed record OnerilenAyar(string Anahtar, string Ad, string Grup, string Aciklama, IReadOnlyList<string> Etiketler, ProfilAyarlari Ayarlar);
 
 /// <summary>Ayarların JSON biçimi (ayarlar.json ve kayıtlı ön ayarlar).</summary>
 public static class AyarDosyasi

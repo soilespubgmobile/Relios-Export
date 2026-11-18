@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Data;
 using System.Windows.Input;
 using ReliosExport.Core;
 using ReliosExport.Core.Ayarlar;
@@ -8,7 +9,9 @@ namespace ReliosExport;
 /// <summary>
 /// Önerilen ayarlar (programla gelir, yalnızca yüklenir; bkz. <see cref="Varsayilanlar.Onerilenler"/>) ve adıyla kaydedilen
 /// ayarlar: şu anki ayarları kaydet, kayıtlı olanı yükle ya da sil. Yüklenen ayar, hangi profilde kaydedildiğine
-/// bakılmadan şu anki profile uygulanır.
+/// bakılmadan şu anki profile uygulanır. İki seçenek (0.15.0, kullanıcının isteği: "açınca ön ayarlar seçeneği olsun
+/// tıklayıp görelim"): "Önerilen" (gruplu kartlar) ve "Kayıtlı ayarlarım"; tıklanan liste görünür. Açılınca kayıtlı ön
+/// ayar varsa onlar, yoksa önerilenler; kaydedince kayıtlılar.
 /// </summary>
 public partial class OnAyarPenceresi : Window
 {
@@ -24,10 +27,27 @@ public partial class OnAyarPenceresi : Window
         _simdiki = simdiki;
         Aciklama.Text = $"Yüklenen ayar şu anki profile ({profil.DisplayName}) uygulanır. Önerilen ayarlar programla gelir; "
                         + "kayıtlı ayarlar listesinde yalnızca buradan kaydedilenler durur.";
-        // Programın kendi listesi: ayar dosyasına yazılmaz, kullanıcının ön ayarlarına karışmaz.
-        OnerilenListe.ItemsSource = Varsayilanlar.Onerilenler();
+        // Programın kendi listesi: ayar dosyasına yazılmaz, kullanıcının ön ayarlarına karışmaz. Gruplu (her platform /
+        // örnek dosyalardan), sırası listedeki gibi.
+        var onerilenler = Varsayilanlar.Onerilenler();
+        var gorunum = new ListCollectionView(onerilenler.ToList());
+        gorunum.GroupDescriptions.Add(new PropertyGroupDescription(nameof(OnerilenAyar.Grup)));
+        OnerilenListe.ItemsSource = gorunum;
+        SekmeOnerilen.Content = $"Önerilen ({onerilenler.Count})";
         Yenile();
+        (_settings.OnAyarlar.Count > 0 ? SekmeKayitli : SekmeOnerilen).IsChecked = true;
         Loaded += (_, _) => AdKutusu.Focus();
+    }
+
+    /// <summary>Hangi liste görünüyor: önerilenler mi (yoksa kayıtlılar).</summary>
+    internal bool OnerilenGorunuyor => OnerilenPanel.Visibility == Visibility.Visible;
+
+    private void OnSekme(object sender, RoutedEventArgs e)
+    {
+        // XAML'de hiçbiri seçili değil: ilk seçim kurucuda, paneller kurulduktan sonra.
+        var onerilen = SekmeOnerilen.IsChecked == true;
+        OnerilenPanel.Visibility = onerilen ? Visibility.Visible : Visibility.Collapsed;
+        KayitliPanel.Visibility = onerilen ? Visibility.Collapsed : Visibility.Visible;
     }
 
     /// <summary>"Yükle" ile kapanınca uygulanacak ayarlar (kopya).</summary>
@@ -49,6 +69,7 @@ public partial class OnAyarPenceresi : Window
             .ToList();
         Liste.ItemsSource = liste;
         BosListe.Visibility = liste.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        SekmeKayitli.Content = $"Kayıtlı ayarlarım ({liste.Count})";
     }
 
     private void OnAdKutusuKeyDown(object sender, KeyEventArgs e)
@@ -90,6 +111,7 @@ public partial class OnAyarPenceresi : Window
         AdKutusu.Clear();
         Bilgi.Text = $"\"{ad}\" kaydedildi.";
         Yenile();
+        SekmeKayitli.IsChecked = true;
     }
 
     private void OnYukle(object sender, RoutedEventArgs e)

@@ -1034,7 +1034,21 @@ internal static class ArayuzTaramasi
                 return;
             }
 
+            var onerilenSayisi = Varsayilanlar.Onerilenler().Count;
+            Esit2("Seçenekler: Önerilen / Kayıtlı ayarlarım (sayılarıyla)", $"Önerilen ({onerilenSayisi}) | Kayıtlı ayarlarım (0)",
+                $"{p.SekmeOnerilen.Content} | {p.SekmeKayitli.Content}");
+            Esit2("Açılınca (kayıtlı ön ayar yok): Önerilen seçili, önerilenler görünüyor", true, p.OnerilenGorunuyor);
+            Esit2("Açılınca: kayıtlı liste gizli", Visibility.Collapsed, p.KayitliPanel.Visibility);
+            Sec(p.SekmeKayitli);
+            await Bosta(w);
+            Esit2("Kayıtlı ayarlarım tıklanınca: kayıtlı liste görünüyor", Visibility.Visible, p.KayitliPanel.Visibility);
+            Esit2("Kayıtlı ayarlarım tıklanınca: önerilenler gizli", false, p.OnerilenGorunuyor);
             Esit2("Liste boşken \"Henüz kayıtlı ön ayar yok.\" görünüyor", Visibility.Visible, p.BosListe.Visibility);
+            Durumlu("Boş liste yazısı ekranda (görünür)", p.BosListe.IsVisible, "görünür", "görünmüyor");
+            Sec(p.SekmeOnerilen);
+            await Bosta(w);
+            Esit2("Önerilen tıklanınca: önerilenler yeniden görünüyor", true, p.OnerilenGorunuyor);
+            Esit2("Önerilen tıklanınca: kayıtlı liste gizli", Visibility.Collapsed, p.KayitliPanel.Visibility);
             var kaydet = Dugme(p, "Kaydet");
             p.AdKutusu.Text = "   ";
             Bas(kaydet);
@@ -1048,6 +1062,8 @@ internal static class ArayuzTaramasi
             Esit2("Kaydet: listeye eklendi", OnAyarAdi, string.Join(", ", dosya.OnAyarlar.Select(o => o.Ad)));
             Esit2("Kaydet: kaydedilen ayar şu anki ayar (gecikme 111)", 111, dosya.OnAyarlar.FirstOrDefault()?.Ayarlar.Ses.Gecikme);
             Esit2("Kaydet: ad kutusu temizlendi", string.Empty, p.AdKutusu.Text);
+            Esit2("Kaydet: Kayıtlı ayarlarım seçildi (yeni ön ayar görünüyor)", false, p.OnerilenGorunuyor);
+            Esit2("Kaydet: seçenek yazısı sayıyı gösteriyor", "Kayıtlı ayarlarım (1)", p.SekmeKayitli.Content);
             Esit2("Kaydet: listede bir satır", 1, Gorsel(p.Liste).OfType<Button>().Count(b => b.Content as string == "Yükle"));
             await Task.Delay(300);
             Durumlu("Kaydet: ayar dosyasına yazıldı", File.ReadAllText(Path.Combine(AppPaths.VeriKlasoru, "ayarlar.json")).Contains(OnAyarAdi, StringComparison.Ordinal),
@@ -1065,6 +1081,7 @@ internal static class ArayuzTaramasi
                 return;
             }
 
+            Esit2("Açılınca (kayıtlı ön ayar var): Kayıtlı ayarlarım seçili", false, p.OnerilenGorunuyor);
             kaydet = Dugme(p, "Kaydet");
             p.AdKutusu.Text = OnAyarAdi.ToUpperInvariant();
             var soru = await DiyalogAc<ConfirmDialog>(w, kaydet);
@@ -1156,9 +1173,17 @@ internal static class ArayuzTaramasi
                     return;
                 }
 
+                Sec(p.SekmeOnerilen);
+                await Bosta(w);
                 var dugmeler = Gorsel(p.OnerilenListe).OfType<Button>().ToList();
                 if (i == 0)
                 {
+                    var basliklar = Gorsel(p.OnerilenListe).OfType<TextBlock>().Select(t => t.Text)
+                        .Where(t => t is Varsayilanlar.GrupHerPlatform or Varsayilanlar.GrupOrnek).ToList();
+                    Esit2("Önerilen ayarlar: grup başlıkları sırayla", $"{Varsayilanlar.GrupHerPlatform} | {Varsayilanlar.GrupOrnek}",
+                        string.Join(" | ", basliklar));
+                    Esit2("Önerilen ayarlar: her kartta etiketler", onerilenler.Sum(o => o.Etiketler.Count),
+                        Gorsel(p.OnerilenListe).OfType<TextBlock>().Count(t => onerilenler.Any(o => o.Etiketler.Contains(t.Text))));
                     Esit2("Önerilen ayarlar: her birinin Yükle düğmesi", onerilenler.Count, dugmeler.Count(b => b.Content as string == "Yükle"));
                     Esit2("Önerilen ayarlar: Sil düğmesi yok", 0, dugmeler.Count(b => b.Content as string == "Sil"));
                     Esit2("Önerilen ayarlar: adları", string.Join(" | ", onerilenler.Select(o => o.Ad)),
@@ -1417,6 +1442,19 @@ internal static class ArayuzTaramasi
 
         e.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, src, 0, k) { RoutedEvent = Keyboard.PreviewKeyDownEvent });
         return true;
+    }
+
+    /// <summary>Seçenek düğmesini (RadioButton) arayüzün seçme yolundan seçer (ön ayar penceresinin seçenekleri).</summary>
+    private static void Sec(RadioButton r)
+    {
+        if (UIElementAutomationPeer.CreatePeerForElement(r)?.GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider sp)
+        {
+            sp.Select();
+        }
+        else
+        {
+            r.IsChecked = true;
+        }
     }
 
     /// <summary>Düğmeye gerçek tıklama yolundan basar (Vazgeç / Tamam gibi pencere düğmeleri dahil); sıraya konur.</summary>

@@ -1990,9 +1990,16 @@ internal static class BirimKontrol
         a.Video.X264.Mod = X264Modu.Crf;
         a.Video.X264.BKare = 2;
         a.Video.X264.Ref = 2;
+        // Burada yalnızca DPB denetlenir: TikTok varsayılanının üst sınırı (0.14.0: 6000 kb/s, tampon 12000 kb) kaldırılır.
+        a.Video.X264.VbvMaks = null;
+        a.Video.X264.VbvTampon = null;
         Kontrol("Baseline + 2 B-kare, CIF 1.1: B-kare yok, seviye 1.1 yeter", "1.1", ArgsBuilder.X264Seviyesi(a, cif));
         a.Video.X264.Profil = "main";
         Kontrol("Main + 2 B-kare, CIF 1.1: piramit 4 kare, seviye 1.2", "1.2", ArgsBuilder.X264Seviyesi(a, cif));
+        // Üst sınırla: tampon 12000 kb 3.0'ın 10000'ine sığmaz (x264: Main'de seviye tamponu × 1) → 3.1.
+        a.Video.X264.VbvMaks = 6000;
+        a.Video.X264.VbvTampon = 12000;
+        Kontrol("Main + en yüksek 6000 / tampon 12000, CIF: tampon 3.0'a sığmaz → 3.1", "3.1", ArgsBuilder.X264Seviyesi(a, cif));
     }
 
     /// <summary>
@@ -2042,11 +2049,19 @@ internal static class BirimKontrol
     private static void OnerilenAyarlar()
     {
         Console.WriteLine();
-        Console.WriteLine("--- Önerilen ayarlar (38m ve 1717504691091 videoları gibi)");
+        Console.WriteLine("--- Önerilen ayarlar (her platform ×2; örnek dosyalardan: CapCut, After Effects, Mobil)");
         var liste = Varsayilanlar.Onerilenler();
-        Kontrol("Önerilen ayar sayısı", "2", liste.Count.ToString());
-        Kontrol("Adları", "38m videosu gibi | 1717504691091 videosu gibi", string.Join(" | ", liste.Select(o => o.Ad)));
-        Kontrol("Başka program adı geçmiyor", "yok",
+        Kontrol("Önerilen ayar sayısı", "5", liste.Count.ToString());
+        Kontrol("Adları (sırayla)", "Her platform · Yüksek kalite | Her platform · Dengeli | CapCut | After Effects | Mobil",
+            string.Join(" | ", liste.Select(o => o.Ad)));
+        Kontrol("Anahtarları", "her-platform-yuksek | her-platform-dengeli | capcut | after-effects | mobil",
+            string.Join(" | ", liste.Select(o => o.Anahtar)));
+        Kontrol("Grupları", "HER PLATFORM | HER PLATFORM | ÖRNEK DOSYALARDAN | ÖRNEK DOSYALARDAN | ÖRNEK DOSYALARDAN",
+            string.Join(" | ", liste.Select(o => o.Grup)));
+        Kontrol("Her birinin etiketleri (4) ve ilki \"Ekran kartı\"", "4 4 4 4 4 / Ekran kartı",
+            string.Join(' ', liste.Select(o => o.Etiketler.Count)) + " / " + string.Join(",", liste.Select(o => o.Etiketler[0]).Distinct()));
+        Kontrol("Hepsi ekran kartıyla (NVENC)", "Nvenc", string.Join(",", liste.Select(o => o.Ayarlar.Video.Kodlayici).Distinct()));
+        Kontrol("Başka program adı geçmiyor (CapCut ve After Effects kullanıcının isteğiyle)", "yok",
             liste.Any(o => (o.Ad + o.Aciklama).Contains("ssstik", StringComparison.OrdinalIgnoreCase)
                            || (o.Ad + o.Aciklama).Contains("MainConcept", StringComparison.OrdinalIgnoreCase)
                            || (o.Ad + o.Aciklama).Contains("XviD", StringComparison.OrdinalIgnoreCase)) ? "var" : "yok");
@@ -2069,8 +2084,10 @@ internal static class BirimKontrol
             return (" " + string.Join(' ', plan.Gecisler[0]) + " ", " " + string.Join(' ', plan.Gecisler[^1]) + " ");
         }
 
-        // 0.13.1: ekran kartıyla (NVENC). Komutlar kullanıcının kartında denenen ayarlarla aynı.
-        var nv38 = liste[0].Ayarlar;
+        static ProfilAyarlari Bul(string anahtar) => Varsayilanlar.Onerilenler().First(o => o.Anahtar == anahtar).Ayarlar;
+
+        // 0.13.1: ekran kartıyla (NVENC). Komutlar kullanıcının kartında denenen ayarlarla aynı. "38m" = Mobil (0.15.0).
+        var nv38 = Bul("mobil");
         Kontrol("38m: kodlayıcı ekran kartı", "Nvenc", nv38.Video.Kodlayici.ToString());
         var (ilk, son) = Komut(nv38, Kaynak(1080, 1920, 30, "High", 41));
         Kontrol("38m: NVENC tek geçiş (komut 1)", "True", (ilk == son).ToString());
@@ -2090,7 +2107,7 @@ internal static class BirimKontrol
             + Regex(Komut(nv38, Kaynak(1080, 1920, 60, "High", 42)).Son, @" -level:v (\S+) "));
 
         // Kodlayıcı x264'e çevrilirse aynı yapı x264'le (ekran kartı olmayan bilgisayar için).
-        var x38 = Varsayilanlar.Onerilenler()[0].Ayarlar;
+        var x38 = Bul("mobil");
         x38.Video.Kodlayici = VideoKodlayici.X264;
         (ilk, son) = Komut(x38, Kaynak(1080, 1920, 30, "High", 41));
         Iceriyor("38m (x264'e çevrilince): veryslow High, seviye kaynağın (4.1)", son, " -c:v libx264 -preset veryslow -profile:v high -level:v 4.1 -b:v 12000k -pass 2 ");
@@ -2103,7 +2120,7 @@ internal static class BirimKontrol
         Icermiyor("38m (x264): açık GOP yok", son, "open-gop");
         Icermiyor("38m (x264): ekran kartıyla çözme yok", son, "-hwaccel");
 
-        var nv17 = liste[1].Ayarlar;
+        var nv17 = Bul("after-effects");
         Kontrol("1717504691091: kodlayıcı ekran kartı", "Nvenc", nv17.Video.Kodlayici.ToString());
         (ilk, son) = Komut(nv17, Kaynak(1920, 1920, 60, "Main", 51));
         Kontrol("1717504691091: NVENC tek geçiş (komut 1)", "True", (ilk == son).ToString());
@@ -2123,7 +2140,7 @@ internal static class BirimKontrol
         Kontrol("1717504691091: kaynak 30 fps'te de 30 kare", "30",
             Regex(Komut(nv17, Kaynak(1080, 1920, 30, "Main", 42)).Son, @" -g (\d+) "));
 
-        var x17 = Varsayilanlar.Onerilenler()[1].Ayarlar;
+        var x17 = Bul("after-effects");
         x17.Video.Kodlayici = VideoKodlayici.X264;
         (ilk, son) = Komut(x17, Kaynak(1920, 1920, 60, "Main", 51));
         Iceriyor("1717504691091 (x264'e çevrilince): veryslow Main, seviye kaynağın (5.1)", son, " -c:v libx264 -preset veryslow -profile:v main -level:v 5.1 -b:v 52000k -pass 2 ");
@@ -2133,6 +2150,74 @@ internal static class BirimKontrol
         Iceriyor("1717504691091 (x264): VBV 62000 / 62000", son, ":vbv-maxrate=62000:vbv-bufsize=62000:");
         Kontrol("1717504691091 (x264): kaynak 30 fps'te de 30 kare", "30",
             Regex(Komut(x17, Kaynak(1080, 1920, 30, "Main", 42)).Son, @":keyint=(\d+):"));
+        // CapCut ("1017 (2)" örneği: NVENC CBR 34375, Main, 3 referans, B-kare yok, AQ yok, 30 karede IDR, MOV, AAC 192 44,1k).
+        var cc = Bul("capcut");
+        (ilk, son) = Komut(cc, Kaynak(1080, 1080, 60, "Main", 42));
+        Kontrol("CapCut: NVENC tek geçiş", "True", (ilk == son).ToString());
+        Iceriyor("CapCut: NVDEC", son, " -hwaccel cuda ");
+        Iceriyor("CapCut: NVENC p7 hq Main, seviye 4.2 (örnekteki gibi)", son, " -c:v h264_nvenc -preset p7 -tune hq -profile:v main -level:v 4.2 ");
+        Iceriyor("CapCut: CBR 34375, tampon 62500 (Main 4.2'nin en büyüğü), çok geçiş, AQ yok", son,
+            " -rc cbr -b:v 34375k -bufsize 62500k -multipass fullres -spatial-aq 0 -temporal-aq 0 ");
+        Iceriyor("CapCut: B-kare yok, 3 referans, DPB 3", son, " -bf 0 -refs 3 -dpb_size 3 ");
+        Iceriyor("CapCut: CABAC, 30 karede anahtar kare, sahne değişiminde ek anahtar kare yok", son, " -coder cabac -g 30 -no-scenecut 1 ");
+        Icermiyor("CapCut: CBR'de en yüksek bit hızı yok (kart yok sayar)", son, "-maxrate");
+        Icermiyor("CapCut: AQ gücü yok (AQ kapalı)", son, "-aq-strength");
+        Icermiyor("CapCut: B-kare yokken -b_adapt / -b_ref_mode yok", son, "-b_");
+        Icermiyor("CapCut: önden bakış kartın ön ayarınınki", son, "-rc-lookahead");
+        Iceriyor("CapCut: ses FDK AAC-LC 192 kb/s 44,1 kHz stereo", son, " -c:a libfdk_aac -profile:a aac_low -b:a 192k -ar 44100 -ac 2 ");
+        Kontrol("CapCut: kap MOV", ".mov", cc.Uzanti);
+        Iceriyor("CapCut: kaynak 1080x1920 30 fps Main@4.0: 34,4 Mb/s 4.0'ı aşar, seviye 4.1",
+            Komut(cc, Kaynak(1080, 1920, 30, "Main", 40)).Son, " -level:v 4.1 ");
+        Iceriyor("CapCut: kaynak 1080x1920 60 fps High@4.2: profil yine Main, seviye 4.2",
+            Komut(cc, Kaynak(1080, 1920, 60, "High", 42)).Son, " -profile:v main -level:v 4.2 ");
+        Kontrol("CapCut: tahmini boyut (60 sn, sabit 34375 + AAC 192)", "tahmini 247 MB",
+            BoyutTahmini.Hesapla(cc, Kaynak(1080, 1920, 60, "High", 42) with { DurationSeconds = 60 },
+                ArgsBuilder.SesSec(cc.Ses, Kaynak(1080, 1920, 60, "High", 42), "KAYNAK.mp4"))?.Metin ?? "yok");
+        var ccx = Bul("capcut");
+        ccx.Video.Kodlayici = VideoKodlayici.X264;
+        (ilk, son) = Komut(ccx, Kaynak(1080, 1080, 60, "Main", 42));
+        Iceriyor("CapCut (x264'e çevrilince): veryslow Main 4.2, 2 geçiş 34375", son, " -c:v libx264 -preset veryslow -profile:v main -level:v 4.2 -b:v 34375k -pass 2 ");
+        Iceriyor("CapCut (x264): 1. geçiş hızlı", ilk, " -pass 1 -passlogfile GECIS -fastfirstpass 1 ");
+        Iceriyor("CapCut (x264): referans 3", son, "-x264-params threads=8:ref=3:");
+        Iceriyor("CapCut (x264): 8x8 DCT kapalı (Main)", son, ":8x8dct=0:");
+        Iceriyor("CapCut (x264): B-kare yok, ağırlıklı P yok, anahtar kare 30, sahne eşiği 0", son, ":bframes=0:weightp=0:keyint=30:scenecut=0:");
+        Iceriyor("CapCut (x264): VBV 34375 / 62500", son, ":vbv-maxrate=34375:vbv-bufsize=62500");
+
+        // Her platform: sabit kalite + en yüksek bit hızı (25 / 12 Mb/s), High, 2 B-kare (referans değil), 2 sn'de bir
+        // anahtar kare, uzamsal AQ, MP4, AAC-LC 48 kHz (320 / 192 kb/s).
+        foreach (var (anahtar, cq, enCok, sesKbps) in new[] { ("her-platform-yuksek", 19, 25000, 320), ("her-platform-dengeli", 23, 12000, 192) })
+        {
+            var hp = Bul(anahtar);
+            var hpAd = liste.First(o => o.Anahtar == anahtar).Ad;
+            (ilk, son) = Komut(hp, Kaynak(1080, 1920, 60, "High", 42));
+            Kontrol($"{hpAd}: NVENC tek geçiş", "True", (ilk == son).ToString());
+            Iceriyor($"{hpAd}: NVDEC", son, " -hwaccel cuda ");
+            Iceriyor($"{hpAd}: NVENC p7 hq High, seviye 4.2", son, " -c:v h264_nvenc -preset p7 -tune hq -profile:v high -level:v 4.2 ");
+            Iceriyor($"{hpAd}: sabit kalite {cq}, en çok {enCok} kb/s, çok geçiş, uzamsal AQ 8", son,
+                $" -rc vbr -cq {cq} -b:v 0 -maxrate {enCok}k -multipass fullres -spatial-aq 1 -aq-strength 8 -temporal-aq 0 ");
+            Icermiyor($"{hpAd}: sabit kalitede tampon yok (ffmpeg yok sayar)", son, "-bufsize");
+            Iceriyor($"{hpAd}: 2 B-kare referans değil, uyarlamalı B-kare açık, 3 referans, DPB 3", son, " -bf 2 -b_ref_mode disabled -refs 3 -dpb_size 3 ");
+            Icermiyor($"{hpAd}: uyarlamalı B-kare açık (-b_adapt 0 yok)", son, "-b_adapt");
+            Iceriyor($"{hpAd}: CABAC, 2 sn'de bir anahtar kare (60 fps: 120)", son, " -coder cabac -g 120 ");
+            Icermiyor($"{hpAd}: sahne değişiminde ek anahtar kare olabilir", son, "-no-scenecut");
+            Icermiyor($"{hpAd}: ağırlıklı tahmin yok", son, "-weighted_pred");
+            Iceriyor($"{hpAd}: ses FDK AAC-LC {sesKbps} kb/s 48 kHz stereo", son, $" -c:a libfdk_aac -profile:a aac_low -b:a {sesKbps}k -ar 48000 -ac 2 ");
+            Iceriyor($"{hpAd}: MP4 hızlı başlatma", son, " -movflags +faststart ");
+            Kontrol($"{hpAd}: kap MP4", ".mp4", hp.Uzanti);
+            Kontrol($"{hpAd}: kaynak 30 fps'te 60 kare (2 sn)", "60", Regex(Komut(hp, Kaynak(1080, 1920, 30, "High", 40)).Son, @" -g (\d+) "));
+            Kontrol($"{hpAd}: tahmini boyut \"en çok\" (sabit kalite + üst sınır)", "True",
+                (BoyutTahmini.Hesapla(hp, Kaynak(1080, 1920, 60, "High", 42), ArgsBuilder.SesSec(hp.Ses, Kaynak(1080, 1920, 60, "High", 42), "KAYNAK.mp4"))?.Tur
+                 == TahminTuru.EnCok).ToString());
+            var hx = Bul(anahtar);
+            hx.Video.Kodlayici = VideoKodlayici.X264;
+            (ilk, son) = Komut(hx, Kaynak(1080, 1920, 60, "High", 42));
+            Iceriyor($"{hpAd} (x264'e çevrilince): veryslow High 4.2", son, " -c:v libx264 -preset veryslow -profile:v high -level:v 4.2 ");
+            Iceriyor($"{hpAd} (x264): referans 4", son, "-x264-params threads=8:ref=4:");
+            Iceriyor($"{hpAd} (x264): 2 B-kare, anahtar kare 120", son, ":bframes=2:");
+            Iceriyor($"{hpAd} (x264): anahtar kare 2 sn (120)", son, ":keyint=120:");
+            Iceriyor($"{hpAd} (x264): CRF {cq} + VBV {enCok} / {enCok * 2}", son, $":crf={cq}:vbv-maxrate={enCok}:vbv-bufsize={enCok * 2}");
+        }
+
         foreach (var o in liste)
         {
             Kontrol($"{o.Ad}: eşitleme açık -14 LUFS, yalnızca kısık ses yükseltilir, sınırlayıcı -1 dB", "True -14 YalnizcaYukselt True -1",

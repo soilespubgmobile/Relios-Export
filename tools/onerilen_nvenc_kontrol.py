@@ -1,9 +1,10 @@
-"""Önerilen ayarların (ekran kartı, NVENC) kullanıcının bilgisayarında üretilen çıktısını kaynağıyla ve örnek videonun
-ölçülen yapısıyla karşılaştırır: kap, görüntü (boyut, kare hızı / sayısı, süre), H.264 başlıkları (profil, DPB, P-karenin
-referans sayısı, CABAC, 8x8, ağırlıklı tahmin, dilim, B-kare düzeni, IDR aralığı, HRD, seviye sınırları), bit hızı (VBV
-benzetimi), ses (AAC-LC, hız, kanal, bit hızı, dil, süre, -14 LUFS, gerçek tepe <= -1 dBTP).
+"""Önerilen ayarların (ekran kartı, NVENC) kullanıcının bilgisayarında üretilen çıktısını kaynağıyla ve ayarın beklenen
+yapısıyla karşılaştırır: kap, görüntü (boyut, kare hızı / sayısı, süre), H.264 başlıkları (profil, DPB, P-karenin referans
+sayısı, CABAC, 8x8, ağırlıklı tahmin, dilim, B-kare düzeni, IDR aralığı, HRD, seviye sınırları), bit hızı (VBV benzetimi),
+ses (AAC-LC, hız, kanal, bit hızı, dil, süre, -14 LUFS, gerçek tepe <= -1 dBTP).
 
-Kullanım: python3 -I tools/onerilen_nvenc_kontrol.py <kaynak> <çıktı> --onerilen 38m|1717
+Kullanım: python3 -I tools/onerilen_nvenc_kontrol.py <kaynak> <çıktı> --onerilen <anahtar>
+Anahtarlar: mobil (eski 38m), after-effects (eski 1717), capcut, her-platform-yuksek, her-platform-dengeli.
 GitHub'da ekran kartı yok: bu denetim kullanıcının bilgisayarındaki çıktılar içindir (0.13.1'de 9 çıktı, 0 fark).
 """
 import json, math, subprocess, sys
@@ -11,12 +12,23 @@ from collections import Counter
 
 kaynak, cikti = sys.argv[1], sys.argv[2]
 ek = dict(zip(sys.argv[3::2], sys.argv[4::2]))
-ON = {
-    "38m": dict(profil=100, ref=2, l0=1, dct8=1, b=1, gop_sn=1.0, gop_kare=None, hedef=12000, maks=16000, tampon=16000,
-                ses_hiz=44100, ses_kbps=128, kap="mov"),
-    "1717": dict(profil=77, ref=3, l0=3, dct8=0, b=0, gop_sn=None, gop_kare=30, hedef=52000, maks=62000, tampon=62000,
-                 ses_hiz=48000, ses_kbps=512, kap="mp4"),
-}[ek["--onerilen"]]
+# kip: vbr (hedef / en yüksek / tampon), cbr (sabit bit hızı = en yüksek, tampon), cq (sabit kalite, en yüksek; tamponu
+# kart seçer, HRD'den okunur). l0 None: P-kare en çok ref kadar referansa bakar. sahne: kartın sahne değişimi IDR'leri
+# açık (IDR aralıkları en çok gop). uyarlamali: B-kare sayısını kart seçer (oran yalnızca bilgi).
+ONLER = {
+    "mobil": dict(kip="vbr", profil=100, ref=2, l0=1, dct8=1, b=1, uyarlamali=False, gop_sn=1.0, gop_kare=None, sahne=False,
+                  hedef=12000, maks=16000, tampon=16000, ses_hiz=44100, ses_kbps=128, kap="mov"),
+    "after-effects": dict(kip="vbr", profil=77, ref=3, l0=3, dct8=0, b=0, uyarlamali=False, gop_sn=None, gop_kare=30,
+                          sahne=False, hedef=52000, maks=62000, tampon=62000, ses_hiz=48000, ses_kbps=512, kap="mp4"),
+    "capcut": dict(kip="cbr", profil=77, ref=3, l0=3, dct8=0, b=0, uyarlamali=False, gop_sn=None, gop_kare=30, sahne=False,
+                   hedef=34375, maks=34375, tampon=62500, ses_hiz=44100, ses_kbps=192, kap="mov"),
+    "her-platform-yuksek": dict(kip="cq", profil=100, ref=3, l0=None, dct8=1, b=2, uyarlamali=True, gop_sn=2.0, gop_kare=None,
+                                sahne=True, hedef=None, maks=25000, tampon=None, ses_hiz=48000, ses_kbps=320, kap="mp4"),
+    "her-platform-dengeli": dict(kip="cq", profil=100, ref=3, l0=None, dct8=1, b=2, uyarlamali=True, gop_sn=2.0, gop_kare=None,
+                                 sahne=True, hedef=None, maks=12000, tampon=None, ses_hiz=48000, ses_kbps=192, kap="mp4"),
+}
+ADLAR = {"38m": "mobil", "1717": "after-effects", "1717504691091": "after-effects"}
+ON = ONLER[ADLAR.get(ek["--onerilen"], ek["--onerilen"])]
 sat = []
 
 
@@ -106,10 +118,15 @@ der = json.loads(calistir([sys.executable, "-I", __file__.replace("onerilen_nven
 sps, pps = der["sps"], der["pps"]
 chk("Profil", ON["profil"], sps["profile_idc"], sps["profile_idc"] == ON["profil"])
 chk("En çok referans kare (DPB)", ON["ref"], sps["max_num_ref_frames"], sps["max_num_ref_frames"] == ON["ref"])
-chk("P-karenin referans sayısı", ON["l0"], pps["num_ref_idx_l0_default_active_minus1"] + 1, pps["num_ref_idx_l0_default_active_minus1"] + 1 == ON["l0"])
+l0 = pps["num_ref_idx_l0_default_active_minus1"] + 1
+if ON["l0"] is not None:
+    chk("P-karenin referans sayısı", ON["l0"], l0, l0 == ON["l0"])
+else:
+    chk("P-karenin referans sayısı (en çok ref)", f"<= {ON['ref']}", l0, l0 <= ON["ref"])
+l0_ust = ON["l0"] if ON["l0"] is not None else ON["ref"]
 p_over = der["dilim_alanlari"].get("P", {}).get("num_ref_idx_l0_active_minus1", {})
-fazla = [int(x) + 1 for x in p_over if x != "-" and int(x) + 1 > ON["l0"]]
-chk("Hiçbir P-kare fazlasına bakmıyor", f"<= {ON['l0']}", fazla or "yok", not fazla)
+fazla = [int(x) + 1 for x in p_over if x != "-" and int(x) + 1 > l0_ust]
+chk("Hiçbir P-kare fazlasına bakmıyor", f"<= {l0_ust}", fazla or "yok", not fazla)
 chk("CABAC", 1, pps["entropy_coding_mode_flag"], pps["entropy_coding_mode_flag"] == 1)
 chk("8x8 dönüşüm", ON["dct8"], pps.get("transform_8x8_mode_flag", 0), pps.get("transform_8x8_mode_flag", 0) == ON["dct8"])
 chk("Ağırlıklı tahmin yok", "0/0", f"{pps['weighted_pred_flag']}/{pps['weighted_bipred_idc']}", pps["weighted_pred_flag"] == 0 and pps["weighted_bipred_idc"] == 0)
@@ -122,22 +139,43 @@ if ON["b"] == 0:
 else:
     b_ref = der["dilim_alanlari"].get("B", {}).get("_ref_idc", {})
     chk("B-kareler referans değil", "{0}", b_ref, set(b_ref) <= {"0"})
-    bb = "BnBn" in desen
-    chk("Arka arkaya en çok 1 B-kare", "PBPB", "BB var" if bb else "yok", not bb)
+    fazla_b = "Bn" * (ON["b"] + 1) in desen
+    chk(f"Arka arkaya en çok {ON['b']} B-kare", "P" + "B" * ON["b"] + "P", f"{ON['b'] + 1} B var" if fazla_b else "yok", not fazla_b)
     oran = tur.get("B", 0) / max(1, len(cp) - tur.get("IDR", 0))
     bilgi("B-kare oranı (IDR dışı karelere)", f"{oran:.2f}")
-    chk("B-kare oranı (~0,5)", "0,40-0,55", f"{oran:.2f}", 0.40 <= oran <= 0.55)
+    if ON["uyarlamali"]:
+        # Kart B-kare sayısını içeriğe göre seçer (hızlı yerde az); en çok b / (b + 1).
+        ust = ON["b"] / (ON["b"] + 1) + 0.01
+        chk("B-kare oranı (uyarlamalı, en çok b / (b + 1))", f"<= {ust:.2f}", f"{oran:.2f}", oran <= ust)
+    else:
+        alt, ust = ON["b"] / (ON["b"] + 1) - 0.10, ON["b"] / (ON["b"] + 1) + 0.05
+        chk(f"B-kare oranı (~{ON['b'] / (ON['b'] + 1):.2f})", f"{alt:.2f}-{ust:.2f}", f"{oran:.2f}", alt <= oran <= ust)
 gop = ON["gop_kare"] or round(fps * ON["gop_sn"])
 ara = der["idr_araliklari"]
-chk("IDR aralığı", gop, ara, set(int(x) for x in ara) <= {gop} and len(ara) >= 1 or (len(cp) <= gop and not ara))
-chk("IDR dışında I-kare yok (sahne değişimi kapalı)", 0, len(der["idr_olmayan_I"]), not der["idr_olmayan_I"])
-# HRD
+if ON["sahne"]:
+    # Sahne değişiminde kart erken IDR koyar: aralıklar en çok gop.
+    ok = all(int(x) <= gop for x in ara) and (len(ara) >= 1 or len(cp) <= gop)
+    chk("IDR aralığı (en çok)", f"<= {gop}", ara, ok)
+    bilgi("IDR dışındaki I-kareler", len(der["idr_olmayan_I"]))
+else:
+    chk("IDR aralığı", gop, ara, set(int(x) for x in ara) <= {gop} and len(ara) >= 1 or (len(cp) <= gop and not ara))
+    chk("IDR dışında I-kare yok (sahne değişimi kapalı)", 0, len(der["idr_olmayan_I"]), not der["idr_olmayan_I"])
+# HRD (sabit kalitede tamponu kart seçer: denetimler HRD'nin tamponuyla)
+maks, tampon = ON["maks"], ON["tampon"]
 if sps.get("nal_hrd_parameters_present_flag"):
     br = (sps["bit_rate_value_minus1[0]"] + 1) * 2 ** (6 + sps["bit_rate_scale"]) / 1000
     cpb = (sps["cpb_size_value_minus1[0]"] + 1) * 2 ** (4 + sps["cpb_size_scale"]) / 1000
     chk("HRD bit hızı = en yüksek", ON["maks"], br, abs(br - ON["maks"]) < 1)
-    chk("HRD tampon", ON["tampon"], cpb, abs(cpb - ON["tampon"]) < 1)
-    chk("HRD değişken bit hızı (cbr_flag 0)", 0, sps["cbr_flag[0]"], sps["cbr_flag[0]"] == 0)
+    if ON["tampon"] is not None:
+        chk("HRD tampon", ON["tampon"], cpb, abs(cpb - ON["tampon"]) < 1)
+    else:
+        bilgi("HRD tampon (kartın seçtiği)", f"{cpb:.0f}")
+        tampon = cpb
+    cbr = 1 if ON["kip"] == "cbr" else 0
+    chk(f"HRD {'sabit' if cbr else 'değişken'} bit hızı (cbr_flag {cbr})", cbr, sps["cbr_flag[0]"], sps["cbr_flag[0]"] == cbr)
+elif ON["tampon"] is None:
+    chk("HRD var (sabit kalitede tampon ondan okunur)", "var", "yok", False)
+    tampon = maks
 # seviye sınırları
 L = {9: (1485, 99, 396, 64, 175), 10: (1485, 99, 396, 64, 175), 11: (3000, 396, 900, 192, 500), 12: (6000, 396, 2376, 384, 1000),
      13: (11880, 396, 2376, 768, 2000), 20: (11880, 396, 2376, 2000, 2000), 21: (19800, 792, 4752, 4000, 4000),
@@ -154,8 +192,8 @@ sorun = []
 if fs * fps > mmbps * 1.0001: sorun.append(f"MB/s {fs*fps:.0f}>{mmbps}")
 if fs > mfs or mbw > math.sqrt(mfs * 8) or mbh > math.sqrt(mfs * 8): sorun.append("kare boyutu")
 if min(16, mdpb // fs) < sps["max_num_ref_frames"]: sorun.append(f"DPB {mdpb//fs}<{sps['max_num_ref_frames']}")
-if ON["maks"] * 1000 > mbr * nal: sorun.append(f"bit hızı {ON['maks']}>{mbr*nal/1000:.0f}")
-if ON["tampon"] * 1000 > mcpb * nal: sorun.append(f"tampon {ON['tampon']}>{mcpb*nal/1000:.0f}")
+if maks * 1000 > mbr * nal: sorun.append(f"bit hızı {maks}>{mbr*nal/1000:.0f}")
+if tampon * 1000 > mcpb * nal: sorun.append(f"tampon {tampon:.0f}>{mcpb*nal/1000:.0f}")
 ks = probe(kaynak)
 klv = next(s for s in ks["streams"] if s["codec_type"] == "video").get("level", -1)
 chk("Seviye sınırları içinde", "uygun", f"{lv/10:.1f} " + (",".join(sorun) or "uygun"), not sorun)
@@ -163,18 +201,25 @@ bilgi("Seviye (kaynak / çıktı)", f"{klv/10 if klv and klv > 0 else '?'} / {lv
 # bit hızı
 boy = [int(x["size"]) for x in cp]
 ort = sum(boy) * 8 / (len(boy) / fps) / 1000
-bilgi("Ortalama bit hızı (kb/s)", f"{ort:.0f} (hedef {ON['hedef']})")
-chk("Ortalama, hedefin %15 fazlasını geçmiyor", f"<= {ON['hedef']*1.15:.0f}", f"{ort:.0f}", ort <= ON["hedef"] * 1.15)
+sure = len(boy) / fps
+if ON["kip"] == "vbr":
+    bilgi("Ortalama bit hızı (kb/s)", f"{ort:.0f} (hedef {ON['hedef']})")
+    chk("Ortalama, hedefin %15 fazlasını geçmiyor", f"<= {ON['hedef']*1.15:.0f}", f"{ort:.0f}", ort <= ON["hedef"] * 1.15)
+else:
+    # Sabit bit hızında ve sabit kalitede ortalama en çok: en yüksek + tampon / süre (VBV).
+    ust = maks + tampon / sure
+    bilgi("Ortalama bit hızı (kb/s)", f"{ort:.0f} ({'sabit ' + str(ON['hedef']) if ON['kip'] == 'cbr' else 'en çok ' + str(maks)})")
+    chk("Ortalama <= en yüksek + tampon / süre", f"<= {ust:.0f}", f"{ort:.0f}", ort <= ust)
 w = max(1, round(fps))
 kay = max(sum(boy[i:i + w]) for i in range(0, max(1, len(boy) - w + 1))) * 8 / 1000
 bilgi("En yüksek 1 sn (kbit)", f"{kay:.0f}")
 # VBV: tampon dolu başlar (en serbest durum), en yüksek bit hızıyla dolar; hiçbir kare boşaltmamalı
-dolu = ON["tampon"] * 1000.0
+dolu = tampon * 1000.0
 alt = dolu
 dts = [float(x.get("dts_time") or 0) for x in cp]
 for j, (sz, t) in enumerate(zip(boy, dts)):
     if j:
-        dolu = min(ON["tampon"] * 1000.0, dolu + ON["maks"] * 1000.0 * (t - dts[j - 1]))
+        dolu = min(tampon * 1000.0, dolu + maks * 1000.0 * (t - dts[j - 1]))
     dolu -= sz * 8
     alt = min(alt, dolu)
 chk("VBV taşmıyor (en yüksek / tampon)", ">= 0", f"{alt/1000:.0f} kbit", alt >= 0)

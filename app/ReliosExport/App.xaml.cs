@@ -280,7 +280,37 @@ public partial class App : Application
             d.Owner = w;
             d.Show();
             EkranGoruntusu.Bekle(d.Dispatcher);
-            var sekme = ekran is null ? 0 : EkranGoruntusu.Sekmeler(d, ekran, $"{sira:00}-{ad}");
+            int sekme;
+            if (d is OnAyarPenceresi oa)
+            {
+                // İki seçenek (Önerilen / Kayıtlı ayarlarım): ikisinin de görüntüsü. Kayıtlı ön ayar var: açılınca o seçili.
+                rapor.AppendLine("Ön ayar penceresi açılınca: " + (oa.OnerilenGorunuyor ? "Önerilen" : "Kayıtlı ayarlarım"));
+                if (oa.OnerilenGorunuyor)
+                {
+                    throw new InvalidOperationException("Kayıtlı ön ayar varken pencere Önerilen seçili açıldı.");
+                }
+
+                oa.SekmeOnerilen.IsChecked = true;
+                EkranGoruntusu.Bekle(d.Dispatcher);
+                if (ekran is not null)
+                {
+                    EkranGoruntusu.Pencere(d, Path.Combine(ekran, $"{sira:00}-{ad}-1-onerilen.png"));
+                }
+
+                oa.SekmeKayitli.IsChecked = true;
+                EkranGoruntusu.Bekle(d.Dispatcher);
+                if (ekran is not null)
+                {
+                    EkranGoruntusu.Pencere(d, Path.Combine(ekran, $"{sira:00}-{ad}-2-kayitli.png"));
+                }
+
+                sekme = ekran is null ? 0 : 2;
+            }
+            else
+            {
+                sekme = ekran is null ? 0 : EkranGoruntusu.Sekmeler(d, ekran, $"{sira:00}-{ad}");
+            }
+
             d.Close();
             rapor.Append($"{ad}=acildi");
             rapor.Append(ekran is null ? "\n" : $" ({sekme} görüntü)\n");
