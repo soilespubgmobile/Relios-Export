@@ -127,7 +127,8 @@ jobs:
             return $false
           }
           function Kopyalar { return @(Get-Process -Name 'Relios Export' -ErrorAction SilentlyContinue).Count }
-          function Ac($ek = @()) {
+          # (Adi "Ac" olamaz: PowerShell'de "ac", Add-Content'in kisa adidir ve islevden once gelir.)
+          function KopyaAc($ek = @()) {
             $p = if ($ek.Count) { Start-Process -FilePath $exe -ArgumentList $ek -PassThru } else { Start-Process -FilePath $exe -PassThru }
             $null = $p.Handle  # cikis kodunun okunabilmesi icin
             return $p
@@ -137,7 +138,7 @@ jobs:
           if ((Kopyalar) -ne 0) { "HATA: deneme baslamadan acik kopya var ($(Kopyalar))"; Oldur; exit 1 }
 
           # 1) Ilk kopya acilir.
-          $p1 = Ac
+          $p1 = KopyaAc
           if (-not (Pencere $p1 90)) { "HATA: ilk kopyanin penceresi 90 saniyede acilmadi"; Oldur; exit 1 }
           $h1 = $p1.MainWindowHandle
           "1. kopya acildi: islem $($p1.Id), pencere $h1"
@@ -145,7 +146,7 @@ jobs:
 
           # 2) Ikinci acilis: pencere acmadan kapanir (kod 0); ilk kopya acik kalir, baska kopya yok.
           $sw = [Diagnostics.Stopwatch]::StartNew()
-          $p2 = Ac
+          $p2 = KopyaAc
           if (-not $p2.WaitForExit(30000)) { $sorun += 'ikinci acilis 30 saniyede kapanmadi (yeni pencere acildi)' }
           else {
             "2. acilis $($sw.ElapsedMilliseconds) ms'de kapandi (kod $($p2.ExitCode))"
@@ -156,7 +157,7 @@ jobs:
           if ((Kopyalar) -ne 1) { $sorun += "ikinci acilistan sonra acik kopya sayisi $(Kopyalar) (1 olmali)" }
 
           # 3) Pes pese uc acilis: hicbiri pencere acmaz.
-          $uc = @(1..3 | ForEach-Object { Ac })
+          $uc = @(1..3 | ForEach-Object { KopyaAc })
           foreach ($p in $uc) { if (-not $p.WaitForExit(30000)) { $sorun += 'pes pese acilislardan biri kapanmadi (yeni pencere acildi)' } elseif ($p.ExitCode -ne 0) { $sorun += "pes pese acilisin cikis kodu $($p.ExitCode)" } }
           if ((Kopyalar) -ne 1) { $sorun += "pes pese acilislardan sonra acik kopya sayisi $(Kopyalar) (1 olmali)" } else { 'Pes pese uc acilis: hicbiri pencere acmadi.' }
 
@@ -165,7 +166,7 @@ jobs:
             $null = [Win.U32]::ShowWindowAsync($h1, 6)  # SW_MINIMIZE
             Start-Sleep -Seconds 2
             $kucuk = [Win.U32]::IsIconic($h1)
-            $p3 = Ac
+            $p3 = KopyaAc
             if (-not $p3.WaitForExit(30000)) { $sorun += 'simge durumundayken acilis kapanmadi (yeni pencere acildi)' }
             Start-Sleep -Seconds 1
             if (-not $kucuk) { 'NOT: pencere simge durumuna alinamadi (deneme ortami); geri acilma denenemedi.' }
@@ -177,7 +178,7 @@ jobs:
           # 5) Program acikken derleme denetimi (--ffmpeg-kontrol) yine calisir (tek kopya denetimine girmez).
           $f = Join-Path $PWD 'tek-kopya-ffmpeg.txt'
           Remove-Item $f -ErrorAction SilentlyContinue
-          $p4 = Ac @('--ffmpeg-kontrol', $f)
+          $p4 = KopyaAc @('--ffmpeg-kontrol', $f)
           if (-not $p4.WaitForExit(120000)) { $sorun += 'program acikken --ffmpeg-kontrol kapanmadi' }
           elseif ($p4.ExitCode -ne 0 -or -not (Test-Path $f)) { $sorun += "program acikken --ffmpeg-kontrol calismadi (kod $($p4.ExitCode))" }
           else { 'Program acikken --ffmpeg-kontrol calisti.' }
@@ -193,13 +194,13 @@ jobs:
           #    kilit bosalinca acilir).
           Oldur
           Start-Sleep -Seconds 1
-          $p5 = Ac
+          $p5 = KopyaAc
           if (-not (Pencere $p5 90)) { $sorun += 'kapandiktan sonra program yeniden acilmadi' }
           else {
             'Kapandiktan sonra yeniden acildi.'
             $null = $p5.CloseMainWindow()
             $sw = [Diagnostics.Stopwatch]::StartNew()
-            $p6 = Ac
+            $p6 = KopyaAc
             if (-not (Pencere $p6 90)) { $sorun += 'kapatilip hemen acilinca program acilmadi' }
             else {
               "Kapatilip hemen acilinca $($sw.ElapsedMilliseconds) ms'de acildi."

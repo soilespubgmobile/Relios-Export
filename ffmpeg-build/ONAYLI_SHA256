@@ -1,6 +1,7 @@
 # Onaylı FFmpeg derlemesinin (ffmpeg-build/ONAYLI_DERLEME) içindeki dosyaların SHA-256'sı.
 # Programın içine yalnızca bu dosyalar gömülür: app-build.yml indirdiği dosyaları bununla karşılaştırır, farklıysa
 # derleme durur. FFmpeg yeniden derlenip doğrulanırsa (README-RELIOS.md) bu dosya da ONAYLI_DERLEME ile birlikte
-# güncellenir. FFmpeg n9.0.2, win64, nonfree (FDK AAC 3.0.0, x264 core 165 r3223 0480cb0); run 43369861243.
+# güncellenir. FFmpeg n9.0.2, win64, nonfree (FDK AAC 3.0.0, x264 core 165 r3223 0480cb0): 13 Kasım 2026'da derlendi
+# (run 43369861243); aynı arşiv 18 Kasım 2026'da ffmpeg-sakla.yml ile yeniden yüklendi (run 44274951659).
 90f9c9369329864fc7336c46e587ecd6d3dc9729f85a7d5e62b43f219f55be63  ffmpeg.exe
 c5c9ab3c8733e1bf6b1bd5ab7ae4bde5b4faa7835b76123f955fdfd41304f515  ffprobe.exe
