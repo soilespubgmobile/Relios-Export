@@ -293,8 +293,8 @@ internal static class UctanUca
         var ttTahmin = Durum("ses_var.mp4");
         Kontrol("TikTok: bekleyen satırda en çok boyut (CRF + en yüksek 6000 kb/s)", "Bekliyor · en çok … MB", ttTahmin,
             ttTahmin.StartsWith("Bekliyor · en çok ", StringComparison.Ordinal) && ttTahmin.EndsWith(" MB", StringComparison.Ordinal));
-        var ttEnCok = Satir("ses_var.mp4") is { Medya: { } bm } bs
-            ? BoyutTahmini.Hesapla(ttAyar, bm, ArgsBuilder.SesSec(ttAyar.Ses, bm, bs.Path))?.Bayt
+        var ttEnCok = Satir("ses_var.mp4") is { Medya: { } ttMedya } ttBekleyen
+            ? BoyutTahmini.Hesapla(ttAyar, ttMedya, ArgsBuilder.SesSec(ttAyar.Ses, ttMedya, ttBekleyen.Path))?.Bayt
             : null;
         if (await Tikla(w.BtnStart, "Başlat"))
         {
