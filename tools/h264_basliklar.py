@@ -9,8 +9,10 @@ from collections import Counter, defaultdict
 
 dosya = sys.argv[1]
 kare = sys.argv[sys.argv.index("--kare") + 1] if "--kare" in sys.argv else "100000"
+# Dolgu verisi (NAL 12; sabit bit hızında kart boşluğu bununla doldurur) başlık değil: her baytı ayrı satır yazdırır ve
+# özeti dakikalarca yavaşlatır (CapCut örneğinde ve CBR çıktısında akışın ~%27'si). İzden önce çıkarılır.
 r = subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "trace", "-i", dosya, "-map", "0:v:0", "-c", "copy",
-                    "-bsf:v", "trace_headers", "-frames:v", kare, "-f", "null", "-"],
+                    "-bsf:v", "filter_units=remove_types=12,trace_headers", "-frames:v", kare, "-f", "null", "-"],
                    capture_output=True, text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
 alan = re.compile(r"\]\s+\d+\s+(\S+)\s+[01]+\s+=\s+(-?\d+)\s*$")
 bolum = None
