@@ -62,6 +62,15 @@ Yerel derleme GitHub'daki denemelerden geçmemiş olur; kalıcı kullanılacak e
 4. Hepsi "0 fark" olmalı; sayılar günlükten okunur (`gh run view <çalışma> --log`). Sonuçlar `CLAUDE.md`'ye yazılır.
 5. Ekran kartı (NVENC) GitHub'da yok: NVENC kodlaması yalnızca kullanıcının bilgisayarında denenir
    (`tools/onerilen_nvenc_kontrol.py`).
+6. Bilgisayardaki bir çıktının ses zaman çizgisi (boşluk / üst üste binme yok, süre kaynağınki):
+   `python -I tools/ses_zaman_kontrol.py denetle <çıktı> --kaynak <kaynak>` (her kaynak türünde çalışır; `ffmpeg` ve
+   `ffprobe` PATH'te olmalı).
+
+**Bit bit karşılaştırma.** Aynı ayar ve aynı FFmpeg ile ses paketleri her zaman bayt bayt aynıdır. Görüntü, x264'ün
+üst sınırı (VBV) tutmuyorsa bayt bayt aynıdır; tutuyorsa (TikTok varsayılanında hareketli videolar) x264 çok iş
+parçacığıyla çalıştırmadan çalıştırmaya birkaç yüz bayt farklı çıktı verir (kalite, sınır ve kare düzeni aynı): bu
+x264'ün bilinen davranışıdır, hata değildir. NVENC çıktıları aynı kart ve aynı sürücüyle bayt bayt aynıdır. Paketleri karşılaştırmak
+için: `ffmpeg -v error -i <dosya> -map 0:v:0 -c copy -f md5 -` (ses: `-map 0:a:0`).
 
 ## 5. Süresi dolan şeyler
 
