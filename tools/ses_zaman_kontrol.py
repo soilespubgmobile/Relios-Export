@@ -13,7 +13,9 @@ bırakıyor: çıktının ses izinde 5 ms'lik bir boşluk kalıyor, sonrası 5 m
   python3 -I ses_zaman_kontrol.py denetle <çıktı> --kaynak <kaynak> [--duzensiz] [--pay 2]
       Çıktının ses paketleri arasında boşluk / üst üste binme var mı (en çok --pay örnek), toplam boşluk ve ses süresi
       kaynağınkiyle aynı mı, ses kaynaktaki yerinde mi başlıyor. --duzensiz: kaynağın gerçekten düzensiz olduğu da
-      denetlenir (yoksa deneme bir şey kanıtlamaz).
+      denetlenir (yoksa deneme bir şey kanıtlamaz). Kaynağın zaman çizgisi FFmpeg'in çözdüğü karelerden okunur
+      (programın süzgeç zincirine giren ses): her kap ve kodlayıcıda çalışır (MKV / WebM'in milisaniyelik damgaları,
+      Opus, Vorbis, PCM). Kaynakta gerçek bir boşluk varsa (--pay'dan büyük) çıktıda da aynısı beklenir.
 
   python3 -I ses_zaman_kontrol.py zincir <düzenli kaynak> --zincir "<programın -af zinciri>"
                                          [--duzensiz-kaynak <dosya>] [--kodlayici libfdk_aac] [--pay 2]
@@ -196,7 +198,8 @@ class Cizgi:
 
     def __init__(self, yol):
         r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries",
-                            "packet=pts,duration:stream=codec_name,sample_rate,time_base", "-of", "json", yol],
+                            "packet=pts,duration,size:stream=codec_name,sample_rate,time_base,channels,bits_per_sample",
+                            "-of", "json", yol],
                            capture_output=True, text=True, encoding="utf-8")
         if r.returncode != 0:
             sys.stderr.write(f"ffprobe okuyamadı ({yol}): {r.stderr[-400:]}\n")
@@ -210,20 +213,31 @@ class Cizgi:
         self.hz = int(akis["sample_rate"])
         pay, payda = akis["time_base"].split("/")
         carpan = Fraction(int(pay), int(payda)) * self.hz
-        self.paketler = []
+        # PCM'de (WAV sesi; ör. OBS'in MKV kaydı) paketlerin uzunluğu sabit değildir (21 / 22 ms'lik paketler):
+        # her paketin örnek sayısı bayt sayısından bilinir.
+        ornek_bayt = int(akis.get("channels") or 0) * (int(akis.get("bits_per_sample") or 0) // 8)
+        pcm = self.codec.startswith("pcm_") and ornek_bayt > 0
+        self.paketler, uzunluklar = [], []
         for p in j.get("packets") or []:
-            if "pts" not in p or "duration" not in p:
+            if "pts" not in p or "duration" not in p or (pcm and "size" not in p):
                 continue
             self.paketler.append((int(p["pts"]) * carpan, int(p["duration"]) * carpan))
+            if pcm:
+                uzunluklar.append(Fraction(int(p["size"]), ornek_bayt))
         if len(self.paketler) < 2:
             sys.stderr.write(f"ses paketi okunamadı: {yol}\n")
             sys.exit(2)
         # Ardışık paketlerin başlangıçları arasındaki süre, karenin kendi uzunluğundan (en sık görülen süre: AAC'de
-        # 1024 örnek) ne kadar farklı (örnek): artı boşluk, eksi üst üste binme. Paketin dosyada yazan süresine
-        # bakılmaz: MP4 / MOV'da o süre zaten sonraki paketin başlangıcına göre yazılır (boşluk onun içinde görünür).
+        # 1024 örnek; PCM'de paketin kendi örnek sayısı) ne kadar farklı (örnek): artı boşluk, eksi üst üste binme.
+        # Paketin dosyada yazan süresine bakılmaz: MP4 / MOV'da o süre zaten sonraki paketin başlangıcına göre yazılır
+        # (boşluk onun içinde görünür).
         farklar = [self.paketler[i + 1][0] - self.paketler[i][0] for i in range(len(self.paketler) - 1)]
-        self.kare = collections.Counter(farklar).most_common(1)[0][0]
-        self.aralar = [(f - self.kare, i + 1) for i, f in enumerate(farklar)]
+        if pcm:
+            self.kare = collections.Counter(uzunluklar[:-1]).most_common(1)[0][0]
+            self.aralar = [(f - u, i + 1) for i, (f, u) in enumerate(zip(farklar, uzunluklar))]
+        else:
+            self.kare = collections.Counter(farklar).most_common(1)[0][0]
+            self.aralar = [(f - self.kare, i + 1) for i, f in enumerate(farklar)]
         self.en_buyuk = max(self.aralar, key=lambda a: a[0])
         self.en_kucuk = min(self.aralar, key=lambda a: a[0])
         self.toplam = sum(a[0] for a in self.aralar)
@@ -231,6 +245,59 @@ class Cizgi:
         # Sunulan ses: 0'dan önce biten paketler kodlayıcının ön doldurmasıdır (AAC), sayılmaz.
         self.bas = max(Fraction(0), min(p[0] for p in self.paketler if p[0] + p[1] > 0))
         self.son = max(p[0] + p[1] for p in self.paketler)
+
+    def ms(self, ornek):
+        return float(ornek) * 1000 / self.hz
+
+    def sn(self, ornek):
+        return Fraction(ornek) / self.hz
+
+
+class Cozulen:
+    """Kaynağın ilk ses izi, FFmpeg'in çözdüğü hâliyle: karelerin başlangıcı ve örnek sayısı (örnek biriminde).
+    Programın süzgeç zincirine giren ses budur. Paketlere bakılmaz: MKV / WebM'in milisaniyelik damgalarını, Opus'un
+    baştaki ve sondaki atlanan örneklerini, Vorbis'in değişken uzunluktaki karelerini FFmpeg çözerken düzeltir;
+    MP4 / MOV'daki tek örneklik düzensizlikler çözülen karelere aynen geçer (sınırlayıcının gördüğü zaman çizgisi)."""
+
+    def __init__(self, yol):
+        # Çözülen her kare bir PCM paketi olur; framecrc her paketin zamanını, süresini ve bayt sayısını yazar.
+        r = subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-i", yol, "-map", "0:a:0", "-c:a", "pcm_s16le",
+                            "-f", "framecrc", "-"], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if r.returncode != 0:
+            sys.stderr.write(f"ffmpeg kaynağın sesini çözemedi ({yol}): {r.stderr[-400:]}\n")
+            sys.exit(2)
+        taban, self.hz, kareler = None, None, []
+        for satir in r.stdout.splitlines():
+            if satir.startswith("#"):
+                m = re.match(r"#tb 0: (\d+)/(\d+)", satir)
+                if m:
+                    taban = Fraction(int(m.group(1)), int(m.group(2)))
+                m = re.match(r"#sample_rate 0: (\d+)", satir)
+                if m:
+                    self.hz = int(m.group(1))
+                continue
+            p = [x.strip() for x in satir.split(",")]
+            if len(p) < 5 or p[0] != "0":
+                continue
+            try:
+                kareler.append((int(p[2]), int(p[3]), int(p[4])))  # zaman, süre, bayt
+            except ValueError:
+                continue
+        # Karenin süresi örnek sayısıdır: bayt sayısıyla orantılı olmalı (örnek başına 2 bayt × kanal), her karede aynı.
+        if (not taban or not self.hz or len(kareler) < 2 or any(sure <= 0 for _, sure, _ in kareler)
+                or len({Fraction(bayt, sure) for _, sure, bayt in kareler}) != 1):
+            sys.stderr.write(f"kaynağın çözülen ses kareleri okunamadı: {yol}\n")
+            sys.exit(2)
+        carpan = taban * self.hz
+        self.kareler = [(zaman * carpan, sure * carpan) for zaman, sure, _ in kareler]
+        # Bir karenin bittiği yerle sonrakinin başladığı yer arasındaki fark (örnek): artı boşluk, eksi üst üste binme.
+        self.aralar = [(self.kareler[i + 1][0] - (self.kareler[i][0] + self.kareler[i][1]), i + 1)
+                       for i in range(len(self.kareler) - 1)]
+        self.en_buyuk = max(self.aralar, key=lambda a: a[0])
+        self.en_kucuk = min(self.aralar, key=lambda a: a[0])
+        self.toplam = sum(a[0] for a in self.aralar)
+        self.duzensiz = [a for a in self.aralar if a[0] != 0]
+        self.sure = max(k[0] + k[1] for k in self.kareler) - min(k[0] for k in self.kareler)
 
     def ms(self, ornek):
         return float(ornek) * 1000 / self.hz
@@ -254,28 +321,37 @@ def denetle(argv):
     if "--kaynak" not in ek:
         sys.stderr.write("denetle --kaynak ister\n")
         sys.exit(2)
-    c, k = Cizgi(cikti), Cizgi(ek["--kaynak"])
-    print(f"Kaynak: {k.codec} {k.hz} Hz, {len(k.paketler)} paket (kare {float(k.kare):g} örnek), "
-          f"düzensizlik {len(k.duzensiz)} (toplam {ornek_metni(k, k.toplam)})")
+    c, k, kc = Cizgi(cikti), Cizgi(ek["--kaynak"]), Cozulen(ek["--kaynak"])
+    print(f"Kaynak: {k.codec} {k.hz} Hz, {len(k.paketler)} paket; çözülen {len(kc.kareler)} karede "
+          f"düzensizlik {len(kc.duzensiz)} (toplam {ornek_metni(kc, kc.toplam)})")
     print(f"Çıktı:  {c.codec} {c.hz} Hz, {len(c.paketler)} paket (kare {float(c.kare):g} örnek), "
           f"düzensizlik {len(c.duzensiz)} (toplam {ornek_metni(c, c.toplam)})")
     if ek.get("--duzensiz"):
         chk("Kaynağın ses zaman çizgisi düzensiz (deneme anlamlı)", ">= 1 örnek",
-            f"{len(k.duzensiz)} yerde, en büyük {float(max(abs(a[0]) for a in k.aralar)):.2f} örnek",
-            any(abs(a[0]) >= 1 for a in k.aralar))
-    chk("Ses paketleri arasında boşluk yok", f"<= {pay:g} örnek",
-        ornek_metni(c, c.en_buyuk[0], c.en_buyuk[1]), c.en_buyuk[0] <= pay)
-    chk("Ses paketleri üst üste binmiyor", f">= -{pay:g} örnek",
-        ornek_metni(c, c.en_kucuk[0], c.en_kucuk[1]), c.en_kucuk[0] >= -pay)
+            f"{len(kc.duzensiz)} yerde, en büyük {float(max(abs(a[0]) for a in kc.aralar)):.2f} örnek",
+            any(abs(a[0]) >= 1 for a in kc.aralar))
+    # Kaynağın kendi boşluğu / üst üste binmesi --pay'dan büyükse (gerçek bir kopukluk) çıktıda da aynısı beklenir:
+    # program kaynağın zaman çizgisini korur. Küçükse (tek örneklik düzensizlikler) sınır --pay'dır.
+    oran = Fraction(c.hz, kc.hz)
+    k_ust, k_alt = kc.en_buyuk[0] * oran, kc.en_kucuk[0] * oran
+    ust = pay if k_ust <= pay else float(k_ust) + pay
+    alt = -pay if k_alt >= -pay else float(k_alt) - pay
+    chk("Ses paketleri arasında boşluk yok", f"<= {ust:g} örnek",
+        ornek_metni(c, c.en_buyuk[0], c.en_buyuk[1]), c.en_buyuk[0] <= ust)
+    chk("Ses paketleri üst üste binmiyor", f">= {alt:g} örnek",
+        ornek_metni(c, c.en_kucuk[0], c.en_kucuk[1]), c.en_kucuk[0] >= alt)
     # Kaynağın düzensizlikleri çıktıya aynen geçer (her biri hız dönüşümünde en çok 1 örnek yuvarlanır); fazlası olmamalı.
-    tolerans = c.sn(pay + len(k.duzensiz))
-    fark = c.sn(c.toplam) - k.sn(k.toplam)
-    chk("Toplam boşluk kaynağınkiyle aynı", f"{float(k.sn(k.toplam)) * 1000:+.3f} ms ± {float(tolerans) * 1000:.3f}",
+    tolerans = c.sn(pay + len(kc.duzensiz))
+    fark = c.sn(c.toplam) - kc.sn(kc.toplam)
+    chk("Toplam boşluk kaynağınkiyle aynı", f"{float(kc.sn(kc.toplam)) * 1000:+.3f} ms ± {float(tolerans) * 1000:.3f}",
         f"{float(c.sn(c.toplam)) * 1000:+.3f} ms", abs(fark) <= tolerans)
     chk("Ses kaynaktaki yerinde başlıyor", f"{float(k.sn(k.bas)) * 1000:.3f} ms ± {float(c.sn(pay)) * 1000:.3f}",
         f"{float(c.sn(c.bas)) * 1000:.3f} ms", abs(c.sn(c.bas) - k.sn(k.bas)) <= c.sn(pay))
-    # Süre: örnek sayısı aynı, zaman çizgisi aynı → bitiş de aynı (hız dönüşümünün uç payı 1 ms).
-    sure_c, sure_k = c.sn(c.son - c.bas), k.sn(k.son - k.bas)
+    # Süre: örnek sayısı aynı, zaman çizgisi aynı → bitiş de aynı (hız dönüşümünün uç payı 1 ms). Kaynağın süresi iki
+    # yoldan okunur ve çıktı birine uymalıdır: paketlerden (MP4 / MOV'da son karenin kısaltılmış süresi orada yazar)
+    # ve çözülen karelerden (Opus'ta sondaki dolgu ancak çözülünce atılır).
+    sure_c = c.sn(c.son - c.bas)
+    sure_k = min((k.sn(k.son - k.bas), kc.sn(kc.sure)), key=lambda v: abs(sure_c - v))
     chk("Ses süresi kaynağınkiyle aynı", f"{float(sure_k):.4f} sn ± 0.001", f"{float(sure_c):.4f} sn",
         abs(sure_c - sure_k) <= Fraction(1, 1000))
     bitir()
