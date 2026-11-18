@@ -80,8 +80,10 @@ public sealed class ProfilAyarlari : Gozlenebilir
     /// 11: YouTube sesi FDK AAC 128 kb/s 48 kHz, en yüksek dönüşüm kalitesi, üçgen titreşim (TikTok WAV 16 bit kalır).
     /// 12: TikTok varsayılanı x264 veryslow CRF 24 (High, 16 referans kare, önden bakış 250), anahtar kare en çok
     ///     10 saniyede bir; ses FDK AAC 128 kb/s 44,1 kHz. Değiştirilmemiş eski TikTok ayarı yenisine geçer.
+    /// 13: TikTok varsayılanında x264'e en yüksek bit hızı 6000 kb/s, tampon 12000 kb (CRF 24 kalır). Değiştirilmemiş
+    ///     0.11.0 TikTok videosu yenisine geçer; anahtar kare, ses ve ön ayarlar olduğu gibi kalır.
     /// </summary>
-    public const int GuncelSurum = 12;
+    public const int GuncelSurum = 13;
 
     public VideoAyarlari Video { get => _video; set => Bagla(ref _video, value); }
 

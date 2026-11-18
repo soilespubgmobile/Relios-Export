@@ -165,6 +165,15 @@ public sealed class AppSettings
                     Varsayilanlar.TikTokSesi(a.Ses);
                 }
             }
+
+            if (!onAyar && id == ExportProfileId.TikTok && a.Surum < 13
+                && AyniAyar(a.Video, Varsayilanlar.TikTok0110().Video))
+            {
+                // 0.11.0–0.13.1'in değiştirilmemiş TikTok videosu (x264 CRF 24, bit hızı üst sınırı yok): artık en çok
+                // 6000 kb/s, tampon 12000 kb. Kullanıcının değiştirdiği video, anahtar kare, ses ve ön ayarlar olduğu
+                // gibi kalır.
+                a.Video = Varsayilanlar.TikTok().Video;
+            }
         }
 
         a.Surum = ProfilAyarlari.GuncelSurum;

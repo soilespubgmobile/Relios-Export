@@ -243,7 +243,7 @@ internal static class UctanUca
             string.Join(", ", new[] { "ses_var.mp4", "sessiz.mov", "harici.mp4", Tr + ".mp4" }.Select(a => Satir(a)?.State.ToString())));
 
         // ------------------------------------------------------------------ 6. TikTok: varsayılan x264; NVENC seçilince ekran kartı yok
-        Bolum("6. TikTok'a geç: satırlar sıfırlanır; varsayılan x264 CRF 24 + FDK AAC 44,1 kHz; NVENC seçilince (ekran kartı yok) anlaşılır hata + günlük");
+        Bolum("6. TikTok'a geç: satırlar sıfırlanır; varsayılan x264 CRF 24 (en çok 6000 kb/s) + FDK AAC 44,1 kHz; NVENC seçilince (ekran kartı yok) anlaşılır hata + günlük");
         w.RbTikTok.IsChecked = true;
         await Task.Delay(300);
         Esit("Platform değişince satırlar bekliyor", "Waiting, Waiting, Waiting, Waiting, Waiting",
@@ -252,8 +252,8 @@ internal static class UctanUca
             Durum("ses_var.mp4").StartsWith("Bekliyor", StringComparison.Ordinal));
         var ttAyar = w.KontrolAyarlari;
         Esit("TikTok kodlayıcısı (varsayılan)", VideoKodlayici.X264, ttAyar.Video.Kodlayici);
-        Esit("TikTok x264 (varsayılan)", "Crf 24 veryslow high kaynak · ref 16 · önden bakış 250",
-            $"{ttAyar.Video.X264.Mod} {ttAyar.Video.X264.Crf} {ttAyar.Video.X264.OnAyar} {ttAyar.Video.X264.Profil} {ttAyar.Video.X264.Seviye} · ref {ttAyar.Video.X264.Ref} · önden bakış {ttAyar.Video.X264.IleriBakis}");
+        Esit("TikTok x264 (varsayılan)", "Crf 24 veryslow high kaynak · ref 16 · önden bakış 250 · en yüksek 6000 · tampon 12000",
+            $"{ttAyar.Video.X264.Mod} {ttAyar.Video.X264.Crf} {ttAyar.Video.X264.OnAyar} {ttAyar.Video.X264.Profil} {ttAyar.Video.X264.Seviye} · ref {ttAyar.Video.X264.Ref} · önden bakış {ttAyar.Video.X264.IleriBakis} · en yüksek {ttAyar.Video.X264.VbvMaks} · tampon {ttAyar.Video.X264.VbvTampon}");
         Esit("TikTok anahtar kare (varsayılan)", "Saniye 10", $"{ttAyar.AnahtarKare.Birim} {ttAyar.AnahtarKare.EnBuyuk}");
         Esit("TikTok sesi (varsayılan)", "FdkAac 44100 128", $"{ttAyar.Ses.Kodlayici} {ttAyar.Ses.OrnekHizi} {ttAyar.Ses.Fdk.BitHizi}");
         Esit("TikTok: LUFS eşitleme varsayılan açık", true, ttAyar.Ses.Esitleme);
@@ -280,7 +280,7 @@ internal static class UctanUca
         Esit("Yarım dosya kalmadı (.part)", 0, Parcalar().Length);
 
         // ------------------------------------------------------------------ 6b. TikTok varsayılanıyla kodlama
-        Bolum("6b. TikTok varsayılanı (x264 veryslow CRF 24, FDK AAC 128 kb/s 44,1 kHz) ile kodlama");
+        Bolum("6b. TikTok varsayılanı (x264 veryslow CRF 24, en çok 6000 kb/s, FDK AAC 128 kb/s 44,1 kHz) ile kodlama");
         ttAyar.Video.Kodlayici = VideoKodlayici.X264;
         await Task.Delay(300);
         if (await Tikla(w.BtnClear, "Temizle"))
@@ -290,7 +290,12 @@ internal static class UctanUca
 
         w.KontrolEkle(M("ses_var.mp4"));
         await Task.Delay(2000);
-        Esit("TikTok: tahmini boyut yazılmaz (CRF, bit hızı üst sınırı yok)", "Bekliyor", Durum("ses_var.mp4"));
+        var ttTahmin = Durum("ses_var.mp4");
+        Kontrol("TikTok: bekleyen satırda en çok boyut (CRF + en yüksek 6000 kb/s)", "Bekliyor · en çok … MB", ttTahmin,
+            ttTahmin.StartsWith("Bekliyor · en çok ", StringComparison.Ordinal) && ttTahmin.EndsWith(" MB", StringComparison.Ordinal));
+        var ttEnCok = Satir("ses_var.mp4") is { Medya: { } bm } bs
+            ? BoyutTahmini.Hesapla(ttAyar, bm, ArgsBuilder.SesSec(ttAyar.Ses, bm, bs.Path))?.Bayt
+            : null;
         if (await Tikla(w.BtnStart, "Başlat"))
         {
             await Bitir("TikTok dışa aktarma (x264)", 600);
@@ -307,6 +312,9 @@ internal static class UctanUca
         Esit("TikTok: ses (FDK AAC, 44,1 kHz, stereo)", "aac 44100 2",
             ttCikti?.SesAkislari is [var t1] ? $"{t1.Codec} {t1.OrnekHizi} {t1.Kanal}" : "ses izi sayısı " + ttCikti?.SesAkislari.Count);
         Kontrol("TikTok: süre (12 sn)", "12 ± 0,2", ttCikti?.DurationSeconds, ttCikti is { } tc && Math.Abs(tc.DurationSeconds - 12) <= 0.2);
+        var ttBoyut = ttSatir?.OutputPath is { } ttYol && File.Exists(ttYol) ? new FileInfo(ttYol).Length : (long?)null;
+        Kontrol("TikTok: dosya \"en çok\" tahmininin altında", $"<= {ttEnCok?.ToString() ?? "?"} bayt", ttBoyut,
+            ttBoyut is { } tb && ttEnCok is { } te && tb <= te);
 
         // ------------------------------------------------------------------ 7. Temizle, ayar dosyası
         Bolum("7. Temizle; ayarlar diske yazıldı");

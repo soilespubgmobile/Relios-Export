@@ -152,9 +152,10 @@ def olc_vmaf(bozuk: Path, kaynak: Path, kaynak_fps: float, hedef_fps: float | No
         ys, us, vs = [], [], []
         for satir in st.read_text().splitlines():
             m = dict(re.findall(r"(\w+):([-\d.inf]+)", satir))
-            ys.append(float(m["psnr_y"]))
-            us.append(float(m["psnr_u"]))
-            vs.append(float(m["psnr_v"]))
+            # Aynı kareler (sonsuz PSNR) ortalamayı bozmasın: libvmaf gibi üstten sınırla (60 dB)
+            ys.append(min(60.0, float(m["psnr_y"])))
+            us.append(min(60.0, float(m["psnr_u"])))
+            vs.append(min(60.0, float(m["psnr_v"])))
         sonuc["kare"] = len(ys)
         sonuc["psnr_y"] = round(sum(ys) / len(ys), 4)
         sonuc["psnr_u"] = round(sum(us) / len(us), 4)

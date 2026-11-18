@@ -8,17 +8,25 @@ TikTok ve YouTube için video dışa aktarma programı (FFmpeg + FDK AAC). Tamam
     Video (çözünürlük, kare hızı, x264 / NVENC), Ses (kaynak, gecikme, seviye, örnekleme, kanal,
     FDK AAC / WAV) ve Anahtar kare. x264, NVENC ve FDK AAC'nin bütün ayarları XviD4PSP'deki gibi
     sekmeli pencerelerde. Ayarlar adıyla ön ayar olarak kaydedilebilir.
-  - TikTok varsayılanı (0.11.0): x264 veryslow, CRF 24, High profil, 16 referans kare, önden bakış 250 (diğer x264
-    ayarları hız ayarının: 8 B-kare, B-piramit, umh, subme 10, trellis 2, 8x8 DCT); bit hızı üst sınırı yok; anahtar kare
-    en çok 10 saniyede bir (en az ve sahne eşiği x264'ün); çözünürlük, kare hızı (60 fps korunur) ve seviye kaynakla aynı
-    (16 referans kare yetmezse yükselir: 1080p'de 5.1); ses FDK AAC-LC 128 kb/s 44,1 kHz stereo; MOV. TikTok yüklenen
-    videoyu kendisi yeniden kodlar: TikTok'un kendi sayfalarındaki video bilgisine göre 1080p sürümü H.265, dikey
-    1080×1920 60 fps PUBG videolarında 2,2–2,4 Mb/s (bütün 1080p 60 fps örneklerde 1,6–3,4 Mb/s); 60 fps yalnızca
-    1080p sürümde kalıyor, 720p ve 540p 30 fps. Bu dönüşümün benzetiminde (aynı codec, bit hızı ve kare hızı) CRF 24'e
-    kadar yüklemenin TikTok'taki sonucu kaynağın kendisini yüklemekle aynı (fark ≤ 0,06 dB), CRF 26'da kayıp başlıyor;
-    önceki varsayılana (NVENC 34375 kb/s) göre dosya ~%70 küçük. Kullanıcının bilgisayarında programla denendi.
-    Son kullanılan ayar 0.10.0'ın değiştirilmemiş TikTok ayarıysa (video, anahtar kare, ses ayrı ayrı) kendiliğinden
-    yenisine geçer; LUFS eşitleme seçimi ve ön ayarlar olduğu gibi kalır.
+  - TikTok varsayılanı (0.14.0): x264 veryslow, CRF 24, en yüksek bit hızı 6000 kb/s (tampon 12000 kb = 2 saniye),
+    High profil, 16 referans kare, önden bakış 250 (diğer x264 ayarları hız ayarının: 8 B-kare, B-piramit, umh, subme 10,
+    trellis 2, 8x8 DCT); anahtar kare en çok 10 saniyede bir (en az ve sahne eşiği x264'ün); çözünürlük, kare hızı
+    (60 fps korunur) ve seviye kaynakla aynı (16 referans kare yetmezse yükselir: 1080p'de 5.1); ses FDK AAC-LC 128 kb/s
+    44,1 kHz stereo; MOV. 60 saniyelik video en çok ~45 MB (bekleyen satırda "en çok" yazar). TikTok yüklenen videoyu
+    kendisi yeniden kodlar: TikTok'un kendi sayfalarındaki video bilgisine göre 1080p sürümü H.265, dikey 1080×1920
+    60 fps PUBG videolarında 2,2–2,4 Mb/s (bütün 1080p 60 fps örneklerde 1,6–3,4 Mb/s); 60 fps yalnızca 1080p sürümde
+    kalıyor, 720p ve 540p 30 fps.
+    Neden üst sınır (0.14.0, `tools/tiktok_calisma.py`, `tiktok-calisma.yml`): yedi 1080p60 oyun videosu (Xiph'in
+    herkese açık oyun kayıtları) ve kullanıcının PUBG kaydı her ayarla kodlanıp bu dönüşümün benzetiminden (x265,
+    1080p60 2,3 Mb/s; 720p30 1,2 Mb/s) geçirildi, kalite kaynağa göre VMAF (telefon modeli dahil), PSNR, SSIM ve
+    bantlanma (CAMBI) ile ölçüldü. Zor sahnelerde CRF 24'ün 12–20 Mb/s'i boşa gidiyor: 6000 kb/s üst sınırla dosya
+    %26–52'ye iner (kullanıcının 25 sn'lik kaydı 28,6 MB → 17,2 MB), TikTok sonrası kalite farkı telefon VMAF'ında
+    ortalama −1,5 (görülebilir fark ≈ 6), bantlanma artmıyor; 8000 kb/s'te −0,7, 4000 kb/s'te −3,8. Üst sınırın
+    altında kalan (kolay) sahneler CRF 24'le aynı. x264'ün 22 farklı ayarı da (psy, AQ, qcomp, deblock, tesa,
+    subme 11, 16 B-kare, placebo) denendi: TikTok sonrası kazanç ±0,5 VMAF'ı geçmedi, ölçüm puanını artıranlar
+    bantlanmayı artırıyor ya da 1,5–3,7 kat yavaş; hız ayarının değerleri kaldı.
+    Son kullanılan ayar 0.10.0'ın ya da 0.11.0–0.13.1'in değiştirilmemiş TikTok ayarıysa kendiliğinden yenisine geçer;
+    kullanıcının değiştirdiği kısım, LUFS eşitleme seçimi ve ön ayarlar olduğu gibi kalır.
   - TikTok'ta NVENC seçilirse 0.10.0'ın varsayılanı kullanılır: ekran kartıyla (NVENC H.264) CBR 34375 kb/s, tampon 1
     saniye; H.264 profili ve seviyesi kaynakla aynı; B-kare yok, 3 referans kare. NVENC seviyeyi katı denetler: kaynağın seviyesi çıktının boyutuna, kare hızına,
     bit hızına ya da tamponuna yetmiyorsa (ör. 34375 kb/s, 4.0 ve altının sınırını aşar) seviye yeten en düşük

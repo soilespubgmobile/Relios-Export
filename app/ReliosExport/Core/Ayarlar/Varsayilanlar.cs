@@ -8,14 +8,21 @@ namespace ReliosExport.Core.Ayarlar;
 public static class Varsayilanlar
 {
     /// <summary>
-    /// TikTok (0.11.0, kullanıcının isteği; bilgisayarında denendi): x264 veryslow, CRF 24, High profil, seviye kaynakla
-    /// aynı (16 referans kare yetmezse yükselir: 1080p'de 5.1). Diğer x264 ayarları hız ayarının (8 B-kare, piramit,
-    /// uyarlamalı B-kare 2, umh, subme 10, trellis 2, 8x8 DCT); 16 referans kare, önden bakış 250; bit hızı üst sınırı
-    /// yok. Anahtar kare en çok 10 saniyede bir (en az: x264'ün kendisi), sahne değişiminde x264'ün eşiği (40).
-    /// Çözünürlük ve kare hızı kaynakla aynı (60 fps korunur); MOV. Ses FDK AAC-LC 128 kb/s 44,1 kHz (bkz.
-    /// <see cref="TikTokSesi"/>), LUFS eşitleme açık. TikTok yüklenen videoyu kendisi yeniden kodlar (1080p'yi H.265
-    /// ile; dikey 60 fps'te ~2,3 Mb/s): CRF 24 bunun 4–5 katıdır, TikTok'un sonucunda kaynağı yüklemekten farkı
-    /// ölçülemedi. NVENC'e geçilirse 0.10.0'ın NVENC ayarları (CBR 34375 kb/s) kullanılır.
+    /// TikTok (0.14.0, kullanıcının isteği: "daha küçük dosya önceliğimiz", "x264 ile devam", "stabil olmalı"): x264
+    /// veryslow, CRF 24, en yüksek bit hızı 6000 kb/s (tampon 12000 kb, 2 saniye), High profil, seviye kaynakla aynı
+    /// (16 referans kare yetmezse yükselir: 1080p'de 5.1). Diğer x264 ayarları hız ayarının (8 B-kare, piramit,
+    /// uyarlamalı B-kare 2, umh, subme 10, trellis 2, 8x8 DCT); 16 referans kare, önden bakış 250. Anahtar kare en çok
+    /// 10 saniyede bir (en az: x264'ün kendisi), sahne değişiminde x264'ün eşiği (40). Çözünürlük ve kare hızı kaynakla
+    /// aynı (60 fps korunur); MOV. Ses FDK AAC-LC 128 kb/s 44,1 kHz (bkz. <see cref="TikTokSesi"/>), LUFS eşitleme açık.
+    /// NVENC'e geçilirse 0.10.0'ın NVENC ayarları (CBR 34375 kb/s) kullanılır.
+    /// Neden (18 Kasım ölçümü; tools/tiktok_calisma.py, tiktok-calisma.yml): TikTok yüklenen videoyu kendisi yeniden
+    /// kodlar (1080p60'ı H.265 ile ~2,3 Mb/s). Yedi 1080p60 oyun videosu ve kullanıcının PUBG kaydı bu dönüşümün
+    /// benzetiminden geçirilip kaynağa göre ölçüldü (VMAF, telefon VMAF'ı, PSNR, SSIM, CAMBI): zor sahnelerde CRF 24'ün
+    /// 12–20 Mb/s'i boşa gidiyor; 6000 kb/s üst sınırla dosya %26–52'ye (kullanıcının 25 sn'lik kaydı 28,6 MB → 17,2 MB)
+    /// iner, TikTok sonrası kalite farkı telefon VMAF'ında ortalama −1,5 (görülebilir fark ≈ 6), bantlanma artmadı;
+    /// 4000 kb/s'te kayıp üç katına çıkıyor (−3,8). Üst sınırın altındaki (kolay) sahneler CRF 24'le aynı kalır.
+    /// x264'ün diğer ayarlarıyla (psy, AQ, qcomp, deblock, tesa, subme 11, 16 B-kare, placebo) TikTok sonrası kazanç
+    /// ±0,5 VMAF'ı geçmedi: bantlanmayı artırıyor ya da 1,5–3,7 kat yavaş; hız ayarının değerleri kaldı.
     /// </summary>
     public static ProfilAyarlari TikTok()
     {
@@ -33,6 +40,8 @@ public static class Varsayilanlar
             IsParcacigi = 8, // Ryzen 7 5700X: 8 çekirdek
             Ref = 16,
             IleriBakis = 250,
+            VbvMaks = 6000,
+            VbvTampon = 12000,
         };
 
         var k = a.AnahtarKare;
@@ -43,6 +52,18 @@ public static class Varsayilanlar
 
         TikTokSesi(a.Ses);
         a.Ses.Esitleme = true;
+        return a;
+    }
+
+    /// <summary>
+    /// 0.11.0–0.13.1'in TikTok varsayılanı: <see cref="TikTok"/> ile aynı, yalnızca bit hızı üst sınırı yok (x264 CRF 24).
+    /// Ayar geçişi (sürüm 13) ve denemeler için.
+    /// </summary>
+    public static ProfilAyarlari TikTok0110()
+    {
+        var a = TikTok();
+        a.Video.X264.VbvMaks = null;
+        a.Video.X264.VbvTampon = null;
         return a;
     }
 

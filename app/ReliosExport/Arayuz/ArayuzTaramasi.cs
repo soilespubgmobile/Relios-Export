@@ -440,7 +440,7 @@ internal static class ArayuzTaramasi
                 a.Ses.Kodlayici = SesKodlayici.Wav;
                 return a;
             }),
-            ("TikTok · x264 CRF 24 · FDK AAC 44,1 kHz (varsayılan)", ExportProfileId.TikTok, () => Ozel(Varsayilanlar.TikTok())),
+            ("TikTok · x264 CRF 24 (en çok 6000 kb/s) · FDK AAC 44,1 kHz (varsayılan)", ExportProfileId.TikTok, () => Ozel(Varsayilanlar.TikTok())),
             ("TikTok · NVENC CBR · WAV (0.10.0'ın varsayılanı; GitHub'da ekran kartı yok: komut denetlenir)", ExportProfileId.TikTok, () => Ozel(Varsayilanlar.TikTokNvenc())),
             ("TikTok · NVENC sabit kalite", ExportProfileId.TikTok, () =>
             {
