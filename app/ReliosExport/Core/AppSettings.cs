@@ -169,9 +169,18 @@ public sealed class AppSettings
             if (!onAyar && id == ExportProfileId.TikTok && a.Surum < 13
                 && AyniAyar(a.Video, Varsayilanlar.TikTok0110().Video))
             {
-                // 0.11.0–0.13.1'in değiştirilmemiş TikTok videosu (x264 CRF 24, bit hızı üst sınırı yok): artık en çok
-                // 6000 kb/s, tampon 12000 kb. Kullanıcının değiştirdiği video, anahtar kare, ses ve ön ayarlar olduğu
-                // gibi kalır.
+                // 0.11.0–0.13.1'in değiştirilmemiş TikTok videosu (x264 CRF 24, bit hızı üst sınırı yok): artık şimdiki
+                // varsayılan (0.16.0'dan beri en çok 8000 kb/s, tampon 12000 kb). Kullanıcının değiştirdiği video,
+                // anahtar kare, ses ve ön ayarlar olduğu gibi kalır.
+                a.Video = Varsayilanlar.TikTok().Video;
+            }
+
+            if (!onAyar && id == ExportProfileId.TikTok && a.Surum < 14
+                && AyniAyar(a.Video, Varsayilanlar.TikTok0140().Video))
+            {
+                // 0.14.0–0.15.0'ın değiştirilmemiş TikTok videosu (CRF 24, en çok 6000 kb/s, tampon 12000 kb): artık en
+                // çok 8000 kb/s (tampon 12000 kalır). Kullanıcının değiştirdiği video, anahtar kare, ses ve ön ayarlar
+                // olduğu gibi kalır.
                 a.Video = Varsayilanlar.TikTok().Video;
             }
         }

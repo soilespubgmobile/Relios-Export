@@ -488,7 +488,7 @@ public partial class MainWindow : Window
     {
         var p = SelectedProfile;
         var not = p.Id == ExportProfileId.TikTok
-            ? " TikTok: x264 CRF 24, en yüksek bit hızı 6000 kb/s (tampon 12000 kb), veryslow, High profil, 16 referans kare, önden bakış 250 (diğer x264 ayarları hız ayarının); boyut, kare hızı ve seviye kaynakla aynı; anahtar kare en çok 10 saniyede bir; ses FDK AAC 128 kb/s 44,1 kHz (en yüksek dönüşüm kalitesi, üçgen titreşim); MOV."
+            ? " TikTok: x264 CRF 24, en yüksek bit hızı 8000 kb/s (tampon 12000 kb), veryslow, High profil, 16 referans kare, önden bakış 250 (diğer x264 ayarları hız ayarının); boyut, kare hızı ve seviye kaynakla aynı; anahtar kare en çok 10 saniyede bir; ses FDK AAC 128 kb/s 44,1 kHz (en yüksek dönüşüm kalitesi, üçgen titreşim); MOV."
             : " YouTube: x264 CRF 18, Main profil, en yüksek bit hızı 34375 kb/s, tampon 55000 kb; çözünürlük, kare hızı ve seviye kaynakla aynı; anahtar kare 30 fps'e göre 50 / 26; ses FDK AAC 128 kb/s 48 kHz (en yüksek dönüşüm kalitesi, üçgen titreşim); MOV.";
         if (!ConfirmDialog.Ask(
                 this,

@@ -195,14 +195,14 @@ public partial class App : Application
         var arka = (Brush)w.FindResource("BgSurface");
         w.KontrolIcinDoldur();
         EkranGoruntusu.Bekle(w.Dispatcher);
-        // Bekleyen örnek: 60 sn 1080×1920, yanında aynı adlı WAV. TikTok varsayılanı x264 CRF 24 + en yüksek 6000 kb/s
-        // (tampon 12000 kb), ses FDK AAC 128 kb/s: (6000 + 128) × 60 + 12000 × 0,9 = 378 480 kbit = 47 310 000 bayt
-        // = 45,1 MB → "en çok 45,1 MB".
+        // Bekleyen örnek: 60 sn 1080×1920, yanında aynı adlı WAV. TikTok varsayılanı x264 CRF 24 + en yüksek 8000 kb/s
+        // (tampon 12000 kb; 0.16.0), ses FDK AAC 128 kb/s: (8000 + 128) × 60 + 12000 × 0,9 = 498 480 kbit
+        // = 62 310 000 bayt = 59,4 MB → "en çok 59,4 MB".
         var ilk = w.KontrolIlkSatir;
         rapor.AppendLine("Bekleyen satır (TikTok): " + ilk);
-        if (ilk != "Bekliyor · Ses: edit1.wav · en çok 45,1 MB")
+        if (ilk != "Bekliyor · Ses: edit1.wav · en çok 59,4 MB")
         {
-            throw new InvalidOperationException("TikTok varsayılanında bekleyen satır beklenen gibi değil (en çok 45,1 MB olmalı): " + ilk);
+            throw new InvalidOperationException("TikTok varsayılanında bekleyen satır beklenen gibi değil (en çok 59,4 MB olmalı): " + ilk);
         }
 
         if (ekran is not null)

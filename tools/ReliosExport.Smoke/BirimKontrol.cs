@@ -650,7 +650,9 @@ internal static class BirimKontrol
         // TikTok varsayılanı (x264): en çok 10 saniyede bir anahtar kare; en az ve sahne eşiği x264'ün (40).
         x = KomutMetni(Kaynak(1920, 1080, 60, "h264", "High", 42), Varsayilanlar.TikTok());
         Iceriyor("TikTok varsayılanı 60 fps (en çok 10 sn: 600 kare)", x, ":keyint=600:");
-        Iceriyor("TikTok varsayılanı: CRF 24, en yüksek bit hızı 6000 kb/s, tampon 12000 kb", x, ":crf=24:vbv-maxrate=6000:vbv-bufsize=12000");
+        Iceriyor("TikTok varsayılanı: CRF 24, en yüksek bit hızı 8000 kb/s, tampon 12000 kb (0.16.0)", x, ":crf=24:vbv-maxrate=8000:vbv-bufsize=12000");
+        Iceriyor("0.14.0'ın TikTok varsayılanı: en yüksek bit hızı 6000 kb/s, tampon 12000 kb",
+            KomutMetni(Kaynak(1920, 1080, 60, "h264", "High", 42), Varsayilanlar.TikTok0140()), ":crf=24:vbv-maxrate=6000:vbv-bufsize=12000");
         Iceriyor("TikTok varsayılanı: seviye 5.1 (16 referans kare)", x, " -level:v 5.1 ");
         Icermiyor("TikTok varsayılanı: başlangıç doluluğu x264'ün (0,9)", x, "vbv-init");
         Icermiyor("0.11.0'ın TikTok varsayılanı: bit hızı üst sınırı yok",
@@ -1242,13 +1244,17 @@ internal static class BirimKontrol
         // (34375 + 48000 × 16 × 2 / 1000) kb/s × 60 s = 269 332 500 bayt = 256,9 MB
         Kontrol("TikTok NVENC ayarı 60 sn (CBR 34375 + WAV 16 bit 48 kHz stereo)", "tahmini 257 MB", BoyutTahmini.Hesapla(tt, m, ses)?.Metin ?? "yok");
         var ttVar = Varsayilanlar.TikTok();
-        // (6000 + 128 FDK AAC) × 60 = 367 680 kbit + tampon payı 12000 × 0,9 = 10 800 kbit → 378 480 kbit
-        // = 47 310 000 bayt = 45,1 MB
-        Kontrol("TikTok varsayılanı 60 sn (CRF 24, en yüksek 6000, tampon 12000, AAC 128)", "en çok 45,1 MB",
+        // (8000 + 128 FDK AAC) × 60 = 487 680 kbit + tampon payı 12000 × 0,9 = 10 800 kbit → 498 480 kbit
+        // = 62 310 000 bayt = 59,4 MB
+        Kontrol("TikTok varsayılanı 60 sn (CRF 24, en yüksek 8000, tampon 12000, AAC 128)", "en çok 59,4 MB",
             BoyutTahmini.Hesapla(ttVar, m, ArgsBuilder.SesSec(ttVar.Ses, m, "YOK.mp4"))?.Metin ?? "yok");
-        // 5 sn: (6000 + 128) × 5 + 10800 = 41 440 kbit = 5 180 000 bayt = 4,9 MB
-        Kontrol("TikTok varsayılanı 5 sn: tampon payı kısa videoda büyük", "en çok 4,9 MB",
+        // 5 sn: (8000 + 128) × 5 + 10800 = 51 440 kbit = 6 430 000 bayt = 6,1 MB
+        Kontrol("TikTok varsayılanı 5 sn: tampon payı kısa videoda büyük", "en çok 6,1 MB",
             BoyutTahmini.Hesapla(ttVar, m with { DurationSeconds = 5 }, ArgsBuilder.SesSec(ttVar.Ses, m, "YOK.mp4"))?.Metin ?? "yok");
+        var tt014 = Varsayilanlar.TikTok0140();
+        // 0.14.0–0.15.0: (6000 + 128) × 60 + 10 800 = 378 480 kbit = 47 310 000 bayt = 45,1 MB
+        Kontrol("0.14.0'ın TikTok varsayılanı 60 sn (en yüksek 6000, tampon 12000)", "en çok 45,1 MB",
+            BoyutTahmini.Hesapla(tt014, m, ArgsBuilder.SesSec(tt014.Ses, m, "YOK.mp4"))?.Metin ?? "yok");
         var ttEski = Varsayilanlar.TikTok0110();
         Kontrol("0.11.0'ın TikTok varsayılanı (CRF 24, üst sınır yok): tahmin yapılmaz", "yok",
             BoyutTahmini.Hesapla(ttEski, m, ArgsBuilder.SesSec(ttEski.Ses, m, "YOK.mp4"))?.Metin ?? "yok");
@@ -1612,7 +1618,7 @@ internal static class BirimKontrol
             $"{yeniTt.Video.Kodlayici} {x264Tt.Mod} {x264Tt.Crf} {x264Tt.OnAyar} {x264Tt.Profil} {x264Tt.Seviye} · ref {x264Tt.Ref} · önden bakış {x264Tt.IleriBakis} · iş parçacığı {x264Tt.IsParcacigi}");
         Kontrol("TikTok varsayılanı: diğer x264 ayarları hız ayarının (B-kare, me, qpmax, 8x8 DCT, AQ, psy boş)", "boş boş boş boş boş boş",
             $"{Bos(x264Tt.BKare)} {Bos(x264Tt.Me)} {Bos(x264Tt.QpMax)} {Bos(x264Tt.Dct8x8)} {Bos(x264Tt.AqModu)} {Bos(x264Tt.PsyRd)}");
-        Kontrol("TikTok varsayılanı: en yüksek bit hızı 6000 kb/s, tampon 12000 kb, başlangıç doluluğu x264'ün", "6000 12000 boş",
+        Kontrol("TikTok varsayılanı: en yüksek bit hızı 8000 kb/s, tampon 12000 kb, başlangıç doluluğu x264'ün (0.16.0)", "8000 12000 boş",
             $"{Bos(x264Tt.VbvMaks)} {Bos(x264Tt.VbvTampon)} {Bos(x264Tt.VbvBaslangic)}");
         var x264Eski = Varsayilanlar.TikTok0110().Video.X264;
         Kontrol("0.11.0'ın TikTok varsayılanı: yalnızca bit hızı üst sınırı yok", "boş boş " + Json(yeniTt.Video.Nvenc),
@@ -1645,11 +1651,12 @@ internal static class BirimKontrol
         var ayarPc = new AppSettings();
         ayarPc.Profiller[ExportProfileId.TikTok] = ttPc;
         var gPc = ayarPc.ProfilAyari(ExportProfileId.TikTok);
-        Kontrol("TikTok 11 → 13 (elle kurulmuş x264 CRF 24): video yeni varsayılana geçer (en çok 6000 kb/s)", Json(yeniTt.Video), Json(gPc.Video));
+        Kontrol("TikTok 11 → 14 (elle kurulmuş x264 CRF 24): video yeni varsayılana geçer (en çok 8000 kb/s)", Json(yeniTt.Video), Json(gPc.Video));
         Kontrol("TikTok 11 → 13 (elle kurulmuş x264 CRF 24): ses FDK AAC 44,1 kHz olur", TikTokSes, SesOzeti(gPc.Ses));
 
-        // Sürüm 13: 0.11.0–0.13.1'in değiştirilmemiş TikTok videosu (CRF 24, üst sınır yok) en çok 6000 kb/s olur;
-        // anahtar kare, ses, LUFS seçimi, kullanıcının değiştirdiği video ve ön ayarlar olduğu gibi kalır.
+        // Sürüm 13: 0.11.0–0.13.1'in değiştirilmemiş TikTok videosu (CRF 24, üst sınır yok) şimdiki varsayılana geçer
+        // (0.16.0'dan beri en çok 8000 kb/s); anahtar kare, ses, LUFS seçimi, kullanıcının değiştirdiği video ve ön
+        // ayarlar olduğu gibi kalır.
         var tt12 = Varsayilanlar.TikTok0110();
         tt12.Surum = 12;
         tt12.Ses.EsitlemeHedef = -16;
@@ -1658,11 +1665,11 @@ internal static class BirimKontrol
         ayar12.Profiller[ExportProfileId.TikTok] = tt12;
         var g12 = ayar12.ProfilAyari(ExportProfileId.TikTok);
         Kontrol("TikTok 12 → 13: 0.11.0 varsayılanının videosu yeni varsayılan olur", Json(yeniTt.Video), Json(g12.Video));
-        Kontrol("TikTok 12 → 13: en yüksek 6000, tampon 12000", "6000 12000", $"{g12.Video.X264.VbvMaks} {g12.Video.X264.VbvTampon}");
+        Kontrol("TikTok 12 → 14: en yüksek 8000, tampon 12000", "8000 12000", $"{g12.Video.X264.VbvMaks} {g12.Video.X264.VbvTampon}");
         Kontrol("TikTok 12 → 13: kendi anahtar karesi (5 sn) korunur", "Saniye 5", $"{g12.AnahtarKare.Birim} {g12.AnahtarKare.EnBuyuk}");
         Kontrol("TikTok 12 → 13: LUFS hedefi (-16) korunur", "-16", g12.Ses.EsitlemeHedef.ToString(System.Globalization.CultureInfo.InvariantCulture));
         Kontrol("TikTok 12 → 13: ses olduğu gibi", SesOzeti(Varsayilanlar.TikTok0110().Ses), SesOzeti(g12.Ses));
-        Kontrol("TikTok 12 → 13: sürüm", "13", g12.Surum.ToString());
+        Kontrol("TikTok 12 → 14: sürüm", "14", g12.Surum.ToString());
 
         var tt12Kendi = Varsayilanlar.TikTok0110();
         tt12Kendi.Surum = 12;
@@ -1693,6 +1700,62 @@ internal static class BirimKontrol
         var gOn12 = new AppSettings().OnAyariYukle(ExportProfileId.TikTok, onTt12);
         Kontrol("TikTok ön ayarı (sürüm 12, üst sınırsız CRF 24) kaydedildiği gibi kalır", "boş boş 24",
             $"{Bos(gOn12.Video.X264.VbvMaks)} {Bos(gOn12.Video.X264.VbvTampon)} {gOn12.Video.X264.Crf}");
+
+        // Sürüm 14 (0.16.0): 0.14.0–0.15.0'ın değiştirilmemiş TikTok videosu (CRF 24, en çok 6000, tampon 12000) en çok
+        // 8000 kb/s olur (tampon 12000 kalır); anahtar kare, ses, LUFS seçimi, kullanıcının değiştirdiği video ve ön
+        // ayarlar olduğu gibi kalır.
+        var tt13 = Varsayilanlar.TikTok0140();
+        tt13.Surum = 13;
+        tt13.Ses.EsitlemeHedef = -16;
+        tt13.AnahtarKare.EnBuyuk = 5;
+        var ayar13 = new AppSettings();
+        ayar13.Profiller[ExportProfileId.TikTok] = tt13;
+        var g13 = ayar13.ProfilAyari(ExportProfileId.TikTok);
+        Kontrol("TikTok 13 → 14: 0.14.0 varsayılanının videosu yeni varsayılan olur", Json(yeniTt.Video), Json(g13.Video));
+        Kontrol("TikTok 13 → 14: en yüksek 8000, tampon 12000", "8000 12000", $"{g13.Video.X264.VbvMaks} {g13.Video.X264.VbvTampon}");
+        Kontrol("TikTok 13 → 14: kendi anahtar karesi (5 sn) korunur", "Saniye 5", $"{g13.AnahtarKare.Birim} {g13.AnahtarKare.EnBuyuk}");
+        Kontrol("TikTok 13 → 14: LUFS hedefi (-16) korunur", "-16", g13.Ses.EsitlemeHedef.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        Kontrol("TikTok 13 → 14: ses olduğu gibi", SesOzeti(Varsayilanlar.TikTok0140().Ses), SesOzeti(g13.Ses));
+        Kontrol("TikTok 13 → 14: sürüm", "14", g13.Surum.ToString());
+
+        var tt13Kendi = Varsayilanlar.TikTok0140();
+        tt13Kendi.Surum = 13;
+        tt13Kendi.Video.X264.Crf = 22;
+        var ayar13Kendi = new AppSettings();
+        ayar13Kendi.Profiller[ExportProfileId.TikTok] = tt13Kendi;
+        var g13Kendi = ayar13Kendi.ProfilAyari(ExportProfileId.TikTok);
+        Kontrol("TikTok 13 → 14: kendi CRF'si (22) varsa video olduğu gibi kalır (6000 / 12000)", "22 6000 12000",
+            $"{g13Kendi.Video.X264.Crf} {g13Kendi.Video.X264.VbvMaks} {g13Kendi.Video.X264.VbvTampon}");
+
+        var tt13Sinir = Varsayilanlar.TikTok0140();
+        tt13Sinir.Surum = 13;
+        tt13Sinir.Video.X264.VbvTampon = 16000;
+        var ayar13Sinir = new AppSettings();
+        ayar13Sinir.Profiller[ExportProfileId.TikTok] = tt13Sinir;
+        var g13Sinir = ayar13Sinir.ProfilAyari(ExportProfileId.TikTok);
+        Kontrol("TikTok 13 → 14: kendi tamponu (16000) varsa video olduğu gibi kalır", "6000 16000",
+            $"{g13Sinir.Video.X264.VbvMaks} {g13Sinir.Video.X264.VbvTampon}");
+
+        var tt13Nvenc = Varsayilanlar.TikTok0140();
+        tt13Nvenc.Surum = 13;
+        tt13Nvenc.Video.Kodlayici = VideoKodlayici.Nvenc;
+        var ayar13Nvenc = new AppSettings();
+        ayar13Nvenc.Profiller[ExportProfileId.TikTok] = tt13Nvenc;
+        var g13Nvenc = ayar13Nvenc.ProfilAyari(ExportProfileId.TikTok);
+        Kontrol("TikTok 13 → 14: NVENC seçilmişse video olduğu gibi kalır", "Nvenc 6000", $"{g13Nvenc.Video.Kodlayici} {Bos(g13Nvenc.Video.X264.VbvMaks)}");
+
+        var yt13 = Varsayilanlar.YouTube();
+        yt13.Surum = 13;
+        var ayarYt13 = new AppSettings();
+        ayarYt13.Profiller[ExportProfileId.YouTube] = yt13;
+        Kontrol("YouTube 13 → 14: video olduğu gibi (34375 / 55000)", Json(Varsayilanlar.YouTube().Video),
+            Json(ayarYt13.ProfilAyari(ExportProfileId.YouTube).Video));
+
+        var onTt13 = Varsayilanlar.TikTok0140();
+        onTt13.Surum = 13;
+        var gOn13 = new AppSettings().OnAyariYukle(ExportProfileId.TikTok, onTt13);
+        Kontrol("TikTok ön ayarı (sürüm 13, 6000 / 12000) kaydedildiği gibi kalır", "6000 12000 24",
+            $"{Bos(gOn13.Video.X264.VbvMaks)} {Bos(gOn13.Video.X264.VbvTampon)} {gOn13.Video.X264.Crf}");
 
         var ttKendiVideo = Varsayilanlar.TikTokNvenc();
         ttKendiVideo.Surum = 11;
@@ -1990,7 +2053,7 @@ internal static class BirimKontrol
         a.Video.X264.Mod = X264Modu.Crf;
         a.Video.X264.BKare = 2;
         a.Video.X264.Ref = 2;
-        // Burada yalnızca DPB denetlenir: TikTok varsayılanının üst sınırı (0.14.0: 6000 kb/s, tampon 12000 kb) kaldırılır.
+        // Burada yalnızca DPB denetlenir: TikTok varsayılanının üst sınırı (0.16.0: 8000 kb/s, tampon 12000 kb) kaldırılır.
         a.Video.X264.VbvMaks = null;
         a.Video.X264.VbvTampon = null;
         Kontrol("Baseline + 2 B-kare, CIF 1.1: B-kare yok, seviye 1.1 yeter", "1.1", ArgsBuilder.X264Seviyesi(a, cif));

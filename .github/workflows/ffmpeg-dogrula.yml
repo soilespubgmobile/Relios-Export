@@ -7,7 +7,7 @@ name: FFmpeg dogrulama (Windows)
 #    Her cikti hedef meta veriyle (tools/hedef_kontrol.py) ve kaynakla
 #    (tools/saglamlik_kontrol.py: sure, kare sayisi, senkron, dondurme, renk, kirpma) karsilastirilir.
 #    Programin urettigi komut, XviD4PSP ile dogrulanan 0.3.0'in komutuyla harf harf karsilastirilir.
-# 3) Diger ayarlar da denenir: YouTube ve TikTok varsayilani (x264 veryslow CRF 24, en cok 6000 kb/s (tampon 12000),
+# 3) Diger ayarlar da denenir: YouTube ve TikTok varsayilani (x264 veryslow CRF 24, en cok 8000 kb/s (tampon 12000),
 #    16 referans kare, anahtar kare en cok 10 sn; FDK AAC 128 kb/s 44,1 kHz), 2 / 3 gecisli x264, WAV sesli MOV, siyah kenar, sessiz, ses seviyesi /
 #    gecikme, HE-AAC, NVENC komutu (0.10.0'in TikTok varsayilani; tools/ayar_kontrol.py).
 # 4) Ses donusumu: WAV 16 bit 48 kHz secilince 24 bit kaynak ucgen titresimle 16 bit'e inmeli, 16 bit 48 kHz
@@ -221,10 +221,10 @@ jobs:
                hedef = @('--boyut', '1080x1920', '--fps', '30000/1001', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov', '--ses', 'aac'); ayar = @('kap=mov', 'acodec=aac', 'aprofil=LC', 'abit=128000±5%', 'ar=48000', 'ac=2') },
             @{ ad = 'YouTube varsayilani: 1080x1080 sessiz H.264 High@3.2 (seviye 4.1)'; k = '07_'; arg = $yt; sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
                hedef = @('--boyut', '1080x1080', '--fps', '30/1', '--gop', '50/26', '--vbv', '34375/55000', '--kap', 'mov'); ayar = @('kap=mov') },
-            @{ ad = 'TikTok varsayilani: 1080p60 yatay H.264 High@4.2 (x264 veryslow CRF 24, en cok 6000 kb/s / tampon 12000, High, 16 referans -> seviye 5.1, 8 B-kare, anahtar kare 10 sn; FDK AAC 128 kb/s 44,1 kHz)'; k = '01_'; arg = @(); sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               ayar = @('kap=mov', 'vcodec=h264', 'profil=High', 'seviye=5.1', 'x264:crf=24.0', 'x264:vbv_maxrate=6000', 'x264:vbv_bufsize=12000', 'x264:ref=16', 'x264:bframes=8', 'x264:b_pyramid=2', 'x264:b_adapt=2', 'x264:me=umh', 'x264:subme=10', 'x264:trellis=2', 'x264:8x8dct=1', 'x264:rc_lookahead=250', 'x264:keyint=600', 'x264:scenecut=40', 'x264:threads=8', 'acodec=aac', 'aprofil=LC', 'abit=128000±5%', 'ar=44100', 'ac=2') },
+            @{ ad = 'TikTok varsayilani: 1080p60 yatay H.264 High@4.2 (x264 veryslow CRF 24, en cok 8000 kb/s / tampon 12000, High, 16 referans -> seviye 5.1, 8 B-kare, anahtar kare 10 sn; FDK AAC 128 kb/s 44,1 kHz)'; k = '01_'; arg = @(); sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
+               ayar = @('kap=mov', 'vcodec=h264', 'profil=High', 'seviye=5.1', 'x264:crf=24.0', 'x264:vbv_maxrate=8000', 'x264:vbv_bufsize=12000', 'x264:ref=16', 'x264:bframes=8', 'x264:b_pyramid=2', 'x264:b_adapt=2', 'x264:me=umh', 'x264:subme=10', 'x264:trellis=2', 'x264:8x8dct=1', 'x264:rc_lookahead=250', 'x264:keyint=600', 'x264:scenecut=40', 'x264:threads=8', 'acodec=aac', 'aprofil=LC', 'abit=128000±5%', 'ar=44100', 'ac=2') },
             @{ ad = 'TikTok varsayilani: 1080x1920 29.97 fps H.264 High@4.0 (seviye 5.1, anahtar kare 300 kare = 10 sn)'; k = '02_'; arg = @(); sag = @('--boyut', 'kaynak', '--fps', 'kaynak')
-               ayar = @('kap=mov', 'profil=High', 'seviye=5.1', 'x264:crf=24.0', 'x264:vbv_maxrate=6000', 'x264:vbv_bufsize=12000', 'x264:ref=16', 'x264:keyint=300', 'x264:scenecut=40', 'acodec=aac', 'aprofil=LC', 'abit=128000±5%', 'ar=44100', 'ac=2') },
+               ayar = @('kap=mov', 'profil=High', 'seviye=5.1', 'x264:crf=24.0', 'x264:vbv_maxrate=8000', 'x264:vbv_bufsize=12000', 'x264:ref=16', 'x264:keyint=300', 'x264:scenecut=40', 'acodec=aac', 'aprofil=LC', 'abit=128000±5%', 'ar=44100', 'ac=2') },
             @{ ad = 'x264 2 gecis 4000 kb/s'; k = '12_'; arg = @('--profil', 'tiktok-916', '--ayarla', 'Video.X264.Mod=IkiGecis', '--ayarla', 'Video.X264.BitHizi=4000'); sag = @()
                ayar = @('x264:rc=2pass', 'x264:bitrate=4000', 'vbit=4000000±30%') },
             @{ ad = 'x264 3 gecis 4000 kb/s'; k = '12_'; arg = @('--profil', 'tiktok-916', '--ayarla', 'Video.X264.Mod=UcGecis', '--ayarla', 'Video.X264.BitHizi=4000'); sag = @()
@@ -513,7 +513,7 @@ jobs:
           # Gercekci (sikistirilabilir) goruntu, 30 sn. (Saf parazitte x264'un qpmax 33 siniri bit hizini asar; bu
           # uc durum tahminin ipucunda yazar.)
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=1920x1080:rate=30 -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 30 -pix_fmt yuv420p -c:v libx264 -preset veryfast -crf 18 -c:a aac -ac 2 -y $src
-          # Zor goruntu (gurultulu 1080p60, 10 sn): TikTok varsayilaninin CRF 24'u 6000 kb/s ust sinirini asar, sinir tutmali.
+          # Zor goruntu (gurultulu 1080p60, 10 sn): TikTok varsayilaninin CRF 24'u 8000 kb/s ust sinirini asar, sinir tutmali.
           $zor = Join-Path $PWD 'boyut_zor.mov'
           ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=1920x1080:rate=60 -f lavfi -i "sine=frequency=440:sample_rate=48000" -t 10 -vf "noise=alls=25:allf=t+u" -pix_fmt yuv420p -c:v libx264 -preset veryfast -crf 12 -c:a aac -ac 2 -y $zor
           $yt = @('--profil', 'youtube')
@@ -522,7 +522,7 @@ jobs:
             @{ ad = 'x264 2 gecis 5000 kb/s + FDK AAC 128 kb/s (YouTube sesi)'; arg = $yt + @('--ayarla', 'Video.X264.Mod=IkiGecis', '--ayarla', 'Video.X264.BitHizi=5000'); tur = 'Yaklasik'; pay = 0.10 },
             @{ ad = 'x264 CBR 6000 kb/s (tampon 2 sn) + FDK AAC 192 kb/s'; arg = $yt + @('--ayarla', 'Video.X264.Mod=Cbr', '--ayarla', 'Video.X264.BitHizi=6000', '--ayarla', 'Video.X264.VbvTampon=null', '--ayarla', 'Ses.Kodlayici=FdkAac', '--ayarla', 'Ses.Fdk.BitHizi=192'); tur = 'Yaklasik'; pay = 0.05 },
             @{ ad = 'YouTube varsayilani (CRF 18, en yuksek 34375 kb/s): en cok'; arg = $yt; tur = 'EnCok'; pay = 0.01 },
-            @{ ad = 'TikTok varsayilani (CRF 24, en yuksek 6000 kb/s), kolay goruntu: en cok'; arg = @('--profil', 'tiktok'); tur = 'EnCok'; pay = 0.01 },
+            @{ ad = 'TikTok varsayilani (CRF 24, en yuksek 8000 kb/s), kolay goruntu: en cok'; arg = @('--profil', 'tiktok'); tur = 'EnCok'; pay = 0.01 },
             @{ ad = 'TikTok varsayilani, gurultulu 1080p60 (CRF 24 ust siniri asar): en cok, sinira ulasir'; src = $zor; arg = @('--profil', 'tiktok'); tur = 'EnCok'; pay = 0.01; enaz = -0.25 }
           )
           $satirlar = @(); $hatali = 0; $i = 0

@@ -82,8 +82,10 @@ public sealed class ProfilAyarlari : Gozlenebilir
     ///     10 saniyede bir; ses FDK AAC 128 kb/s 44,1 kHz. Değiştirilmemiş eski TikTok ayarı yenisine geçer.
     /// 13: TikTok varsayılanında x264'e en yüksek bit hızı 6000 kb/s, tampon 12000 kb (CRF 24 kalır). Değiştirilmemiş
     ///     0.11.0 TikTok videosu yenisine geçer; anahtar kare, ses ve ön ayarlar olduğu gibi kalır.
+    /// 14: TikTok varsayılanında en yüksek bit hızı 8000 kb/s (tampon 12000 kalır). Değiştirilmemiş 0.14.0–0.15.0
+    ///     TikTok videosu yenisine geçer; anahtar kare, ses ve ön ayarlar olduğu gibi kalır.
     /// </summary>
-    public const int GuncelSurum = 13;
+    public const int GuncelSurum = 14;
 
     public VideoAyarlari Video { get => _video; set => Bagla(ref _video, value); }
 

@@ -8,8 +8,9 @@ namespace ReliosExport.Core.Ayarlar;
 public static class Varsayilanlar
 {
     /// <summary>
-    /// TikTok (0.14.0, kullanıcının isteği: "daha küçük dosya önceliğimiz", "x264 ile devam", "stabil olmalı"): x264
-    /// veryslow, CRF 24, en yüksek bit hızı 6000 kb/s (tampon 12000 kb, 2 saniye), High profil, seviye kaynakla aynı
+    /// TikTok (0.16.0: en yüksek bit hızı 8000 kb/s, tampon 12000 kb, kullanıcı seçti — "ömürlük için"; 0.14.0'da 6000 /
+    /// 12000, kullanıcının isteği: "daha küçük dosya önceliğimiz", "x264 ile devam", "stabil olmalı"): x264
+    /// veryslow, CRF 24, en yüksek bit hızı 8000 kb/s (tampon 12000 kb, 1,5 saniye), High profil, seviye kaynakla aynı
     /// (16 referans kare yetmezse yükselir: 1080p'de 5.1). Diğer x264 ayarları hız ayarının (8 B-kare, piramit,
     /// uyarlamalı B-kare 2, umh, subme 10, trellis 2, 8x8 DCT); 16 referans kare, önden bakış 250. Anahtar kare en çok
     /// 10 saniyede bir (en az: x264'ün kendisi), sahne değişiminde x264'ün eşiği (40). Çözünürlük ve kare hızı kaynakla
@@ -23,6 +24,11 @@ public static class Varsayilanlar
     /// 4000 kb/s'te kayıp üç katına çıkıyor (−3,8). Üst sınırın altındaki (kolay) sahneler CRF 24'le aynı kalır.
     /// x264'ün diğer ayarlarıyla (psy, AQ, qcomp, deblock, tesa, subme 11, 16 B-kare, placebo) TikTok sonrası kazanç
     /// ±0,5 VMAF'ı geçmedi: bantlanmayı artırıyor ya da 1,5–3,7 kat yavaş; hız ayarının değerleri kaldı.
+    /// 0.16.0 (18 Kasım sabah): yüklenen video kalıcı, TikTok ileride kalitesini artırırsa yüklenen dosyanın kalitesi önem
+    /// kazanır; dosya boyutu yalnızca yükleme anında önemli. Kullanıcının 25 sn'lik PUBG kaydının tamamında (x264 164,
+    /// SSIM; dosya / TikTok benzetimi sonrası): sınırsız 28,6 MB 0,9626 / 0,8729; 8000 / 16000 22,6 MB 0,9523 / 0,8713;
+    /// 8000 / 12000 22,1 MB 0,9513 / 0,8719; 6000 / 12000 17,2 MB 0,9374 / 0,8692. 8000 / 12000 TikTok sonrası 8000 /
+    /// 16000 ile aynı (fark ölçümün altında), dosya %2 küçük; tampon 0.14.0'daki gibi 12000 kaldı.
     /// </summary>
     public static ProfilAyarlari TikTok()
     {
@@ -40,7 +46,7 @@ public static class Varsayilanlar
             IsParcacigi = 8, // Ryzen 7 5700X: 8 çekirdek
             Ref = 16,
             IleriBakis = 250,
-            VbvMaks = 6000,
+            VbvMaks = 8000,
             VbvTampon = 12000,
         };
 
@@ -64,6 +70,18 @@ public static class Varsayilanlar
         var a = TikTok();
         a.Video.X264.VbvMaks = null;
         a.Video.X264.VbvTampon = null;
+        return a;
+    }
+
+    /// <summary>
+    /// 0.14.0–0.15.0'ın TikTok varsayılanı: <see cref="TikTok"/> ile aynı, yalnızca en yüksek bit hızı 6000 kb/s (tampon
+    /// 12000 kb). Ayar geçişi (sürüm 14) ve denemeler için.
+    /// </summary>
+    public static ProfilAyarlari TikTok0140()
+    {
+        var a = TikTok();
+        a.Video.X264.VbvMaks = 6000;
+        a.Video.X264.VbvTampon = 12000;
         return a;
     }
 
