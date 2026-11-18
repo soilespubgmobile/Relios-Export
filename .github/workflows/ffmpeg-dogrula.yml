@@ -37,9 +37,19 @@ jobs:
         uses: actions/checkout@v7
 
       - name: ffmpeg kur (yalnizca deneme videolarini uretmek icin)
+        timeout-minutes: 25
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg > /dev/null
+          # GitHub'in apt aynasi zaman zaman takiliyor (18 Kasim: iki kez 15 dk+, normalde 30 sn): her deneme sinirli
+          # sure; olmazsa archive.ubuntu.com, sonra bir kez daha.
+          kur() {
+            sudo dpkg --configure -a || true
+            timeout 240 sudo apt-get update -qq && timeout 480 sudo apt-get install -y -qq ffmpeg > /dev/null
+          }
+          kur || {
+            echo "apt aynasi yanit vermedi; archive.ubuntu.com deneniyor"
+            sudo sed -i 's#http://azure.archive.ubuntu.com#http://archive.ubuntu.com#g' /etc/apt/sources.list.d/*.sources /etc/apt/sources.list 2>/dev/null || true
+            kur
+          } || { sleep 30; kur; }
           ffmpeg -hide_banner -version | head -1
 
       - name: Deneme videolarini uret
