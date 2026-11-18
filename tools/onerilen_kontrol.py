@@ -37,9 +37,9 @@ BEKLENEN = {
     'capcut': dict(profil=77, refs=3, cabac=1, dct=0, wp=0, wb=0, b=False, gop=30, bit=34375, vbv=34375, tampon=62500,
                    kap='qt', ses=('LC', 44100, 2, 192000)),
     'her-platform-yuksek': dict(profil=100, refs=4, cabac=1, dct=1, wp=1, wb=2, b=2, gop=round(2 * fps), bit=None, vbv=25000,
-                                tampon=50000, kap='isom', ses=('LC', 48000, 2, 320000)),
+                                tampon=50000, kap='isom', ses=('LC', 48000, 2, 320000), sahne=True),
     'her-platform-dengeli': dict(profil=100, refs=4, cabac=1, dct=1, wp=1, wb=2, b=2, gop=round(2 * fps), bit=None, vbv=12000,
-                                 tampon=24000, kap='isom', ses=('LC', 48000, 2, 192000)),
+                                 tampon=24000, kap='isom', ses=('LC', 48000, 2, 192000), sahne=True),
 }
 BEKLENEN['38m'] = BEKLENEN['mobil']
 BEKLENEN['1717504691091'] = BEKLENEN['after-effects']
@@ -94,7 +94,14 @@ else:
         ('BB' not in kareler and 'PP' not in kareler.replace('IP', 'I').replace('PI', 'I') and kareler.count('B') > 0)
         if BEK['b'] else ('B' not in kareler and len(kareler) > 0))
 araliklar = [b - a for a, b in zip(idr, idr[1:])]
-chk('Anahtar kare aralığı (kare)', BEK['gop'], sorted(set(araliklar)), bool(araliklar) and set(araliklar) == {BEK['gop']})
+if BEK.get('sahne'):
+    # Sahne değişimi açık (x264 scenecut 40): x264 eşiği GOP sonuna doğru gevşetir, anahtar kare en çok gop'ta, sahne
+    # değişiminde ya da bir iki kare önce gelir (gürültülü görüntüde 120 yerine 119). Aralıklar en çok gop, çoğu ona yakın.
+    yakin = [a for a in araliklar if a >= 0.9 * BEK['gop']]
+    chk('Anahtar kare aralığı (kare; en çok, sahne değişimi açık)', f"<= {BEK['gop']}", sorted(set(araliklar)),
+        bool(araliklar) and max(araliklar) <= BEK['gop'] and len(yakin) * 2 > len(araliklar))
+else:
+    chk('Anahtar kare aralığı (kare)', BEK['gop'], sorted(set(araliklar)), bool(araliklar) and set(araliklar) == {BEK['gop']})
 chk('Anahtar kareler IDR (kapalı GOP), arada I yok', len(idr), kareler.count('I'), kareler.count('I') == len(idr))
 
 # ---- bit hızı: ortalama ve en yüksek 1 saniye
